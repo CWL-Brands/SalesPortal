@@ -1,3 +1,8 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
 # Test files - don't upload to GitHub
 test-environment.html
 test-*.html
@@ -7,16 +12,28 @@ local-test/
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
 
 # Logs and temp files
 *.log
 *.tmp
 npm-debug.log*
 
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
 # OS files
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local development
+*.local
 
 # Windsurf config
 .windsurf/

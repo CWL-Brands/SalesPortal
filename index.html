@@ -11,8 +11,17 @@
     <!-- Modern UI Styles -->
     <link rel="stylesheet" href="css/modern-styles.css">
     
+    <!-- Enhanced Admin Styles -->
+    <link rel="stylesheet" href="css/admin-styles.css">
+    
     <!-- Copper CRM SDK -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/copper-sdk@latest/dist/copper-sdk.min.js"></script>
+    
+    <!-- Admin Components - Load Before Main App -->
+    <script src="js/form-manager.js"></script>
+    <script src="js/git-connector.js"></script>
+    <script src="js/integration-validator.js"></script>
+    <script src="js/admin-dashboard.js"></script>
 </head>
 <body>
     <!-- Loading State -->
@@ -224,34 +233,9 @@
             </div>
         </div>
 
-        <!-- Admin Settings - Bottom Panel -->
-        <div id="adminPanel" class="admin-panel-bottom" style="display: none;">
-            <div class="admin-toggle" onclick="calculator.toggleAdminPanel()">
-                <span class="admin-cog">⚙️</span>
-                <span class="admin-text">Admin Settings</span>
-            </div>
-            <div id="adminContent" class="admin-content" style="display: none;">
-                <!-- Admin content will be populated by JavaScript -->
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Admin Settings Modal -->
-    <div id="adminModal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>⚙️ Admin Settings</h3>
-                <button class="modal-close">×</button>
-            </div>
-            <div class="modal-body">
-                <!-- Admin settings content will be populated here -->
-            </div>
-        </div>
-    </div>
-
     <!-- Scripts -->
     <script src="js/order-details.js"></script>
+    <script src="js/copper-integration.js"></script>
     <script src="js/admin-manager.js"></script>
     <script src="js/calculator-consolidated.js"></script>
 

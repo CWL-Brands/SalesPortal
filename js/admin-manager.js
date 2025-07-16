@@ -1,5 +1,6 @@
 /**
  * Admin Manager - Handles admin functionality and JSON file editing
+ * Enhanced with integrated admin components from kanva-portal
  */
 class AdminManager {
     constructor(calculator = null) {
@@ -10,6 +11,11 @@ class AdminManager {
             shipping: null,
             payment: null
         };
+        
+        // Initialize enhanced admin components after page load
+        setTimeout(() => {
+            this.initializeComponents();
+        }, 500);
         
         // GitHub configuration
         this.github = {
@@ -28,6 +34,74 @@ class AdminManager {
         
         // Load GitHub token if available
         this.loadGitHubToken();
+    }
+
+    /**
+     * Initialize enhanced admin components
+     */
+    initializeComponents() {
+        // Initialize GitConnector with admin configuration
+        if (typeof window.GitConnector !== 'undefined') {
+            this.gitConnector = new window.GitConnector({
+                owner: 'benatkanva',
+                repo: 'kanva-quotes',
+                branch: 'main'
+            });
+            console.log('✅ GitConnector initialized');
+        }
+        
+        // Initialize FormManager
+        if (typeof window.FormManager !== 'undefined') {
+            this.formManager = new window.FormManager();
+            console.log('✅ FormManager initialized');
+        }
+        
+        // Initialize IntegrationValidator
+        if (typeof window.IntegrationValidator !== 'undefined') {
+            this.integrationValidator = new window.IntegrationValidator({
+                gitConnector: this.gitConnector,
+                copperIntegration: window.copperIntegration,
+                adminManager: this
+            });
+            console.log('✅ IntegrationValidator initialized');
+        }
+        
+        // Initialize AdminDashboard
+        if (typeof window.AdminDashboard !== 'undefined') {
+            this.adminDashboard = new window.AdminDashboard({
+                calculator: this.calculator,
+                adminManager: this
+            });
+            console.log('✅ AdminDashboard initialized');
+        }
+        
+        console.log('🚀 Enhanced admin components initialized');
+    }
+
+    /**
+     * Show enhanced admin dashboard
+     */
+    showEnhancedDashboard() {
+        if (this.adminDashboard) {
+            this.adminDashboard.show();
+        } else {
+            console.error('❌ AdminDashboard not available');
+            alert('Enhanced admin dashboard not available. Please refresh the page.');
+        }
+    }
+
+    /**
+     * Run integration validation
+     */
+    async runIntegrationValidation() {
+        if (this.integrationValidator) {
+            const results = await this.integrationValidator.validateAll();
+            console.log('🔍 Integration validation results:', results);
+            return results;
+        } else {
+            console.error('❌ IntegrationValidator not available');
+            return null;
+        }
     }
 
     /**

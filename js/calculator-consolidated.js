@@ -394,7 +394,12 @@ class KanvaCalculator {
         if (adminToggle) {
             adminToggle.addEventListener('click', () => {
                 if (this.isAdmin) {
-                    this.showAdminPanel();
+                    // Use enhanced admin dashboard if available
+                    if (window.adminManager && window.adminManager.adminDashboard) {
+                        window.adminManager.showEnhancedDashboard();
+                    } else {
+                        this.showAdminPanel();
+                    }
                 } else {
                     this.showAdminLogin();
                 }
