@@ -33,7 +33,25 @@ class GitConnector {
      */
     async loadConnectionFromServer() {
         try {
-            const response = await fetch('/api/connections');
+            // Use the secure integration handler if available
+            if (window.secureIntegrationHandler) {
+                const githubConfig = await window.secureIntegrationHandler.getIntegration('github');
+                
+                if (githubConfig) {
+                    // Update configuration from secure handler
+                    if (githubConfig.token) this.token = githubConfig.token;
+                    if (githubConfig.repo) this.repo = githubConfig.repo;
+                    if (githubConfig.branch) this.branch = githubConfig.branch;
+                    if (githubConfig.username) this.username = githubConfig.username;
+                    if (githubConfig.email) this.email = githubConfig.email;
+                    
+                    console.log('✅ GitHub connection loaded from secure integration handler');
+                    return;
+                }
+            }
+            
+            // Fall back to direct API call if secure handler is not available
+            const response = await fetch('data/connections.json');
             
             // Check if response is ok before trying to parse JSON
             if (!response.ok) {
@@ -46,8 +64,8 @@ class GitConnector {
             try {
                 const result = await response.json();
                 
-                if (result.success && result.data && result.data.github) {
-                    const githubConfig = result.data.github;
+                if (result && result.github) {
+                    const githubConfig = result.github;
                     
                     // Update configuration from server
                     if (githubConfig.token) this.token = githubConfig.token;
@@ -56,7 +74,7 @@ class GitConnector {
                     if (githubConfig.username) this.username = githubConfig.username;
                     if (githubConfig.email) this.email = githubConfig.email;
                     
-                    console.log('✅ GitHub connection loaded from server');
+                    console.log('✅ GitHub connection loaded from connections.json');
                 }
             } catch (jsonError) {
                 console.warn('⚠️ Failed to parse GitHub connection response:', jsonError);

@@ -6,11 +6,7 @@
     "doc": "docs",
     "test": "tests"
   },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --watch",
-    "build": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --minify"
-  },
+
   "repository": {
     "type": "git",
     "url": "git+https://github.com/benatkanva/kanva-quotes.git"
@@ -23,6 +19,17 @@
   },
   "homepage": "https://github.com/benatkanva/kanva-quotes#readme",
   "description": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --watch",
+    "build": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --minify",
+    "secure-connections": "node scripts/secure-connections.js",
+    "postinstall": "npm run secure-connections"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.3",
+    "fs-extra": "^11.1.0"
+  },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",

@@ -1397,13 +1397,16 @@ textarea:disabled {
 
 .modal-body {
     padding: var(--space-lg);
-    max-height: 70vh;
+    max-height: auto;
     overflow-y: auto;
 }
 
 /* Tab Content */
 .tab-content {
     margin-top: var(--space-lg);
+    overflow: visible;
+    height: auto;
+    min-height: 300px;
 }
 
 /* Utility Classes */
