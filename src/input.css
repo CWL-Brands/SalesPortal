@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Kanva brand fonts */
+@font-face {
+    font-family: 'Century Gothic';
+    src: url('../assets/fonts/GOTHIC.TTF') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Century Gothic';
+    src: url('../assets/fonts/GOTHICB.TTF') format('truetype');
+    font-weight: bold;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Century Gothic';
+    src: url('../assets/fonts/GOTHICBI.TTF') format('truetype');
+    font-weight: bold;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: 'Century Gothic';
+    src: url('../assets/fonts/GOTHICI.TTF') format('truetype');
+    font-weight: normal;
+    font-style: italic;
+}
+
+/* Set default font to Century Gothic */
+@layer base {
+    html {
+        font-family: 'Century Gothic', Helvetica, Arial, sans-serif;
+    }
+}
+
+/* Kanva brand colors */
+:root {
+    --kanva-green: #93D500;
+    --kanva-dark: #17351A;
+    --kanva-light: #f8fdf8;
+    --kanva-accent: #e8f5e8;
+    --kanva-muted: #6b7280;
+}

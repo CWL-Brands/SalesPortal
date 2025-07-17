@@ -134,7 +134,6 @@ const NotificationManager = {
             display: flex;
             align-items: flex-start;
             gap: 12px;
-            font-family: Arial, sans-serif;
             font-size: 14px;
             line-height: 1.4;
             position: relative;

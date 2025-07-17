@@ -61,15 +61,25 @@ const EmailGenerator = {
         const timestamp = new Date().toLocaleString();
         const userEmail = appState.currentUser?.email || '[YOUR EMAIL]';
         const userName = appState.currentUser?.name || '[YOUR NAME]';
+        const quoteId = this.generateQuoteId();
+        
+        // Get the base template
+        const template = this.getEmailTemplate('quote');
         
         // Handle multiple products or single product
         const isMultipleProducts = Array.isArray(calc);
         const calculations = isMultipleProducts ? calc : [calc];
         
-        let productDetails = '';
-        let grandTotal = 0;
-        let totalUnits = 0;
-        let totalDisplayBoxes = 0;
+        // Prepare product details
+        const productDetails = this.formatProductDetails(calculations, isMultipleProducts);
+        
+        // Calculate payment info
+        const grandTotal = isMultipleProducts 
+            ? appState.lastMultiProductCalculation?.summary?.grandTotal || 0
+            : calculations[0]?.raw?.total || 0;
+            
+        const requiresACH = grandTotal >= adminConfig.payment.achThreshold;
+        const paymentInfo = this.getPaymentInfo(grandTotal, requiresACH);
 
         if (isMultipleProducts) {
             // Multiple products
@@ -118,10 +128,6 @@ const EmailGenerator = {
             totalUnits = item.totalUnits;
             totalDisplayBoxes = item.displayBoxes;
         }
-
-        // Calculate payment info
-        const requiresACH = grandTotal >= adminConfig.payment.achThreshold;
-        const paymentInfo = this.getPaymentInfo(grandTotal, requiresACH);
 
         return `Subject: ${formData.quoteName} - Partnership Proposal
 
@@ -183,11 +189,134 @@ Quote ID: ${this.generateQuoteId()}`;
 
     // Get payment information based on total
     getPaymentInfo: function(total, requiresACH) {
-        if (requiresACH) {
-            return `Since this order exceeds $${this.formatNumber(adminConfig.payment.achThreshold)}, payment will need to be processed via **ACH transfer**. I'll send over a DocuSign agreement that includes the ACH transfer details. Please provide a voided blank check for account verification.`;
-        } else {
-            return `Payment options: ACH transfer, wire transfer, or company check.`;
+        try {
+            const templates = JSON.parse(localStorage.getItem('emailTemplates')) || {};
+            const paymentTemplate = templates.payment || {};
+            
+            if (requiresACH) {
+                return (paymentTemplate.ach_required || 'Since this order exceeds ${{achThreshold}}, payment will need to be processed via **ACH transfer**. I\'ll send over a DocuSign agreement that includes the ACH transfer details. Please provide a voided blank check for account verification.')
+                    .replace('{{achThreshold}}', adminConfig.payment.achThreshold);
+            } else {
+                return paymentTemplate.standard_options || 'Payment options: ACH transfer, wire transfer, or company check.';
+            }
+        } catch (error) {
+            console.error('Error loading payment info template:', error);
+            return requiresACH 
+                ? `Since this order exceeds $${adminConfig.payment.achThreshold}, payment will need to be processed via **ACH transfer**. I'll send over a DocuSign agreement that includes the ACH transfer details. Please provide a voided blank check for account verification.`
+                : 'Payment options: ACH transfer, wire transfer, or company check.';
         }
+    },
+    
+    // Helper method to get email template
+    getEmailTemplate: function(templateName) {
+        try {
+            // Try to load from localStorage first
+            const savedTemplates = localStorage.getItem('emailTemplates');
+            if (savedTemplates) {
+                const templates = JSON.parse(savedTemplates);
+                if (templates[templateName]) {
+                    return templates[templateName];
+                }
+            }
+            
+            // Fallback to default templates
+            const defaultTemplates = {
+                quote: {
+                    subject: "{{quoteName}} - Partnership Proposal",
+                    body: "Hi there,\n\nThank you for your interest in partnering with Kanva Botanicals! We're excited about the opportunity to work with {{companyName}}.\n\n## Partnership Overview\n\nWe'd like to move forward with the following quote for your {{segment}} customer base:\n\n{{productDetails}}\n\n{{orderSummary}}\n\n### Pricing Guidelines\nTo maintain market stability and ensure fair margins for all partners in your area, we ask that your retail price to customers not exceed **${{maxRetail}}** per unit.\n\n## Payment Information\n\n{{paymentInfo}}\n\n## Additional Product Opportunities\n\nOur complete product line includes high-margin kratom capsules and powders (49-58% margins) that could be excellent additions for your experienced customers. Full catalog available upon request.\n\n## Support Included\n✅ **Retail Support** - In-store displays, POS materials, promotional strategies  \n✅ **Sales Training** - Staff education and product knowledge support  \n✅ **Marketing Assets** - Digital materials, window clings, branded displays  \n✅ **Exclusive Offers** - Introductory pricing and promotional bundles  \n\n## Next Steps\n\n1. Review this proposal\n2. Complete payment setup {{achRequired}}\n3. Schedule delivery once payment is processed\n\nWe're excited about building a successful partnership with you and supporting your business growth in the functional beverage market.\n\nPlease contact us at {{emailDomain}} or {{phone}} if you have any questions.\n\nBest regards,\n\n{{userName}}  \nKanva Botanicals  \n{{userEmail}}  \n{{phone}}\n\n---\nGenerated on: {{timestamp}}\nQuote ID: {{quoteId}}"
+                }
+            };
+            
+            return defaultTemplates[templateName] || { subject: '', body: '' };
+        } catch (error) {
+            console.error('Error loading email template:', error);
+            return { subject: '', body: '' };
+        }
+    },
+    
+    // Helper method to format product details
+    formatProductDetails: function(calculations, isMultipleProducts) {
+        let details = '';
+        let summary = '';
+        let totalUnits = 0;
+        let totalDisplayBoxes = 0;
+        let grandTotal = 0;
+
+        if (isMultipleProducts) {
+            // Multiple products
+            calculations.forEach((item, index) => {
+                details += `**Product ${index + 1}: ${item.product.name}**\n` +
+                          `- Quantity: ${item.masterCases} Master Cases\n` +
+                          `- Display Boxes: ${item.displayBoxes}\n` +
+                          `- Individual Units: ${this.formatNumber(item.totalUnits)}\n` +
+                          `- Unit Price: ${item.unitPrice} (${item.tierInfo.name})\n` +
+                          `- Line Total: ${item.total}\n\n`;
+                
+                totalUnits += item.totalUnits;
+                totalDisplayBoxes += item.displayBoxes;
+            });
+
+            // Add order summary for multiple products
+            const multiResult = appState.lastMultiProductCalculation;
+            if (multiResult?.summary) {
+                summary = `**Order Summary:**\n` +
+                         `- Total Display Boxes: ${this.formatNumber(totalDisplayBoxes)}\n` +
+                         `- Total Individual Units: ${this.formatNumber(totalUnits)}\n` +
+                         `- Subtotal: ${this.formatCurrency(multiResult.summary.subtotal)}\n` +
+                         `- Shipping: ${this.formatCurrency(multiResult.summary.shipping)}\n` +
+                         `- Credit Card Fee (3%): ${this.formatCurrency(multiResult.summary.creditCardFee)}\n` +
+                         `- **Grand Total: ${this.formatCurrency(multiResult.summary.grandTotal)}**\n`;
+                
+                grandTotal = multiResult.summary.grandTotal;
+            }
+        } else {
+            // Single product
+            const item = calculations[0];
+            details = `**${item.product.name}**\n` +
+                     `- Quantity: ${item.masterCases} Master Cases\n` +
+                     `- Display Boxes: ${item.displayBoxes}\n` +
+                     `- Individual Units: ${this.formatNumber(item.totalUnits)}\n` +
+                     `- Unit Price: ${item.unitPrice} (${item.tierInfo.name})\n` +
+                     `- Case Price: ${item.casePrice}\n` +
+                     `- Subtotal: ${item.subtotal}\n` +
+                     `- Shipping: ${item.shipping}\n` +
+                     `- Credit Card Fee (3%): ${item.creditCardFee}\n` +
+                     `- **Total: ${item.total}**\n`;
+            
+            totalUnits = item.totalUnits;
+            totalDisplayBoxes = item.displayBoxes;
+            grandTotal = item.raw.total;
+        }
+
+        return {
+            details: details,
+            summary: summary,
+            totalUnits: totalUnits,
+            totalDisplayBoxes: totalDisplayBoxes,
+            grandTotal: grandTotal
+        };
+    },
+    
+    // Load email templates from JSON file
+    loadEmailTemplates: function() {
+        return fetch('/data/email-templates.json')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load email templates');
+                }
+                return response.json();
+            })
+            .then(templates => {
+                // Save to localStorage for offline use
+                localStorage.setItem('emailTemplates', JSON.stringify(templates));
+                return templates;
+            })
+            .catch(error => {
+                console.error('Error loading email templates:', error);
+                // Try to use cached version if available
+                const cached = localStorage.getItem('emailTemplates');
+                return cached ? JSON.parse(cached) : null;
+            });
     },
 
     // Display email in the interface
@@ -205,7 +334,7 @@ Quote ID: ${this.generateQuoteId()}`;
             newWindow.document.write(`
                 <html>
                     <head><title>Kanva Quote Email</title></head>
-                    <body style="font-family: Arial, sans-serif; padding: 20px; white-space: pre-wrap;">
+                    <body class="p-5 whitespace-pre-wrap">
                         ${content.replace(/\n/g, '<br>')}
                     </body>
                 </html>
@@ -299,18 +428,18 @@ Quote ID: ${this.generateQuoteId()}`;
 <html>
 <head>
     <title>Kanva Botanicals Quote</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
-        h1, h2 { color: #17351A; }
-        .quote-header { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        /* Keep any custom styles that can't be handled by Tailwind */
+        body { max-width: 800px; }
     </style>
 </head>
-<body>
-    <div class="quote-header">
-        <h1>Kanva Botanicals Quote</h1>
-        <p>Generated: ${new Date().toLocaleString()}</p>
+<body class="mx-auto my-8 px-5">
+    <div class="bg-gray-50 p-4 rounded-lg mb-5">
+        <h1 class="text-2xl font-bold text-kanva-dark mb-2">Kanva Botanicals Quote</h1>
+        <p class="text-gray-600">Generated: ${new Date().toLocaleString()}</p>
     </div>
-    <div style="white-space: pre-wrap;">${content.replace(/\n/g, '<br>')}</div>
+    <div class="whitespace-pre-wrap">${content.replace(/\n/g, '<br>')}</div>
 </body>
 </html>`;
         } else {
