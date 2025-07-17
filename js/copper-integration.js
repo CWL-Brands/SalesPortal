@@ -865,6 +865,46 @@ Calculator Version: ${adminConfig.metadata.version}`;
             hasEntityContext: appState.hasEntityContext,
             contextEntity: appState.contextEntity
         };
+    },
+    
+    /**
+     * Configure Copper integration with API credentials
+     * @param {Object} config - Configuration object with apiKey, email, and environment
+     * @returns {Promise} - Promise that resolves when configuration is complete
+     */
+    configure: async function(config) {
+        console.log('🔧 Configuring Copper integration with new credentials...');
+        
+        if (!config) {
+            console.error('❌ No configuration provided to Copper.configure()');
+            return false;
+        }
+        
+        // Store credentials in appState
+        if (!appState.copper) appState.copper = {};
+        
+        appState.copper.apiKey = config.apiKey || appState.copper.apiKey;
+        appState.copper.email = config.email || appState.copper.email;
+        appState.copper.environment = config.environment || 'production';
+        
+        console.log(`✅ Copper credentials configured for ${appState.copper.environment} environment`);
+        
+        // If we're in standalone mode, update the configuration
+        if (!this.isCrmAvailable() && appState.copper.apiKey) {
+            try {
+                // Here we would initialize the standalone API client with the new credentials
+                // This would typically involve setting up API headers or authentication
+                console.log('🔄 Updating standalone API configuration with new credentials');
+                
+                // For now, we'll just update the appState and return success
+                return true;
+            } catch (error) {
+                console.error('❌ Error configuring Copper API:', error);
+                return false;
+            }
+        }
+        
+        return true;
     }
 };
 

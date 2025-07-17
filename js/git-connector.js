@@ -23,6 +23,310 @@ class GitConnector {
         this.baseUrl = 'https://api.github.com';
         
         console.log('🐙 GitConnector initialized for repo:', this.repo);
+        
+        // Load connection from server if available
+        this.loadConnectionFromServer();
+    }
+    
+    /**
+     * Load GitHub connection from server
+     */
+    async loadConnectionFromServer() {
+        try {
+            const response = await fetch('/api/connections');
+            
+            // Check if response is ok before trying to parse JSON
+            if (!response.ok) {
+                console.warn(`⚠️ Server returned ${response.status} when loading GitHub connection`);
+                // Load from localStorage as fallback
+                this.loadFromLocalStorage();
+                return;
+            }
+            
+            try {
+                const result = await response.json();
+                
+                if (result.success && result.data && result.data.github) {
+                    const githubConfig = result.data.github;
+                    
+                    // Update configuration from server
+                    if (githubConfig.token) this.token = githubConfig.token;
+                    if (githubConfig.repo) this.repo = githubConfig.repo;
+                    if (githubConfig.branch) this.branch = githubConfig.branch;
+                    if (githubConfig.username) this.username = githubConfig.username;
+                    if (githubConfig.email) this.email = githubConfig.email;
+                    
+                    console.log('✅ GitHub connection loaded from server');
+                }
+            } catch (jsonError) {
+                console.warn('⚠️ Failed to parse GitHub connection response:', jsonError);
+                // Load from localStorage as fallback
+                this.loadFromLocalStorage();
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to load GitHub connection from server:', error);
+            // Load from localStorage as fallback
+            this.loadFromLocalStorage();
+        }
+    }
+    
+    /**
+     * Save GitHub connection to server
+     */
+    /**
+     * Load GitHub connection from localStorage
+     */
+    loadFromLocalStorage() {
+        try {
+            const savedConfig = localStorage.getItem('github_connection');
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                if (config.token) this.token = config.token;
+                if (config.repo) this.repo = config.repo;
+                if (config.branch) this.branch = config.branch;
+                if (config.username) this.username = config.username;
+                if (config.email) this.email = config.email;
+                console.log('✅ GitHub token loaded from local storage');
+                return true;
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to load GitHub connection from localStorage:', error);
+        }
+        return false;
+    }
+    
+    /**
+     * Save GitHub connection to localStorage
+     */
+    saveToLocalStorage() {
+        try {
+            const config = {
+                token: this.token,
+                repo: this.repo,
+                branch: this.branch,
+                username: this.username,
+                email: this.email,
+                timestamp: new Date().toISOString()
+            };
+            localStorage.setItem('github_connection', JSON.stringify(config));
+            console.log('✅ GitHub connection saved to local storage');
+            return true;
+        } catch (error) {
+            console.warn('⚠️ Failed to save GitHub connection to localStorage:', error);
+            return false;
+        }
+    }
+
+    async saveConnectionToServer() {
+        if (!this.token) {
+            console.warn('⚠️ No GitHub token to save');
+            return false;
+        }
+        
+        try {
+            const response = await fetch('/api/connections/github', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    token: this.token,
+                    repo: this.repo,
+                    branch: this.branch,
+                    username: this.username,
+                    email: this.email,
+                    timestamp: new Date().toISOString()
+                })
+            });
+            
+            // Check if response is ok before trying to parse JSON
+            if (!response.ok) {
+                console.warn(`⚠️ Server returned ${response.status} when saving GitHub connection`);
+                // Save to localStorage as fallback
+                const localSaved = this.saveToLocalStorage();
+                return localSaved;
+            }
+            
+            try {
+                const result = await response.json();
+                if (result.success) {
+                    console.log('✅ GitHub connection saved to server');
+                    // Also save to localStorage as backup
+                    this.saveToLocalStorage();
+                    return true;
+                } else {
+                    console.warn('⚠️ Failed to save GitHub connection to server:', result.message);
+                    // Save to localStorage as fallback
+                    const localSaved = this.saveToLocalStorage();
+                    return localSaved;
+                }
+            } catch (jsonError) {
+                console.warn('⚠️ Failed to parse GitHub connection save response:', jsonError);
+                // Save to localStorage as fallback
+                const localSaved = this.saveToLocalStorage();
+                return localSaved;
+            }
+        } catch (error) {
+            console.error('❌ Error saving GitHub connection to server:', error);
+            // Save to localStorage as fallback
+            const localSaved = this.saveToLocalStorage();
+            return localSaved;
+        }
+    }
+    
+    /**
+     * Configure GitHub connection settings
+     * @param {Object} config - Configuration object
+     * @param {string} config.token - GitHub personal access token
+     * @param {string} config.repo - GitHub repository in format 'username/repo'
+     * @param {string} config.branch - Branch to commit to
+     * @param {string} config.username - GitHub username
+     * @param {string} config.email - GitHub email
+     * @returns {Promise<boolean>} - Success status
+     */
+    async configure(config = {}) {
+        let updated = false;
+        
+        if (config.token) {
+            this.token = config.token;
+            updated = true;
+        }
+        
+        if (config.repo) {
+            this.repo = config.repo;
+            updated = true;
+        }
+        
+        if (config.branch) {
+            this.branch = config.branch;
+            updated = true;
+        }
+        
+        if (config.username) {
+            this.username = config.username;
+            updated = true;
+        }
+        
+        if (config.email) {
+            this.email = config.email;
+            updated = true;
+        }
+        
+        if (updated) {
+            console.log('✅ GitConnector configuration updated');
+            
+            // Save to server if token is available
+            if (this.token) {
+                return await this.saveConnectionToServer();
+            }
+        }
+        
+        return updated;
+    }
+    
+    /**
+     * Test GitHub connection
+     * @returns {Promise<Object>} - Test result with status and message
+     */
+    async testConnection() {
+        if (!this.token) {
+            return {
+                success: false,
+                message: 'GitHub token not configured. Please enter a valid token.',
+                details: null
+            };
+        }
+        
+        try {
+            console.log('🔍 Testing GitHub connection...');
+            
+            // Test API access by getting repo info
+            const url = `${this.baseUrl}/repos/${this.repo}`;
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `token ${this.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                // Connection successful, save to server
+                await this.saveConnectionToServer();
+                
+                return {
+                    success: true,
+                    message: `Successfully connected to ${data.full_name}`,
+                    details: {
+                        name: data.name,
+                        full_name: data.full_name,
+                        description: data.description,
+                        default_branch: data.default_branch,
+                        owner: data.owner.login
+                    }
+                };
+            } else {
+                // API returned an error
+                return {
+                    success: false,
+                    message: data.message || 'Failed to connect to GitHub repository',
+                    details: data
+                };
+            }
+        } catch (error) {
+            console.error('❌ GitHub connection test failed:', error);
+            return {
+                success: false,
+                message: `Connection error: ${error.message}`,
+                details: error
+            };
+        }
+    }
+    
+    /**
+     * Get configuration information
+     * @returns {Object} - Configuration object
+     */
+    getConfig() {
+        return {
+            repo: this.repo,
+            branch: this.branch,
+            username: this.username,
+            email: this.email,
+            hasToken: !!this.token,
+            baseUrl: this.baseUrl
+        };
+    }
+    
+    /**
+     * Get repository information
+     * @returns {Promise<Object>} - Repository information
+     */
+    async getRepoInfo() {
+        if (!this.token) {
+            throw new Error('GitHub token not configured');
+        }
+        
+        try {
+            const url = `${this.baseUrl}/repos/${this.repo}`;
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `token ${this.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to get repository information');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Error getting repository information:', error);
+            throw error;
+        }
     }
 
     /**

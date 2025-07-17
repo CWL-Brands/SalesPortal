@@ -44,19 +44,32 @@ class AdminDashboard {
         }
     }
 
-    async init() {
+    /**
+     * Initialize the admin dashboard
+     */
+    init() {
         if (this.isInitialized) {
-            console.log('⚠️ AdminDashboard already initialized');
+            console.log('⚠️ AdminDashboard already initialized, skipping...');
             return;
         }
-
+        
         console.log('🔄 Initializing AdminDashboard...');
         
         try {
+            // Create UI elements
             this.createFloatingButton();
             this.createLoginModal();
             this.createAdminModal();
+            
+            // Bind events
             this.bindEvents();
+            
+            // Load data
+            this.loadProductsData();
+            this.loadTiersData();
+            this.loadShippingData();
+            this.loadIntegrationsData();
+            
             this.isInitialized = true;
             console.log('✅ AdminDashboard initialized successfully');
         } catch (error) {
@@ -78,11 +91,14 @@ class AdminDashboard {
         this.floatingButton = document.createElement('button');
         this.floatingButton.id = 'floating-admin-btn';
         this.floatingButton.className = 'floating-admin-btn';
-        this.floatingButton.innerHTML = '⚙️';
+        this.floatingButton.innerHTML = 'Admin';
         this.floatingButton.title = 'Admin Panel';
         
-        document.body.appendChild(this.floatingButton);
-        console.log('✅ Floating admin button created');
+        // Force append to body to ensure it's visible
+        setTimeout(() => {
+            document.body.appendChild(this.floatingButton);
+            console.log('✅ Floating admin button created and appended to body');
+        }, 500); // Small delay to ensure DOM is ready
     }
 
     /**
@@ -108,7 +124,10 @@ class AdminDashboard {
                         </div>
                         <div class="form-group">
                             <label for="admin-password" style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--kanva-dark-blue);">Password</label>
-                            <input type="password" id="admin-password" class="form-control" placeholder="Enter admin password" style="width: 100%; padding: 12px; border: 2px solid #dee2e6; border-radius: 6px; font-size: 14px;" required>
+                            <div class="password-input-container" style="position: relative;">
+                                <input type="text" id="admin-password" class="form-control" placeholder="Enter admin password" style="width: 100%; padding: 12px; border: 2px solid #dee2e6; border-radius: 6px; font-size: 14px;" required>
+                                <!-- Password toggle button removed - password is now always visible -->
+                            </div>
                         </div>
                         <div id="login-error" style="color: var(--admin-danger); font-size: 14px; display: none;"></div>
                         <button type="submit" class="btn btn-primary" style="padding: 12px 24px; font-size: 16px;">Login</button>
@@ -315,6 +334,7 @@ class AdminDashboard {
                         <thead>
                             <tr>
                                 <th>ID</th>
+                                <th>Image</th>
                                 <th>Product Name</th>
                                 <th>Price</th>
                                 <th>MSRP</th>
@@ -326,7 +346,7 @@ class AdminDashboard {
                             </tr>
                         </thead>
                         <tbody id="products-table-body">
-                            <tr><td colspan="9" class="loading-row">Loading products data...</td></tr>
+                            <tr><td colspan="10" class="loading-row">Loading products data...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -376,33 +396,42 @@ class AdminDashboard {
         const tbody = document.getElementById('products-table-body');
         if (!tbody) return;
         
-        tbody.innerHTML = products.map(product => `
-            <tr data-product-id="${product.id}">
-                <td class="product-id">${product.id}</td>
-                <td class="product-name editable" data-field="name">${product.name}</td>
-                <td class="product-price editable" data-field="price">$${product.price}</td>
-                <td class="product-msrp editable" data-field="msrp">$${product.msrp || 'N/A'}</td>
-                <td class="product-cost editable" data-field="cost">$${product.cost || 'N/A'}</td>
-                <td class="product-category editable" data-field="category">${product.category}</td>
-                <td class="product-units editable" data-field="unitsPerCase">${product.unitsPerCase || 1}</td>
-                <td class="product-status">
-                    <span class="status-badge status-${product.active ? 'active' : 'inactive'}">
-                        ${product.active ? 'Active' : 'Inactive'}
-                    </span>
-                </td>
-                <td class="product-actions">
-                    <button class="btn-small btn-edit" onclick="window.adminDashboard.editProduct('${product.id}')" title="Edit Product">
-                        ✏️
-                    </button>
-                    <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleProductStatus('${product.id}')" title="Toggle Status">
-                        ${product.active ? '⏸️' : '▶️'}
-                    </button>
-                    <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteProduct('${product.id}')" title="Delete Product">
-                        🗑️
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+        tbody.innerHTML = products.map(product => {
+            // Get image source - use product image or fallback to logo
+            const imageSrc = product.picture || 'assets/logo/Kanva_Logo_White_Master.png';
+            
+            return `
+                <tr data-product-id="${product.id}">
+                    <td class="product-id">${product.id}</td>
+                    <td class="product-image">
+                        <img src="${imageSrc}" alt="${product.name}" class="product-thumbnail" 
+                             onerror="this.src='assets/logo/Kanva_Logo_White_Master.png'" />
+                    </td>
+                    <td class="product-name editable" data-field="name">${product.name}</td>
+                    <td class="product-price editable" data-field="price">$${product.price}</td>
+                    <td class="product-msrp editable" data-field="msrp">$${product.msrp || 'N/A'}</td>
+                    <td class="product-cost editable" data-field="cost">$${product.cost || 'N/A'}</td>
+                    <td class="product-category editable" data-field="category">${product.category}</td>
+                    <td class="product-units editable" data-field="unitsPerCase">${product.unitsPerCase || 1}</td>
+                    <td class="product-status">
+                        <span class="status-badge status-${product.active ? 'active' : 'inactive'}">
+                            ${product.active ? 'Active' : 'Inactive'}
+                        </span>
+                    </td>
+                    <td class="product-actions">
+                        <button class="btn-small btn-edit" onclick="window.adminDashboard.editProduct('${product.id}')" title="Edit Product">
+                            ✏️
+                        </button>
+                        <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleProductStatus('${product.id}')" title="Toggle Status">
+                            ${product.active ? '⏸️' : '▶️'}
+                        </button>
+                        <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteProduct('${product.id}')" title="Delete Product">
+                            🗑️
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
         
         // Add click listeners for inline editing
         this.setupInlineEditing();
@@ -848,7 +877,7 @@ async saveProductField(productId, field, value) {
             <div class="product-edit-modal">
                 <div class="modal-header">
                     <h3>${title}</h3>
-                    <button class="close-btn" onclick="this.closest('.product-edit-modal').remove()">&times;</button>
+                    <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
                 </div>
                 <div class="modal-body">
                     <form class="product-form">
@@ -895,8 +924,28 @@ async saveProductField(productId, field, value) {
                                 </select>
                             </div>
                         </div>
+                        <div class="form-row">
+                            <div class="form-group" style="width: 100%;">
+                                <label>Product Picture:</label>
+                                <div class="image-upload-container">
+                                    <input type="file" name="picture" accept="image/*" class="file-input-hidden" onchange="window.adminDashboard.handlePictureUpload(event)">
+                                    <div class="picture-preview">
+                                        <img class="image-preview" src="assets/logo/Kanva_Logo_White_Master.png" alt="Product preview">
+                                        <div class="upload-placeholder" style="color: #6c757d; font-size: 14px; margin-top: 10px;">
+                                            📷 Click to upload product image (200x200 recommended)
+                                        </div>
+                                    </div>
+                                    <button type="button" class="image-upload-btn" onclick="this.parentElement.querySelector('input[type=file]').click()">
+                                        Choose Image
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="window.adminDashboard.clearPictureUpload(this)" style="display: none; margin-top: 8px;">
+                                        Remove Image
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                         <div class="form-actions">
-                            <button type="button" class="btn btn-secondary" onclick="this.closest('.product-edit-modal').remove()">
+                            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
                                 Cancel
                             </button>
                             <button type="submit" class="btn btn-primary">
@@ -919,13 +968,252 @@ async saveProductField(productId, field, value) {
             this.populateProductForm(productId);
         }
         
+        // Handle click outside modal to close
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        });
+        
         // Handle form submission
         const form = overlay.querySelector('.product-form');
-        form.addEventListener('submit', (e) => {
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            this.saveProductForm(form, productId);
-            overlay.remove();
+            
+            // Disable form during submission
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Saving...';
+            
+            try {
+                await this.saveProductForm(form, productId);
+                overlay.remove();
+            } catch (error) {
+                console.error('Error saving product:', error);
+                this.showNotification('Failed to save product. Please try again.', 'error');
+            } finally {
+                // Re-enable form
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
         });
+    }
+
+    /**
+     * Resize image to thumbnail size
+     */
+    resizeImage(file, maxWidth = 200, maxHeight = 200, quality = 0.8) {
+        return new Promise((resolve) => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = () => {
+                // Calculate new dimensions
+                let { width, height } = img;
+                
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = (height * maxWidth) / width;
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = (width * maxHeight) / height;
+                        height = maxHeight;
+                    }
+                }
+                
+                // Set canvas dimensions
+                canvas.width = width;
+                canvas.height = height;
+                
+                // Draw and resize image
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Convert to base64
+                const resizedDataUrl = canvas.toDataURL('image/jpeg', quality);
+                resolve(resizedDataUrl);
+            };
+            
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    /**
+     * Populate product form with existing data
+     */
+    populateProductForm(productId) {
+        // Find the product data
+        const product = this.productsData.find(p => p.id === productId);
+        if (!product) return;
+        
+        const form = document.querySelector('.product-form');
+        if (!form) return;
+        
+        // Populate form fields
+        form.querySelector('input[name="name"]').value = product.name || '';
+        form.querySelector('select[name="category"]').value = product.category || '';
+        form.querySelector('input[name="price"]').value = product.price || '';
+        form.querySelector('input[name="msrp"]').value = product.msrp || '';
+        form.querySelector('input[name="cost"]').value = product.cost || '';
+        form.querySelector('input[name="unitsPerCase"]').value = product.unitsPerCase || 1;
+        form.querySelector('select[name="active"]').value = product.active ? 'true' : 'false';
+        
+        // Handle existing product image
+        const container = form.querySelector('.image-upload-container');
+        const previewImg = container.querySelector('.image-preview');
+        const placeholder = container.querySelector('.upload-placeholder');
+        const removeBtn = container.querySelector('.btn-outline-secondary');
+        const fileInput = container.querySelector('input[type="file"]');
+        
+        if (product.picture) {
+            // Use existing product image
+            previewImg.src = product.picture;
+            previewImg.style.display = 'block';
+            placeholder.style.display = 'none';
+            removeBtn.style.display = 'inline-block';
+            
+            // Store existing image data
+            fileInput.setAttribute('data-image-data', product.picture);
+            
+            console.log('✅ Loaded existing product image for editing');
+        } else {
+            // Use fallback logo as placeholder
+            previewImg.src = 'assets/logo/Kanva_Logo_White_Master.png';
+            previewImg.style.display = 'block';
+            placeholder.style.display = 'block';
+            placeholder.textContent = '📷 Click to upload product image (200x200 recommended)';
+            removeBtn.style.display = 'none';
+            
+            // Don't store fallback image as data - let user choose to keep or replace
+            fileInput.removeAttribute('data-image-data');
+            
+            console.log('🖼️ Using fallback logo for product without image');
+        }
+    }
+
+    /**
+     * Save product form data
+     */
+    async saveProductForm(form, productId) {
+        const formData = new FormData(form);
+        const fileInput = form.querySelector('input[name="picture"]');
+        const imageData = fileInput.getAttribute('data-image-data');
+        
+        // Create product object
+        const productData = {
+            name: formData.get('name'),
+            category: formData.get('category'),
+            price: parseFloat(formData.get('price')) || 0,
+            msrp: parseFloat(formData.get('msrp')) || 0,
+            cost: parseFloat(formData.get('cost')) || 0,
+            unitsPerCase: parseInt(formData.get('unitsPerCase')) || 1,
+            active: formData.get('active') === 'true',
+            picture: imageData || null
+        };
+        
+        let isNewProduct = false;
+        let productKey = '';
+        
+        if (productId) {
+            // Update existing product
+            const productIndex = this.productsData.findIndex(p => p.id === productId);
+            if (productIndex !== -1) {
+                // Preserve the product ID
+                productData.id = productId;
+                
+                // If no new image was uploaded, keep the existing one
+                if (!productData.picture && this.productsData[productIndex].picture) {
+                    productData.picture = this.productsData[productIndex].picture;
+                    console.log('✅ Preserved existing product image');
+                }
+                
+                this.productsData[productIndex] = { ...this.productsData[productIndex], ...productData };
+                productKey = this.productsData[productIndex].name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                this.showNotification(`Product "${productData.name}" updated successfully`, 'success');
+            }
+        } else {
+            // Add new product
+            isNewProduct = true;
+            const newProduct = {
+                id: `PROD-${Date.now()}`,
+                ...productData
+            };
+            this.productsData.push(newProduct);
+            productKey = newProduct.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            this.showNotification(`Product "${productData.name}" created successfully`, 'success');
+        }
+        
+        // Refresh the products table
+        this.renderProductsTable();
+        
+        // Save to Git repository if AdminManager is available
+        if (this.adminManager && typeof this.adminManager.saveData === 'function') {
+            try {
+                // Show saving notification
+                this.showNotification('Saving to Git repository...', 'info');
+                
+                // Convert products array to object format for Git storage
+                const productsForGit = {};
+                this.productsData.forEach(product => {
+                    // Use a clean key based on product name
+                    const key = product.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                    
+                    // Ensure we have all required fields
+                    productsForGit[key] = {
+                        id: product.id,
+                        name: product.name,
+                        category: product.category || '',
+                        price: product.price || 0,
+                        msrp: product.msrp || 0,
+                        cost: product.cost || 0,
+                        unitsPerCase: product.unitsPerCase || 1,
+                        active: product.active !== undefined ? product.active : true,
+                        picture: product.picture || null,
+                        description: product.description || '',
+                        displayBoxesPerCase: product.displayBoxesPerCase || product.unitsPerCase || 1,
+                        lastUpdated: new Date().toISOString()
+                    };
+                });
+                
+                // Log the product being saved for debugging
+                if (productKey && productsForGit[productKey]) {
+                    const savedProduct = productsForGit[productKey];
+                    console.log(`Saving product ${savedProduct.id} with image: ${savedProduct.picture ? 'Yes (length: ' + savedProduct.picture.substring(0, 30) + '...)' : 'No'}`);
+                }
+                
+                // Save to Git
+                const success = await this.adminManager.saveData('products', productsForGit);
+                
+                if (success) {
+                    this.showNotification(
+                        `Product data saved to Git repository! ${isNewProduct ? 'New product' : 'Product updates'} are now live.`,
+                        'success'
+                    );
+                    console.log('✅ Products saved to Git repository successfully');
+                } else {
+                    this.showNotification(
+                        'Product saved locally but failed to sync with Git repository. Changes may not persist.',
+                        'warning'
+                    );
+                    console.warn('⚠️ Failed to save products to Git repository');
+                }
+            } catch (error) {
+                console.error('❌ Error saving to Git:', error);
+                this.showNotification(
+                    'Product saved locally but Git sync failed. Please check your connection.',
+                    'warning'
+                );
+            }
+        } else {
+            console.warn('⚠️ AdminManager or saveData method not available');
+            this.showNotification(
+                'Product saved locally. Git integration not available.',
+                'warning'
+            );
+        }
     }
     
     /**
@@ -1111,12 +1399,27 @@ async saveProductField(productId, field, value) {
                         <div class="integration-header">
                             <h3>🥇 Copper CRM</h3>
                             <div class="integration-status" id="copper-status">
-                                <span class="status-indicator status-ok">✅</span>
-                                <span>Connected</span>
+                                <span class="status-indicator status-unknown">❓</span>
+                                <span>Not Tested</span>
                             </div>
                         </div>
                         <div class="integration-content">
-                            <p>Copper CRM is integrated and functioning. Customer data is automatically populated and quotes are saved as activities.</p>
+                            <p>Configure Copper CRM API credentials to enable customer data auto-population and activity logging.</p>
+                            <div class="form-group">
+                                <label>API Key:</label>
+                                <input type="password" id="copper-api-key" placeholder="Enter Copper API key" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Email Address:</label>
+                                <input type="email" id="copper-email" placeholder="Enter Copper user email" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Environment:</label>
+                                <select id="copper-environment" class="form-control">
+                                    <option value="production">Production</option>
+                                    <option value="sandbox">Sandbox</option>
+                                </select>
+                            </div>
                             <div class="integration-features">
                                 <div class="feature-item">
                                     <span class="feature-icon">👥</span>
@@ -1135,8 +1438,11 @@ async saveProductField(productId, field, value) {
                                 <button class="btn btn-primary" onclick="window.adminDashboard.testCopperIntegration()">
                                     🧪 Test Connection
                                 </button>
+                                <button class="btn btn-secondary" onclick="window.adminDashboard.saveCopperSettings()">
+                                    💾 Save Settings
+                                </button>
                                 <button class="btn btn-secondary" onclick="window.adminDashboard.viewCopperLogs()">
-                                    📄 View Activity Logs
+                                    📔 View Activity Logs
                                 </button>
                             </div>
                         </div>
@@ -1147,12 +1453,28 @@ async saveProductField(productId, field, value) {
                         <div class="integration-header">
                             <h3>🐟 Fishbowl ERP</h3>
                             <div class="integration-status" id="fishbowl-status">
-                                <span class="status-indicator status-ok">✅</span>
-                                <span>Connected</span>
+                                <span class="status-indicator status-unknown">❓</span>
+                                <span>Not Tested</span>
                             </div>
                         </div>
                         <div class="integration-content">
-                            <p>Fishbowl ERP integration is active. Inventory data and pricing are synchronized.</p>
+                            <p>Configure Fishbowl ERP connection to enable inventory synchronization and order management.</p>
+                            <div class="form-group">
+                                <label>Host:</label>
+                                <input type="text" id="fishbowl-host" placeholder="Fishbowl server hostname or IP" value="localhost" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Port:</label>
+                                <input type="text" id="fishbowl-port" placeholder="Fishbowl server port" value="28192" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Username:</label>
+                                <input type="text" id="fishbowl-username" placeholder="Fishbowl username" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>Password:</label>
+                                <input type="password" id="fishbowl-password" placeholder="Fishbowl password" class="form-control">
+                            </div>
                             <div class="integration-features">
                                 <div class="feature-item">
                                     <span class="feature-icon">📦</span>
@@ -1170,6 +1492,9 @@ async saveProductField(productId, field, value) {
                             <div class="integration-actions">
                                 <button class="btn btn-primary" onclick="window.adminDashboard.testFishbowlIntegration()">
                                     🧪 Test Connection
+                                </button>
+                                <button class="btn btn-secondary" onclick="window.adminDashboard.saveFishbowlSettings()">
+                                    💾 Save Settings
                                 </button>
                                 <button class="btn btn-secondary" onclick="window.adminDashboard.syncFishbowlData()">
                                     🔄 Sync Data
@@ -1223,6 +1548,13 @@ async saveProductField(productId, field, value) {
     }
 
     /**
+     * Test GitHub integration (called by the UI button)
+     */
+    async testGitHubIntegration() {
+        return this.testGitHubConnection();
+    }
+
+    /**
      * Test GitHub integration
      */
     async testGitHubConnection() {
@@ -1237,28 +1569,42 @@ async saveProductField(productId, field, value) {
         
         try {
             if (window.GitConnector) {
+                // Configure GitConnector with the form values
                 const gitConnector = new window.GitConnector({ 
                     repo: `${owner}/${repo}`, 
                     token: token 
                 });
+                
+                // Test the connection
                 const testResult = await gitConnector.testConnection();
                 
                 if (testResult.success) {
+                    // Update UI to show success
                     this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
+                    
+                    // Save the connection to the server if successful
+                    await gitConnector.saveConnectionToServer();
                     
                     // Show detailed connection info
                     const details = testResult.details;
                     let message = `✅ GitHub API Connection Successful\n\n`;
-                    message += `Repository: ${details.repository.name}\n`;
-                    message += `Branch: ${details.branch.name}\n`;
-                    message += `Permissions: ${details.repository.permissions.push ? 'Write' : 'Read-only'}\n`;
-                    message += `Last Commit: ${new Date(details.branch.last_commit).toLocaleString()}\n`;
-                    message += `Token Scopes: ${details.token_scopes}`;
+                    message += `Repository: ${details.full_name}\n`;
+                    message += `Owner: ${details.owner}\n`;
+                    message += `Default Branch: ${details.default_branch || 'main'}\n`;
+                    message += `Description: ${details.description || 'No description'}\n`;
                     
                     alert(message);
+                    
+                    // Update the admin manager with the new token
+                    if (this.adminManager) {
+                        this.adminManager.github.token = token;
+                        this.adminManager.github.owner = owner;
+                        this.adminManager.github.repo = repo;
+                    }
                 } else {
-                    this.updateIntegrationStatus(statusElement, 'error', testResult.error);
-                    alert(`❌ GitHub Connection Failed\n\nError: ${testResult.error}\nDetails: ${testResult.details}`);
+                    // Update UI to show error
+                    this.updateIntegrationStatus(statusElement, 'error', testResult.message);
+                    alert(`❌ GitHub Connection Failed\n\nError: ${testResult.message}`);
                 }
             } else {
                 this.updateIntegrationStatus(statusElement, 'error', 'GitConnector not loaded');
@@ -1274,16 +1620,50 @@ async saveProductField(productId, field, value) {
     /**
      * Save GitHub settings
      */
-    saveGitHubSettings() {
+    async saveGitHubSettings() {
         const owner = document.getElementById('github-owner')?.value;
         const repo = document.getElementById('github-repo')?.value;
         const token = document.getElementById('github-token')?.value;
+        const branch = document.getElementById('github-branch')?.value || 'main';
         
-        if (this.adminManager) {
-            this.adminManager.github = { owner, repo, token };
-            this.adminManager.saveGitHubToken(token);
-            console.log('✅ GitHub settings saved');
-            alert('GitHub settings saved successfully!');
+        if (!owner || !repo || !token) {
+            alert('Please fill in all required GitHub settings');
+            return;
+        }
+        
+        try {
+            // Update admin manager settings
+            if (this.adminManager) {
+                this.adminManager.github = { owner, repo, branch, token };
+                await this.adminManager.setGitHubToken(token);
+            }
+            
+            // Configure GitConnector with the new settings
+            if (window.GitConnector) {
+                const gitConnector = new window.GitConnector({
+                    repo: `${owner}/${repo}`,
+                    branch: branch,
+                    token: token
+                });
+                
+                // Save connection to server
+                await gitConnector.saveConnectionToServer();
+                
+                console.log('✅ GitHub settings saved to server');
+                alert('GitHub settings saved successfully!');
+                
+                // Update status indicator
+                const statusElement = document.getElementById('github-status');
+                if (statusElement) {
+                    this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
+                }
+            } else {
+                console.error('GitConnector not available');
+                alert('Could not save GitHub settings: GitConnector not available');
+            }
+        } catch (error) {
+            console.error('Failed to save GitHub settings:', error);
+            alert(`Failed to save GitHub settings: ${error.message}`);
         }
     }
 
@@ -1293,12 +1673,28 @@ async saveProductField(productId, field, value) {
     async testCopperIntegration() {
         console.log('🧪 Testing Copper CRM integration...');
         
+        const apiKey = document.getElementById('copper-api-key')?.value;
+        const email = document.getElementById('copper-email')?.value;
+        const environment = document.getElementById('copper-environment')?.value || 'production';
+        
         const statusElement = document.getElementById('copper-status');
         this.updateIntegrationStatus(statusElement, 'testing', 'Testing...');
         
         try {
             // Check if Copper integration is available
             if (window.CopperIntegration) {
+                // Save credentials to server first
+                await this.saveCopperSettings(false); // Don't show alert
+                
+                // Configure Copper SDK with new credentials
+                if (typeof window.CopperIntegration.configure === 'function') {
+                    await window.CopperIntegration.configure({
+                        apiKey: apiKey,
+                        email: email,
+                        environment: environment
+                    });
+                }
+                
                 const isCrmAvailable = window.CopperIntegration.isCrmAvailable();
                 
                 if (isCrmAvailable) {
@@ -1308,7 +1704,10 @@ async saveProductField(productId, field, value) {
                     this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
                     
                     let message = `✅ Copper CRM Connection Successful\n\n`;
-                    message += `Environment: ${typeof window.Copper !== 'undefined' ? 'Copper CRM' : 'Standalone'}\n`;
+                    message += `API Key: ${apiKey ? '✓ Configured' : '✗ Missing'}\n`;
+                    message += `Email: ${email || 'Not configured'}\n`;
+                    message += `Environment: ${environment === 'production' ? 'Production' : 'Sandbox'}\n`;
+                    message += `Mode: ${typeof window.Copper !== 'undefined' ? 'Copper CRM' : 'Standalone'}\n`;
                     
                     if (contextData) {
                         message += `Context Available: Yes\n`;
@@ -1328,8 +1727,14 @@ async saveProductField(productId, field, value) {
                     
                     alert(message);
                 } else {
-                    this.updateIntegrationStatus(statusElement, 'warning', 'Not in CRM Environment');
-                    alert('⚠️ Copper CRM is not available.\n\nThis is normal when running outside the Copper CRM environment.\nCRM features will work in simulation mode.');
+                    // If API key is provided but connection failed
+                    if (apiKey) {
+                        this.updateIntegrationStatus(statusElement, 'error', 'Authentication Failed');
+                        alert('❌ Copper CRM authentication failed.\n\nPlease check your API key and email address.');
+                    } else {
+                        this.updateIntegrationStatus(statusElement, 'warning', 'Not in CRM Environment');
+                        alert('⚠️ Copper CRM is not available.\n\nThis is normal when running outside the Copper CRM environment.\nCRM features will work in simulation mode.');
+                    }
                 }
             } else {
                 this.updateIntegrationStatus(statusElement, 'error', 'Integration Not Loaded');
@@ -1339,6 +1744,70 @@ async saveProductField(productId, field, value) {
             console.error('Copper test failed:', error);
             this.updateIntegrationStatus(statusElement, 'error', 'Test Failed');
             alert(`❌ Copper CRM test failed\n\nError: ${error.message}`);
+        }
+    }
+    
+    /**
+     * Save Copper CRM settings
+     */
+    async saveCopperSettings(showAlert = true) {
+        console.log('💾 Saving Copper CRM settings...');
+        
+        const apiKey = document.getElementById('copper-api-key')?.value;
+        const email = document.getElementById('copper-email')?.value;
+        const environment = document.getElementById('copper-environment')?.value || 'production';
+        
+        if (!apiKey) {
+            if (showAlert) alert('Please enter a Copper API key');
+            return false;
+        }
+        
+        try {
+            // Save to server via API
+            const response = await fetch('/api/connections/copper', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    apiKey: apiKey,
+                    email: email,
+                    environment: environment,
+                    lastUpdated: new Date().toISOString()
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                console.log('✅ Copper CRM settings saved to server');
+                
+                // Update status indicator
+                const statusElement = document.getElementById('copper-status');
+                if (statusElement) {
+                    this.updateIntegrationStatus(statusElement, 'ok', 'Configured');
+                }
+                
+                // Configure Copper SDK with new credentials if available
+                if (window.CopperIntegration && typeof window.CopperIntegration.configure === 'function') {
+                    await window.CopperIntegration.configure({
+                        apiKey: apiKey,
+                        email: email,
+                        environment: environment
+                    });
+                }
+                
+                if (showAlert) alert('Copper CRM settings saved successfully!');
+                return true;
+            } else {
+                console.error('Failed to save Copper settings:', result.message);
+                if (showAlert) alert(`Failed to save Copper settings: ${result.message}`);
+                return false;
+            }
+        } catch (error) {
+            console.error('Error saving Copper settings:', error);
+            if (showAlert) alert(`Error saving Copper settings: ${error.message}`);
+            return false;
         }
     }
 
@@ -1354,78 +1823,448 @@ async saveProductField(productId, field, value) {
      * Test Fishbowl ERP integration
      */
     async testFishbowlIntegration() {
-        console.log('🧪 Testing Fishbowl ERP integration...');
+        console.log('🧪 Testing Fishbowl integration...');
+        
+        const host = document.getElementById('fishbowl-host')?.value || 'localhost';
+        const port = document.getElementById('fishbowl-port')?.value || '28192';
+        const username = document.getElementById('fishbowl-username')?.value;
+        const password = document.getElementById('fishbowl-password')?.value;
+        
+        if (!username || !password) {
+            alert('Please enter both username and password for Fishbowl ERP');
+            return;
+        }
         
         const statusElement = document.getElementById('fishbowl-status');
         this.updateIntegrationStatus(statusElement, 'testing', 'Testing...');
         
         try {
-            // For now, simulate a successful test since Fishbowl integration is confirmed working
-            setTimeout(() => {
-                this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
-                alert('Fishbowl ERP integration is active and synchronized!');
-            }, 1000);
+            if (window.FishbowlIntegration) {
+                // Save credentials to server first
+                await this.saveFishbowlSettings(false); // Don't show alert
+                
+                // Create new instance with the credentials
+                const fishbowlIntegration = new window.FishbowlIntegration({
+                    host: host,
+                    port: port,
+                    username: username,
+                    password: password
+                });
+                
+                // Test connection
+                const testResult = await fishbowlIntegration.testConnection();
+                
+                if (testResult.success) {
+                    this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
+                    
+                    // Store reference to fishbowl integration
+                    window.fishbowlIntegration = fishbowlIntegration;
+                    
+                    alert(`✅ Fishbowl API Connection Successful\n\nServer: ${testResult.details.serverInfo || host + ':' + port}\nVersion: ${testResult.details.version || 'Unknown'}\nUser: ${testResult.details.userName || username}`);
+                } else {
+                    this.updateIntegrationStatus(statusElement, 'error', testResult.message);
+                    alert(`❌ Fishbowl Connection Failed\n\nError: ${testResult.message}`);
+                }
+            } else {
+                this.updateIntegrationStatus(statusElement, 'error', 'Integration Not Loaded');
+                alert('❌ FishbowlIntegration not loaded. Please refresh the page and try again.');
+            }
         } catch (error) {
             console.error('Fishbowl test failed:', error);
             this.updateIntegrationStatus(statusElement, 'error', 'Test Failed');
+            alert(`❌ Fishbowl Test Failed\n\nError: ${error.message}`);
         }
     }
 
     /**
      * Sync Fishbowl data
      */
-    syncFishbowlData() {
+    async syncFishbowlData() {
         console.log('🔄 Syncing Fishbowl data...');
-        alert('Fishbowl data synchronization started. Product inventory and pricing will be updated.');
+        
+        const statusElement = document.getElementById('fishbowl-status');
+        this.updateIntegrationStatus(statusElement, 'testing', 'Syncing...');
+        
+        try {
+            if (window.fishbowlIntegration) {
+                // Use existing instance if available
+                const syncResult = await window.fishbowlIntegration.syncProductData();
+                
+                if (syncResult.success) {
+                    this.updateIntegrationStatus(statusElement, 'ok', 'Synced');
+                    alert(`✅ Fishbowl Data Sync Successful\n\nUpdated ${syncResult.updatedCount} products\nLast Sync: ${new Date().toLocaleString()}`);
+                    
+                    // Refresh products data if we're on the products tab
+                    if (this.currentSection === 'products') {
+                        this.refreshProductsData();
+                    }
+                } else {
+                    this.updateIntegrationStatus(statusElement, 'error', 'Sync Failed');
+                    alert(`❌ Fishbowl Sync Failed\n\nError: ${syncResult.message}`);
+                }
+            } else if (window.FishbowlIntegration) {
+                // Create new instance if needed
+                const fishbowlIntegration = new window.FishbowlIntegration();
+                await fishbowlIntegration.loadConnectionFromServer();
+                
+                // Test connection first
+                const testResult = await fishbowlIntegration.testConnection();
+                
+                if (testResult.success) {
+                    // Connection successful, now sync data
+                    const syncResult = await fishbowlIntegration.syncProductData();
+                    
+                    if (syncResult.success) {
+                        this.updateIntegrationStatus(statusElement, 'ok', 'Synced');
+                        alert(`✅ Fishbowl Data Sync Successful\n\nUpdated ${syncResult.updatedCount} products\nLast Sync: ${new Date().toLocaleString()}`);
+                        
+                        // Store reference to fishbowl integration
+                        window.fishbowlIntegration = fishbowlIntegration;
+                        
+                        // Refresh products data if we're on the products tab
+                        if (this.currentSection === 'products') {
+                            this.refreshProductsData();
+                        }
+                    } else {
+                        this.updateIntegrationStatus(statusElement, 'error', 'Sync Failed');
+                        alert(`❌ Fishbowl Sync Failed\n\nError: ${syncResult.message}`);
+                    }
+                } else {
+                    this.updateIntegrationStatus(statusElement, 'error', 'Connection Failed');
+                    alert(`❌ Fishbowl Connection Failed\n\nPlease test the connection first.\nError: ${testResult.message}`);
+                }
+            } else {
+                this.updateIntegrationStatus(statusElement, 'error', 'Integration Not Loaded');
+                alert('❌ FishbowlIntegration not loaded. Please refresh the page and try again.');
+            }
+        } catch (error) {
+            console.error('Fishbowl sync failed:', error);
+            this.updateIntegrationStatus(statusElement, 'error', 'Sync Failed');
+            alert(`❌ Fishbowl Sync Failed\n\nError: ${error.message}`);
+        }
+    }
+    
+    /**
+     * Save Fishbowl ERP settings
+     */
+    async saveFishbowlSettings(showAlert = true) {
+        console.log('💾 Saving Fishbowl ERP settings...');
+        
+        const host = document.getElementById('fishbowl-host')?.value || 'localhost';
+        const port = document.getElementById('fishbowl-port')?.value || '28192';
+        const username = document.getElementById('fishbowl-username')?.value;
+        const password = document.getElementById('fishbowl-password')?.value;
+        
+        if (!username || !password) {
+            if (showAlert) alert('Please enter both username and password for Fishbowl ERP');
+            return false;
+        }
+        
+        try {
+            // Save to server via API
+            const response = await fetch('/api/connections/fishbowl', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    host: host,
+                    port: port,
+                    username: username,
+                    password: password,
+                    lastUpdated: new Date().toISOString()
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                console.log('✅ Fishbowl ERP settings saved to server');
+                
+                // Update status indicator
+                const statusElement = document.getElementById('fishbowl-status');
+                if (statusElement) {
+                    this.updateIntegrationStatus(statusElement, 'ok', 'Configured');
+                }
+                
+                // Configure Fishbowl integration with new credentials if available
+                if (window.fishbowlIntegration) {
+                    await window.fishbowlIntegration.configure({
+                        host: host,
+                        port: port,
+                        username: username,
+                        password: password
+                    });
+                } else if (window.FishbowlIntegration) {
+                    // Create new instance with the credentials
+                    window.fishbowlIntegration = new window.FishbowlIntegration({
+                        host: host,
+                        port: port,
+                        username: username,
+                        password: password
+                    });
+                }
+                
+                if (showAlert) alert('Fishbowl ERP settings saved successfully!');
+                return true;
+            } else {
+                console.error('Failed to save Fishbowl settings:', result.message);
+                if (showAlert) alert(`Failed to save Fishbowl settings: ${result.message}`);
+                return false;
+            }
+        } catch (error) {
+            console.error('Error saving Fishbowl settings:', error);
+            if (showAlert) alert(`Error saving Fishbowl settings: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Load integrations data from the server
+     */
+    async loadIntegrationsData() {
+        console.log('📂 Loading integrations data from server...');
+        
+        try {
+            // Fetch all connections data
+            const response = await fetch('/api/connections');
+            
+            // Check if response is ok before trying to parse JSON
+            if (!response.ok) {
+                console.warn(`⚠️ Server returned ${response.status} when loading integrations data`);
+                // Try to load from localStorage instead
+                return;
+            }
+            
+            try {
+                const data = await response.json();
+                
+                if (data && data.connections) {
+                    console.log('✅ Loaded connections data:', data.connections);
+                    
+                    // Load GitHub credentials
+                    if (data.connections.github) {
+                    const github = data.connections.github;
+                    const githubOwnerEl = document.getElementById('github-owner');
+                    if (githubOwnerEl) githubOwnerEl.value = github.owner || '';
+                    const githubRepoEl = document.getElementById('github-repo');
+                    if (githubRepoEl) githubRepoEl.value = github.repo || '';
+                    const githubTokenEl = document.getElementById('github-token');
+                    if (githubTokenEl) githubTokenEl.value = github.token || '';
+                    
+                    // Update status if token exists
+                    if (github.token) {
+                        const statusElement = document.getElementById('github-status');
+                        this.updateIntegrationStatus(statusElement, 'ok', 'Configured');
+                    }
+                }
+                
+                // Load Copper credentials
+                if (data.connections.copper) {
+                    const copper = data.connections.copper;
+                    const copperApiKeyEl = document.getElementById('copper-api-key');
+                    if (copperApiKeyEl) copperApiKeyEl.value = copper.apiKey || '';
+                    const copperEmailEl = document.getElementById('copper-email');
+                    if (copperEmailEl) copperEmailEl.value = copper.email || '';
+                    
+                    if (document.getElementById('copper-environment')) {
+                        document.getElementById('copper-environment').value = copper.environment || 'production';
+                    }
+                    
+                    // Update status if API key exists
+                    if (copper.apiKey) {
+                        const statusElement = document.getElementById('copper-status');
+                        this.updateIntegrationStatus(statusElement, 'ok', 'Configured');
+                        
+                        // Configure Copper SDK with credentials if available
+                        if (window.CopperIntegration && typeof window.CopperIntegration.configure === 'function') {
+                            window.CopperIntegration.configure({
+                                apiKey: copper.apiKey,
+                                email: copper.email,
+                                environment: copper.environment || 'production'
+                            });
+                        }
+                    }
+                }
+                
+                // Load Fishbowl credentials
+                if (data.connections.fishbowl) {
+                    const fishbowl = data.connections.fishbowl;
+                    const fishbowlHostEl = document.getElementById('fishbowl-host');
+                    if (fishbowlHostEl) fishbowlHostEl.value = fishbowl.host || 'localhost';
+                    const fishbowlPortEl = document.getElementById('fishbowl-port');
+                    if (fishbowlPortEl) fishbowlPortEl.value = fishbowl.port || '28192';
+                    const fishbowlUsernameEl = document.getElementById('fishbowl-username');
+                    if (fishbowlUsernameEl) fishbowlUsernameEl.value = fishbowl.username || '';
+                    const fishbowlPasswordEl = document.getElementById('fishbowl-password');
+                    if (fishbowlPasswordEl) fishbowlPasswordEl.value = fishbowl.password || '';
+                    
+                    // Update status if username and password exist
+                    if (fishbowl.username && fishbowl.password) {
+                        const statusElement = document.getElementById('fishbowl-status');
+                        this.updateIntegrationStatus(statusElement, 'ok', 'Configured');
+                        
+                        // Initialize Fishbowl integration with credentials if available
+                        if (window.FishbowlIntegration && !window.fishbowlIntegration) {
+                            window.fishbowlIntegration = new window.FishbowlIntegration({
+                                host: fishbowl.host || 'localhost',
+                                port: fishbowl.port || '28192',
+                                username: fishbowl.username,
+                                password: fishbowl.password
+                            });
+                        }
+                    }
+                }
+                }
+            } catch (jsonError) {
+                console.error('❌ Error parsing integrations data JSON:', jsonError);
+            }
+        } catch (error) {
+            console.error('❌ Error loading integrations data:', error);
+        }
     }
 
     /**
      * Update integration status indicator
      */
-    updateIntegrationStatus(statusElement, status, message) {
-        if (!statusElement) return;
+    updateIntegrationStatus(element, status, message) {
+        if (!element) return;
         
-        const indicator = statusElement.querySelector('.status-indicator');
-        const text = statusElement.querySelector('span:last-child');
+        const indicator = element.querySelector('.status-indicator');
+        const text = element.querySelector('span:last-child');
         
-        if (indicator && text) {
-            // Remove existing status classes
+        if (indicator) {
             indicator.className = 'status-indicator';
             
-            // Add new status class and icon
             switch (status) {
                 case 'ok':
                     indicator.classList.add('status-ok');
-                    indicator.textContent = '✅';
+                    indicator.innerHTML = '✅';
                     break;
                 case 'error':
                     indicator.classList.add('status-error');
-                    indicator.textContent = '❌';
+                    indicator.innerHTML = '❌';
                     break;
                 case 'warning':
                     indicator.classList.add('status-warning');
-                    indicator.textContent = '⚠️';
+                    indicator.innerHTML = '⚠️';
                     break;
                 case 'testing':
                     indicator.classList.add('status-testing');
-                    indicator.textContent = '🔄';
+                    indicator.innerHTML = '⏳';
                     break;
                 default:
                     indicator.classList.add('status-unknown');
-                    indicator.textContent = '❔';
+                    indicator.innerHTML = '❓';
             }
-            
+        }
+        
+        if (text && message) {
             text.textContent = message;
         }
     }
 
     // =====================================
-    // PLACEHOLDER METHODS FOR FUTURE IMPLEMENTATION
+    // PASSWORD TOGGLE AND PICTURE UPLOAD METHODS
     // =====================================
 
-    addNewProduct() {
-        alert('Add New Product functionality would be implemented here.');
+    /**
+     * Password visibility function - now just a stub since we're making passwords always visible
+     */
+    togglePasswordVisibility(button) {
+        // Function kept as a stub to prevent errors, but no longer toggles password visibility
+        console.log('Password toggle functionality removed - passwords are now always visible');
     }
+
+    /**
+     * Handle picture upload with resizing and validation
+     */
+    async handlePictureUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        // Check if file is an image
+        if (!file.type.startsWith('image/')) {
+            this.showNotification('❌ Please select a valid image file (JPEG, PNG, GIF, etc.)', 'error');
+            return;
+        }
+        
+        // Check file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+            this.showNotification('⚠️ Image size should be less than 5MB', 'warning');
+            return;
+        }
+        
+        // Show loading state
+        const container = event.target.closest('.image-upload-container');
+        const previewImg = container.querySelector('.image-preview');
+        const placeholder = container.querySelector('.upload-placeholder');
+        const removeBtn = container.querySelector('.btn-outline-secondary');
+        const uploadBtn = container.querySelector('.image-upload-btn');
+        
+        const originalBtnText = uploadBtn.textContent;
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Processing...';
+        
+        try {
+            // Resize image before preview
+            const resizedImageUrl = await this.resizeImage(file, 800, 800, 0.8);
+            
+            // Update preview
+            previewImg.src = resizedImageUrl;
+            previewImg.style.display = 'block';
+            placeholder.style.display = 'none';
+            removeBtn.style.display = 'inline-block';
+            
+            // Store the resized image data for form submission
+            event.target.setAttribute('data-image-data', resizedImageUrl);
+            
+            // Show success feedback
+            this.showNotification('✅ Image uploaded successfully', 'success');
+            console.log('🖼️ Image processed and preview updated');
+            
+        } catch (error) {
+            console.error('Error processing image:', error);
+            this.showNotification('❌ Failed to process image. Please try another one.', 'error');
+            
+            // Reset to default state
+            previewImg.src = 'assets/logo/Kanva_Logo_White_Master.png';
+            placeholder.style.display = 'block';
+            removeBtn.style.display = 'none';
+            event.target.value = ''; // Clear file input
+            event.target.removeAttribute('data-image-data');
+        } finally {
+            // Restore button state
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = originalBtnText;
+        }
+    }
+
+    /**
+     * Clear picture upload and reset to default state
+     */
+    clearPictureUpload(removeBtn) {
+        const container = removeBtn.closest('.image-upload-container');
+        const fileInput = container.querySelector('input[type="file"]');
+        const previewImg = container.querySelector('.image-preview');
+        const placeholder = container.querySelector('.upload-placeholder');
+        
+        // Clear file input and reset to fallback logo
+        fileInput.value = '';
+        fileInput.removeAttribute('data-image-data');
+        previewImg.src = 'assets/logo/Kanva_Logo_White_Master.png';
+        previewImg.style.display = 'block';
+        placeholder.style.display = 'block';
+        placeholder.textContent = '📷 Click to upload product image (200x200 recommended)';
+        removeBtn.style.display = 'none';
+        
+        console.log('🗑️ Image cleared, reset to fallback logo');
+    }
+
+    // =====================================
+    // PLACEHOLDER METHODS FOR FUTURE IMPLEMENTATION
+    // =====================================
 
     addNewTier() {
         alert('Add New Tier functionality would be implemented here.');
@@ -1443,12 +2282,16 @@ if (typeof window !== 'undefined') {
     // Auto-initialize if page is already loaded
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
-            window.adminDashboard = new AdminDashboard();
+            window.adminDashboard = new AdminDashboard({
+                adminManager: window.adminManager
+            });
             window.adminDashboard.init();
         });
     } else {
         // DOM already loaded
-        window.adminDashboard = new AdminDashboard();
+        window.adminDashboard = new AdminDashboard({
+            adminManager: window.adminManager
+        });
         window.adminDashboard.init();
     }
 }

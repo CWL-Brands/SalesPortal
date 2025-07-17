@@ -216,22 +216,78 @@ class AdminManager {
     /**
      * Set GitHub token for API access
      */
-    setGitHubToken(token) {
+    async setGitHubToken(token) {
         this.github.token = token;
+        
+        // Save to localStorage for immediate use
         localStorage.setItem('github_token', token);
+        
+        // Save to server for persistence across devices
+        try {
+            const response = await fetch('/api/connections/github', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    token: token,
+                    owner: this.github.owner,
+                    repo: this.github.repo,
+                    branch: this.github.branch,
+                    timestamp: new Date().toISOString()
+                })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                console.log('✅ GitHub token saved to server');
+            } else {
+                console.warn('⚠️ GitHub token saved locally but not to server:', result.message);
+            }
+        } catch (error) {
+            console.error('❌ Failed to save GitHub token to server:', error);
+        }
+        
         console.log('✅ GitHub token set');
     }
 
     /**
      * Load GitHub token from storage
      */
-    loadGitHubToken() {
+    async loadGitHubToken() {
+        // Try to load from server first
+        try {
+            const response = await fetch('/api/connections');
+            const result = await response.json();
+            
+            if (result.success && result.data && result.data.github && result.data.github.token) {
+                // Update GitHub config from server
+                this.github.token = result.data.github.token;
+                if (result.data.github.owner) this.github.owner = result.data.github.owner;
+                if (result.data.github.repo) this.github.repo = result.data.github.repo;
+                if (result.data.github.branch) this.github.branch = result.data.github.branch;
+                
+                // Update localStorage for consistency
+                localStorage.setItem('github_token', this.github.token);
+                
+                console.log('✅ GitHub token loaded from server');
+                return this.github.token;
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to load GitHub token from server:', error);
+        }
+        
+        // Fall back to localStorage if server fails
         const token = localStorage.getItem('github_token');
         if (token) {
             this.github.token = token;
-            console.log('✅ GitHub token loaded from storage');
+            console.log('✅ GitHub token loaded from local storage');
+            
+            // Try to sync back to server
+            this.setGitHubToken(token).catch(console.error);
         }
-        return token;
+        
+        return this.github.token;
     }
 
     /**

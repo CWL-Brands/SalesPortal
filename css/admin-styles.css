@@ -31,18 +31,37 @@
     --admin-info: var(--kanva-green);
 }
 
+/* Kanva Brand Font Declaration */
+@font-face {
+    font-family: 'Century Gothic';
+    src: url('../assets/fonts/GOTHIC.TTF') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Century Gothic';
+    src: url('../assets/fonts/GOTHICB.TTF') format('truetype');
+    font-weight: bold;
+    font-style: normal;
+}
+
 /* Clean Modern Floating Admin Button */
 .floating-admin-btn {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    width: 56px;
-    height: 56px;
+    width: auto;
+    min-width: 100px;
+    height: 40px;
+    padding: 0 16px;
     background: var(--admin-primary);
     border: 2px solid var(--admin-primary);
-    border-radius: 50%;
+    border-radius: 20px;
     color: var(--pure-white);
-    font-size: 20px;
+    font-family: 'Century Gothic', Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    font-weight: bold;
     cursor: pointer;
     box-shadow: 0 4px 16px var(--admin-shadow);
     transition: all 0.3s ease;
@@ -50,15 +69,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: system-ui, -apple-system, sans-serif;
-    font-weight: 600;
 }
 
 .floating-admin-btn:hover {
-    transform: translateY(-2px) scale(1.05);
+    transform: translateY(-2px);
     box-shadow: 0 8px 24px var(--admin-shadow);
-    background: rgba(147, 213, 0, 0.9);
-    border-color: var(--admin-accent);
+    background: var(--dark-fir);
+    border-color: var(--dark-fir);
 }
 
 .floating-admin-btn:active {
@@ -81,6 +98,22 @@
 .admin-modal-open .floating-admin-btn {
     opacity: 0.3;
     pointer-events: none;
+}
+
+/* Apply Kanva Brand Fonts Globally */
+.admin-dashboard,
+.modal-content,
+.admin-header,
+.admin-navigation,
+.admin-section,
+.admin-card,
+.form-group,
+.btn,
+.table,
+.modal-header,
+.modal-body,
+.modal-footer {
+    font-family: 'Century Gothic', Helvetica, Arial, sans-serif;
 }
 
 /* Clean Modern Admin Dashboard Modal */
@@ -650,9 +683,9 @@
 
 .modal-header h3 {
     margin: 0;
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: 'Century Gothic', Helvetica, Arial, sans-serif;
     font-size: 1.2rem;
-    font-weight: 600;
+    font-weight: bold;
 }
 
 .modal-body {
@@ -1278,6 +1311,331 @@
 
 .w-100 { width: 100%; }
 .h-100 { height: 100%; }
+
+/* Password Toggle Styles */
+.password-input-container {
+    position: relative;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--admin-text-secondary);
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+    z-index: 2;
+}
+
+.password-toggle-btn:hover {
+    color: var(--admin-primary);
+}
+
+.password-toggle-btn:focus {
+    outline: 2px solid var(--admin-focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+/* Picture Upload Styles */
+.picture-upload-container {
+    border: 2px dashed var(--admin-border);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    margin-top: 8px;
+    background: var(--admin-surface);
+    transition: all 0.3s ease;
+}
+
+.picture-upload-container:hover {
+    border-color: var(--admin-primary);
+    background: var(--admin-hover);
+}
+
+.picture-upload-container.drag-over {
+    border-color: var(--admin-primary);
+    background: var(--admin-focus);
+    transform: scale(1.02);
+}
+
+.picture-preview {
+    margin-bottom: 15px;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.preview-image {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px var(--admin-shadow);
+    border: 2px solid var(--admin-border);
+    transition: all 0.3s ease;
+}
+
+.preview-image:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px var(--admin-shadow);
+}
+
+.upload-placeholder {
+    color: var(--admin-text-secondary);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    border-radius: 6px;
+    background: var(--admin-hover);
+    margin: 10px 0;
+}
+
+.upload-placeholder:before {
+    content: "📷";
+    font-size: 24px;
+}
+
+.picture-upload-container .btn {
+    margin: 0 5px;
+    font-size: 14px;
+    padding: 8px 16px;
+}
+
+.btn-outline-secondary {
+    background: transparent;
+    color: var(--admin-text-secondary);
+    border: 1px solid var(--admin-border);
+}
+
+/* Product thumbnail styles */
+.product-thumbnail {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid var(--admin-border);
+    transition: transform 0.2s ease;
+}
+
+.product-thumbnail:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.product-image {
+    text-align: center;
+    padding: 8px;
+}
+
+/* Enhanced image upload container */
+.image-upload-container {
+    border: 2px dashed var(--admin-border);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    background: linear-gradient(135deg, var(--admin-hover) 0%, rgba(255, 107, 53, 0.02) 100%);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.image-upload-container:hover {
+    border-color: var(--admin-primary);
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.05) 0%, rgba(255, 107, 53, 0.08) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.file-input-hidden {
+    display: none !important;
+}
+
+.picture-preview {
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.image-preview {
+    max-width: 200px;
+    max-height: 200px;
+    width: auto;
+    height: auto;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    border: 2px solid var(--admin-border);
+}
+
+.image-preview:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.upload-placeholder {
+    color: var(--admin-text-muted);
+    font-size: 14px;
+    margin-top: 12px;
+    font-weight: 500;
+}
+
+.image-upload-btn {
+    background: linear-gradient(135deg, var(--admin-primary) 0%, var(--admin-secondary) 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+}
+
+.image-upload-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(255, 107, 53, 0.4);
+    background: linear-gradient(135deg, var(--admin-secondary) 0%, var(--admin-primary) 100%);
+}
+
+.image-upload-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+}
+
+.btn.btn-outline-secondary {
+    background: transparent;
+    color: var(--admin-danger);
+    border: 1px solid var(--admin-danger);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn.btn-outline-secondary:hover {
+    background: var(--admin-danger);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+/* Image preview styles are defined above */
+
+/* Product Modal Enhancements */
+.product-edit-modal {
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.product-edit-modal .modal-body {
+    padding: 24px;
+}
+
+.product-edit-modal .form-row {
+    margin-bottom: 20px;
+}
+
+.product-edit-modal .form-group {
+    margin-bottom: 16px;
+}
+
+.product-edit-modal .form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--admin-border);
+}
+
+/* Modal Overlay Improvements */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--admin-overlay);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        backdrop-filter: blur(0px);
+    }
+    to {
+        opacity: 1;
+        backdrop-filter: blur(4px);
+    }
+}
+
+.modal-overlay .product-edit-modal {
+    background: var(--admin-card);
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-30px) scale(0.95);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .picture-upload-container {
+        padding: 15px;
+    }
+    
+    .preview-image {
+        max-width: 150px;
+        max-height: 150px;
+    }
+    
+    .product-edit-modal {
+        width: 95%;
+        margin: 10px;
+    }
+    
+    .product-edit-modal .form-actions {
+        flex-direction: column;
+    }
+    
+    .password-toggle-btn {
+        right: 10px;
+    }
+}
 
 /* Dark mode support (future enhancement) */
 @media (prefers-color-scheme: dark) {
