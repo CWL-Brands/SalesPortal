@@ -5,10 +5,26 @@ const CopperIntegration = {
     searchInterfaceAdded: false, // FIXED: Prevent duplicate search interfaces
 
     // Initialize Copper SDK and detect environment
-    initialize: function() {
+    initialize: async function() {
         console.log('🔗 Initializing Copper CRM integration...');
         
         try {
+            // Load credentials from secure integration handler if available
+            if (window.secureIntegrationHandler) {
+                try {
+                    const copperConfig = await window.secureIntegrationHandler.getIntegration('copper');
+                    if (copperConfig) {
+                        if (!appState.copper) appState.copper = {};
+                        appState.copper.apiKey = copperConfig.apiKey || appState.copper.apiKey;
+                        appState.copper.email = copperConfig.email || appState.copper.email;
+                        appState.copper.environment = copperConfig.environment || 'production';
+                        console.log('✅ Copper credentials loaded from secure storage');
+                    }
+                } catch (configError) {
+                    console.warn('⚠️ Could not load Copper credentials from secure storage:', configError);
+                }
+            }
+            
             // Check if we're running in Copper environment
             if (typeof window.Copper !== 'undefined') {
                 appState.sdk = window.Copper.init();
@@ -888,6 +904,31 @@ Calculator Version: ${adminConfig.metadata.version}`;
         appState.copper.environment = config.environment || 'production';
         
         console.log(`✅ Copper credentials configured for ${appState.copper.environment} environment`);
+        
+        // Save to secure integration handler if available
+        if (window.secureIntegrationHandler) {
+            try {
+                await window.secureIntegrationHandler.updateIntegration('copper', {
+                    apiKey: appState.copper.apiKey,
+                    email: appState.copper.email,
+                    environment: appState.copper.environment,
+                    lastUpdated: new Date().toISOString()
+                });
+                console.log('✅ Copper credentials saved to secure storage');
+                
+                // Show notification to user
+                if (window.showNotification) {
+                    window.showNotification('Copper API credentials updated successfully', 'success');
+                }
+            } catch (error) {
+                console.error('❌ Error saving Copper credentials:', error);
+                
+                // Show notification to user
+                if (window.showNotification) {
+                    window.showNotification('Failed to save Copper API credentials', 'error');
+                }
+            }
+        }
         
         // If we're in standalone mode, update the configuration
         if (!this.isCrmAvailable() && appState.copper.apiKey) {

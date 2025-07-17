@@ -34,6 +34,31 @@ class FishbowlIntegration {
      */
     async loadConnectionFromServer() {
         try {
+            // First try to load from secure integration handler if available
+            if (window.secureIntegrationHandler) {
+                try {
+                    const fishbowlConfig = await window.secureIntegrationHandler.getIntegration('fishbowl');
+                    if (fishbowlConfig) {
+                        // Update configuration from secure storage
+                        if (fishbowlConfig.host) this.host = fishbowlConfig.host;
+                        if (fishbowlConfig.port) this.port = fishbowlConfig.port;
+                        if (fishbowlConfig.username) this.username = fishbowlConfig.username;
+                        if (fishbowlConfig.password) this.password = fishbowlConfig.password;
+                        if (fishbowlConfig.connected) this.connected = fishbowlConfig.connected;
+                        if (fishbowlConfig.lastUpdated) this.lastSync = new Date(fishbowlConfig.lastUpdated);
+                        
+                        // Update API base URL with new host/port
+                        this.apiBase = `http://${this.host}:${this.port}/api`;
+                        
+                        console.log('✅ Fishbowl connection loaded from secure storage');
+                        return;
+                    }
+                } catch (secureError) {
+                    console.warn('⚠️ Could not load Fishbowl credentials from secure storage:', secureError);
+                }
+            }
+            
+            // Fallback to legacy method
             const response = await fetch('/api/connections');
             const result = await response.json();
             
@@ -62,20 +87,47 @@ class FishbowlIntegration {
      * Save Fishbowl connection to server
      */
     async saveConnectionToServer() {
+        const fishbowlConfig = {
+            host: this.host,
+            port: this.port,
+            username: this.username,
+            password: this.password,
+            connected: this.connected,
+            lastUpdated: new Date().toISOString()
+        };
+        
+        // First try to save using secure integration handler if available
+        if (window.secureIntegrationHandler) {
+            try {
+                await window.secureIntegrationHandler.updateIntegration('fishbowl', fishbowlConfig);
+                console.log('✅ Fishbowl connection saved to secure storage');
+                
+                // Show notification to user
+                if (window.showNotification) {
+                    window.showNotification('Fishbowl connection settings updated successfully', 'success');
+                }
+                
+                return true;
+            } catch (secureError) {
+                console.warn('⚠️ Could not save Fishbowl credentials to secure storage:', secureError);
+                
+                // Show notification to user
+                if (window.showNotification) {
+                    window.showNotification('Failed to save Fishbowl connection settings securely', 'warning');
+                }
+                
+                // Fall through to legacy method
+            }
+        }
+        
+        // Fallback to legacy method
         try {
             const response = await fetch('/api/connections/fishbowl', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    host: this.host,
-                    port: this.port,
-                    username: this.username,
-                    password: this.password,
-                    connected: this.connected,
-                    lastUpdated: new Date().toISOString()
-                })
+                body: JSON.stringify(fishbowlConfig)
             });
             
             const result = await response.json();

@@ -28,7 +28,8 @@ const mimeTypes = {
 const connectionsStore = {
     github: null,
     copper: null,
-    fishbowl: null
+    fishbowl: null,
+    shipstation: null
 };
 
 // Path to store connections locally
@@ -114,6 +115,7 @@ const server = http.createServer((req, res) => {
                     if (data.github) connectionsStore.github = data.github;
                     if (data.copper) connectionsStore.copper = data.copper;
                     if (data.fishbowl) connectionsStore.fishbowl = data.fishbowl;
+                    if (data.shipstation) connectionsStore.shipstation = data.shipstation;
                     
                     // Save to file
                     const saved = saveConnectionsToFile();
@@ -139,7 +141,7 @@ const server = http.createServer((req, res) => {
             // Update specific connection
             const connectionType = pathname.split('/').pop();
             
-            if (!['github', 'copper', 'fishbowl'].includes(connectionType)) {
+            if (!['github', 'copper', 'fishbowl', 'shipstation'].includes(connectionType)) {
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: false,
