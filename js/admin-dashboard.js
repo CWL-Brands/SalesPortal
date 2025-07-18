@@ -4236,6 +4236,53 @@ async saveProductField(productId, field, value) {
      * Upload product image file
      */
     async uploadProductImageFile(productId, file) {
+        // Check if we're running on GitHub Pages
+        const isGitHubPages = window.location.hostname.includes('github.io');
+        
+        if (isGitHubPages) {
+            // In GitHub Pages mode, convert image to base64 and store locally
+            console.log('💾 GitHub Pages mode: Converting image to base64 for local storage');
+            
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                return new Promise((resolve, reject) => {
+                    img.onload = () => {
+                        // Resize to 200x200
+                        canvas.width = 200;
+                        canvas.height = 200;
+                        
+                        // Draw image with proper scaling
+                        const scale = Math.min(200 / img.width, 200 / img.height);
+                        const x = (200 - img.width * scale) / 2;
+                        const y = (200 - img.height * scale) / 2;
+                        
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, 200, 200);
+                        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                        
+                        // Convert to base64 data URL
+                        const dataURL = canvas.toDataURL('image/png', 0.9);
+                        
+                        // Generate a simple filename for reference
+                        const timestamp = Date.now();
+                        const filename = `product_${productId}_${timestamp}.png`;
+                        
+                        console.log('✅ Image converted to base64 for GitHub Pages mode');
+                        resolve(dataURL); // Return base64 data URL instead of server path
+                    };
+                    
+                    img.onerror = () => reject(new Error('Failed to load image'));
+                    img.src = URL.createObjectURL(file);
+                });
+            } catch (error) {
+                throw new Error(`Failed to process image: ${error.message}`);
+            }
+        }
+        
+        // Local server mode - original upload functionality
         try {
             // Create a canvas to resize the image
             const canvas = document.createElement('canvas');
