@@ -255,7 +255,41 @@ class AdminManager {
      * Load GitHub token from storage
      */
     async loadGitHubToken() {
-        // Try to load from server first
+        // Check if we're running on GitHub Pages (no local server)
+        const isGitHubPages = window.location.hostname.includes('github.io');
+        
+        if (isGitHubPages) {
+            // Running on GitHub Pages - load from localStorage only
+            console.log('💾 Loading GitHub token from localStorage (GitHub Pages mode)');
+            const githubConnection = localStorage.getItem('github-connection');
+            if (githubConnection) {
+                try {
+                    const connectionData = JSON.parse(githubConnection);
+                    this.github.token = connectionData.token;
+                    if (connectionData.owner) this.github.owner = connectionData.owner;
+                    if (connectionData.repoName) this.github.repo = connectionData.repoName;
+                    if (connectionData.branch) this.github.branch = connectionData.branch;
+                    
+                    console.log('✅ GitHub token loaded from localStorage');
+                    return this.github.token;
+                } catch (e) {
+                    console.warn('⚠️ Failed to parse GitHub connection from localStorage');
+                }
+            }
+            
+            // Fallback to old format
+            const token = localStorage.getItem('github_token');
+            if (token) {
+                this.github.token = token;
+                console.log('✅ GitHub token loaded from local storage (legacy format)');
+                return token;
+            }
+            
+            console.warn('⚠️ No GitHub token found in localStorage');
+            return null;
+        }
+        
+        // Running locally - try server first
         try {
             const response = await fetch('/api/connections');
             const result = await response.json();

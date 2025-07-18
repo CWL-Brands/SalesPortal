@@ -160,34 +160,49 @@ class AdminDashboard {
     }
     
     /**
-     * Save connection data to server
+     * Save connection data to server or localStorage
      */
     async saveConnectionData(integration, connectionData) {
         try {
             console.log(`💾 Saving ${integration} connection data...`);
             
-            const response = await fetch(`/api/connections/${integration}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(connectionData)
-            });
+            // Check if we're running on GitHub Pages (no local server)
+            const isGitHubPages = window.location.hostname.includes('github.io');
             
-            if (response.ok) {
-                const result = await response.json();
-                if (result.success) {
-                    // Update local connection data
-                    this.connectionData[integration] = connectionData;
-                    console.log(`✅ ${integration} connection data saved successfully`);
-                    return true;
+            if (isGitHubPages) {
+                // Running on GitHub Pages - save to localStorage
+                console.log(`💾 Saving ${integration} connection to localStorage (GitHub Pages mode)`);
+                localStorage.setItem(`${integration}-connection`, JSON.stringify(connectionData));
+                
+                // Update local connection data
+                this.connectionData[integration] = connectionData;
+                console.log(`✅ ${integration} connection data saved to localStorage`);
+                return true;
+            } else {
+                // Running locally - save to server
+                const response = await fetch(`/api/connections/${integration}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(connectionData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        // Update local connection data
+                        this.connectionData[integration] = connectionData;
+                        console.log(`✅ ${integration} connection data saved successfully`);
+                        return true;
+                    } else {
+                        console.warn(`⚠️ Failed to save ${integration} connection:`, result.message);
+                        return false;
+                    }
                 } else {
-                    console.warn(`⚠️ Failed to save ${integration} connection:`, result.message);
+                    console.warn(`⚠️ Server returned ${response.status} when saving ${integration} connection`);
                     return false;
                 }
-            } else {
-                console.warn(`⚠️ Server returned ${response.status} when saving ${integration} connection`);
-                return false;
             }
         } catch (error) {
             console.error(`❌ Error saving ${integration} connection:`, error);
@@ -2477,7 +2492,7 @@ async saveProductField(productId, field, value) {
                 }
                 
                 console.log('✅ GitHub settings saved successfully');
-                alert('GitHub settings saved successfully!');
+                this.showNotification('GitHub settings saved successfully!', 'success');
                 
                 // Update status indicator
                 const statusElement = document.getElementById('github-status');

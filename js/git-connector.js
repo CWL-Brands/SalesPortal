@@ -29,10 +29,21 @@ class GitConnector {
     }
     
     /**
-     * Load GitHub connection from server using secure env-config endpoint
+     * Load GitHub connection from server or localStorage
      */
     async loadConnectionFromServer() {
         try {
+            // Check if we're running on GitHub Pages (no local server)
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            
+            if (isGitHubPages) {
+                // Running on GitHub Pages - load from localStorage only
+                console.log('💾 Loading GitHub connection from localStorage (GitHub Pages mode)');
+                this.loadFromLocalStorage();
+                return;
+            }
+            
+            // Running locally - try server endpoints
             // First try to load from secure env-config endpoint
             const envResponse = await fetch('/api/env-config');
             
@@ -137,6 +148,15 @@ class GitConnector {
         if (!this.token) {
             console.warn('⚠️ No GitHub token to save');
             return false;
+        }
+        
+        // Check if we're running on GitHub Pages (no local server)
+        const isGitHubPages = window.location.hostname.includes('github.io');
+        
+        if (isGitHubPages) {
+            // Running on GitHub Pages - save to localStorage only
+            console.log('💾 Saving GitHub connection to localStorage (GitHub Pages mode)');
+            return this.saveToLocalStorage();
         }
         
         try {
