@@ -58,28 +58,65 @@ class AdminDashboard {
     }
     
     /**
-     * Load real connection data from server
+     * Load real connection data from server or localStorage
      */
     async loadConnectionData() {
         try {
-            console.log('🔄 Loading connection data from server...');
-            const response = await fetch('/api/connections');
-            if (response.ok) {
-                const result = await response.json();
-                if (result.success) {
-                    this.connectionData = result.data || {};
-                    console.log('✅ Connection data loaded:', Object.keys(this.connectionData));
-                    
-                    // Update UI with real connection statuses
-                    this.updateConnectionStatuses();
-                } else {
-                    console.warn('⚠️ Failed to load connection data:', result.message);
+            // Check if we're running on GitHub Pages (no local server)
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            
+            if (isGitHubPages) {
+                // Running on GitHub Pages - load from localStorage
+                console.log('💾 Loading connection data from localStorage (GitHub Pages mode)...');
+                this.connectionData = {};
+                
+                // Load GitHub connection from localStorage
+                const githubConnection = localStorage.getItem('github-connection');
+                if (githubConnection) {
+                    try {
+                        this.connectionData.github = JSON.parse(githubConnection);
+                        console.log('✅ GitHub connection loaded from localStorage');
+                    } catch (e) {
+                        console.warn('⚠️ Failed to parse GitHub connection from localStorage');
+                    }
                 }
+                
+                // Load other connections from localStorage if they exist
+                ['copper', 'shipstation', 'fishbowl'].forEach(integration => {
+                    const connectionData = localStorage.getItem(`${integration}-connection`);
+                    if (connectionData) {
+                        try {
+                            this.connectionData[integration] = JSON.parse(connectionData);
+                            console.log(`✅ ${integration} connection loaded from localStorage`);
+                        } catch (e) {
+                            console.warn(`⚠️ Failed to parse ${integration} connection from localStorage`);
+                        }
+                    }
+                });
+                
+                // Update UI with connection statuses
+                this.updateConnectionStatuses();
             } else {
-                console.warn('⚠️ Could not load connection data from server');
+                // Running locally - load from server
+                console.log('🔄 Loading connection data from server...');
+                const response = await fetch('/api/connections');
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        this.connectionData = result.data || {};
+                        console.log('✅ Connection data loaded:', Object.keys(this.connectionData));
+                        
+                        // Update UI with real connection statuses
+                        this.updateConnectionStatuses();
+                    } else {
+                        console.warn('⚠️ Failed to load connection data:', result.message);
+                    }
+                } else {
+                    console.warn('⚠️ Could not load connection data from server');
+                }
             }
         } catch (error) {
-            console.error('❌ Error loading connection data:', error);
+            console.warn('⚠️ Could not load connection data from server');
         }
     }
     
@@ -2257,25 +2294,39 @@ async saveProductField(productId, field, value) {
         let token, repoOwner, repoName;
         
         try {
-            // Load GitHub configuration from environment variables
-            const envResponse = await fetch('/api/env-config');
-            if (!envResponse.ok) {
-                throw new Error('Failed to load environment configuration');
+            // Check if we're running on GitHub Pages (no local server)
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            
+            if (isGitHubPages) {
+                // Running on GitHub Pages - use form input values
+                token = document.getElementById('github-token').value.trim();
+                repoOwner = document.getElementById('github-owner').value.trim() || 'benatkanva';
+                repoName = document.getElementById('github-repo').value.trim() || 'kanva-quotes';
+                
+                if (!token) {
+                    throw new Error('Please enter a GitHub token');
+                }
+            } else {
+                // Running locally - try to load from server
+                const envResponse = await fetch('/api/env-config');
+                if (!envResponse.ok) {
+                    throw new Error('Failed to load environment configuration');
+                }
+                
+                const envResult = await envResponse.json();
+                if (!envResult.success || !envResult.data || !envResult.data.github) {
+                    throw new Error('GitHub configuration not found in environment');
+                }
+                
+                const githubConfig = envResult.data.github;
+                token = githubConfig.token;
+                const owner = githubConfig.username || 'benatkanva';
+                const repo = githubConfig.repo || 'benatkanva/kanva-quotes';
+                
+                // Extract repo name from full repo path if needed
+                repoName = repo.includes('/') ? repo.split('/')[1] : repo;
+                repoOwner = repo.includes('/') ? repo.split('/')[0] : owner;
             }
-            
-            const envResult = await envResponse.json();
-            if (!envResult.success || !envResult.data || !envResult.data.github) {
-                throw new Error('GitHub configuration not found in environment');
-            }
-            
-            const githubConfig = envResult.data.github;
-            token = githubConfig.token;
-            const owner = githubConfig.username || 'benatkanva';
-            const repo = githubConfig.repo || 'benatkanva/kanva-quotes';
-            
-            // Extract repo name from full repo path if needed
-            repoName = repo.includes('/') ? repo.split('/')[1] : repo;
-            repoOwner = repo.includes('/') ? repo.split('/')[0] : owner;
             
             if (!token) {
                 this.updateIntegrationStatus(statusElement, 'error', 'No Token');
@@ -2392,6 +2443,9 @@ async saveProductField(productId, field, value) {
         }
         
         try {
+            // Check if we're running on GitHub Pages (no local server)
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            
             // Update admin manager settings
             if (this.adminManager) {
                 this.adminManager.github = { owner, repo, branch, token };
@@ -2406,10 +2460,23 @@ async saveProductField(productId, field, value) {
                     token: token
                 });
                 
-                // Save connection to server
-                await gitConnector.saveConnectionToServer();
+                if (isGitHubPages) {
+                    // Running on GitHub Pages - save to localStorage only
+                    console.log('💾 Saving GitHub settings to localStorage (GitHub Pages mode)');
+                    localStorage.setItem('github-connection', JSON.stringify({
+                        token: token,
+                        repo: `${owner}/${repo}`,
+                        owner: owner,
+                        repoName: repo,
+                        branch: branch,
+                        timestamp: new Date().toISOString()
+                    }));
+                } else {
+                    // Running locally - save to server
+                    await gitConnector.saveConnectionToServer();
+                }
                 
-                console.log('✅ GitHub settings saved to server');
+                console.log('✅ GitHub settings saved successfully');
                 alert('GitHub settings saved successfully!');
                 
                 // Update status indicator
