@@ -76,9 +76,9 @@ const TierManager = {
     getTier: function(masterCases) {
         const tiers = adminConfig.tiers;
         
-        if (masterCases >= tiers.tier3.threshold) return tiers.tier3;
-        if (masterCases >= tiers.tier2.threshold) return tiers.tier2;
-        return tiers.tier1;
+        if (masterCases >= tiers['3'].threshold) return tiers['3'];
+        if (masterCases >= tiers['2'].threshold) return tiers['2'];
+        return tiers['1'];
     },
 
     // Get all tiers
@@ -90,15 +90,15 @@ const TierManager = {
     getNextTier: function(currentMasterCases) {
         const tiers = adminConfig.tiers;
         
-        if (currentMasterCases < tiers.tier2.threshold) {
+        if (currentMasterCases < tiers['2'].threshold) {
             return {
-                tier: tiers.tier2,
-                casesNeeded: tiers.tier2.threshold - currentMasterCases
+                tier: tiers['2'],
+                casesNeeded: tiers['2'].threshold - currentMasterCases
             };
-        } else if (currentMasterCases < tiers.tier3.threshold) {
+        } else if (currentMasterCases < tiers['3'].threshold) {
             return {
-                tier: tiers.tier3,
-                casesNeeded: tiers.tier3.threshold - currentMasterCases
+                tier: tiers['3'],
+                casesNeeded: tiers['3'].threshold - currentMasterCases
             };
         }
         
@@ -178,8 +178,8 @@ const ConfigManager = {
         }
 
         // Validate tiers  
-        if (config.tiers.tier2.threshold <= config.tiers.tier1.threshold ||
-            config.tiers.tier3.threshold <= config.tiers.tier2.threshold) {
+        if (config.tiers['2'].threshold <= config.tiers['1'].threshold ||
+            config.tiers['3'].threshold <= config.tiers['2'].threshold) {
             errors.push('Invalid tier thresholds');
         }
 
@@ -232,8 +232,8 @@ const ProductManager = {
     },
 
     // Get specific product
-    get: function(productKey) {
-        return adminConfig.products[productKey];
+    get: function(productId) {
+        return adminConfig.products[productId];
     },
 
     // Get product options for dropdowns

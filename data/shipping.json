@@ -49,6 +49,7 @@
   },
   "zones": {
     "zone1": {
+      "shippingId": 1,
       "name": "Zone 1",
       "states": [
         "CA",
@@ -62,6 +63,7 @@
       "zoneNumber": 1
     },
     "zone2": {
+      "shippingId": 2,
       "name": "Zone 2",
       "states": [
         "UT",
@@ -76,6 +78,7 @@
       "zoneNumber": 2
     },
     "zone3": {
+      "shippingId": 3,
       "name": "Zone 3",
       "states": [
         "TX",
@@ -104,6 +107,7 @@
       "zoneNumber": 3
     },
     "zone4": {
+      "shippingId": 4,
       "name": "Zone 4",
       "states": [
         "WV",
@@ -130,6 +134,7 @@
       "zoneNumber": 4
     },
     "remote": {
+      "shippingId": 5,
       "name": "Remote",
       "states": [
         "AK",

@@ -47,19 +47,22 @@ let adminConfig = {
 
     // Volume tier pricing structure
     tiers: {
-        tier1: {
+        "1": {
+            tierId: 1,
             threshold: 0,
             discount: 0,
             name: "Tier 1",
             description: "Standard pricing for orders under 56 cases"
         },
-        tier2: {
+        "2": {
+            tierId: 2,
             threshold: 56,
             discount: 0.035,
             name: "Tier 2", 
             description: "Volume discount for 56-111 cases"
         },
-        tier3: {
+        "3": {
+            tierId: 3,
             threshold: 112,
             discount: 0.06,
             name: "Tier 3",

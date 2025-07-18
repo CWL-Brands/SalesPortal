@@ -159,9 +159,12 @@ class KanvaCalculator {
         // Pricing mode toggle
         const pricingToggle = document.getElementById('pricingModeToggle');
         if (pricingToggle) {
+            console.log('🔗 Pricing toggle found and binding event listener');
             pricingToggle.addEventListener('change', (e) => {
                 this.isRetailMode = e.target.checked;
                 console.log(`💰 Pricing mode changed to: ${this.isRetailMode ? 'Retail' : 'Distribution'}`);
+                console.log('🔄 Current toggle state:', e.target.checked);
+                console.log('🔄 Current isRetailMode:', this.isRetailMode);
                 
                 // Show notification to user
                 this.showNotification(`Pricing mode changed to ${this.isRetailMode ? 'Retail' : 'Distribution'}`, 'info');
@@ -180,6 +183,8 @@ class KanvaCalculator {
                 // Recalculate totals
                 this.calculateAll();
             });
+        } else {
+            console.warn('⚠️ Pricing toggle element not found! ID: pricingModeToggle');
         }
         
         console.log('✅ Event listeners bound');
@@ -238,13 +243,18 @@ class KanvaCalculator {
         console.log(`🏷️ Getting price for ${product.name || 'product'}:`, {
             mode: this.isRetailMode ? 'Retail' : 'Distribution',
             retailPrice: product.retailPrice,
-            distributionPrice: product.price
+            distributionPrice: product.price,
+            willUseRetail: this.isRetailMode && product.retailPrice !== undefined
         });
         
         if (this.isRetailMode && product.retailPrice !== undefined) {
-            return parseFloat(product.retailPrice);
+            const retailPrice = parseFloat(product.retailPrice);
+            console.log(`💰 Using retail price: $${retailPrice}`);
+            return retailPrice;
         }
-        return parseFloat(product.price || 0);
+        const distributionPrice = parseFloat(product.price || 0);
+        console.log(`💰 Using distribution price: $${distributionPrice}`);
+        return distributionPrice;
     }
 
     /**
@@ -819,14 +829,24 @@ class KanvaCalculator {
             const unitsPerCase = product.unitsPerCase || 1;
             const displayBoxes = lineItem.displayBoxes || cases * 12;
             
-            // Get base price from product data
-            const baseUnitPrice = product.price || 0;
+            // Get current price based on pricing mode (retail vs distribution)
+            const currentPrice = this.getCurrentPrice(product);
+            const baseUnitPrice = product.price || 0; // Always use distribution price as base
             
-            // Apply tier pricing if available, otherwise use base price
-            let unitPrice = baseUnitPrice;
+            // Apply tier pricing if available, otherwise use current price
+            let unitPrice = currentPrice;
             if (tier && tier.prices && tier.prices[productId]) {
                 unitPrice = tier.prices[productId];
             }
+            
+            console.log(`📊 Calculation for ${product.name}:`, {
+                cases,
+                currentPrice,
+                baseUnitPrice,
+                unitPrice,
+                unitsPerCase,
+                pricingMode: this.isRetailMode ? 'Retail' : 'Distribution'
+            });
             
             const lineTotal = cases * unitPrice * unitsPerCase;
             const baseLineTotal = cases * baseUnitPrice * unitsPerCase;
@@ -1602,6 +1622,54 @@ class KanvaCalculator {
             notification.style.opacity = '0';
             setTimeout(() => notification.remove(), 300);
         }, 2000);
+    }
+
+    /**
+     * Show a general notification
+     */
+    showNotification(message, type = 'info') {
+        // Remove any existing notification
+        const existingNotification = document.getElementById('generalNotification');
+        if (existingNotification) {
+            existingNotification.remove();
+        }
+
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.id = 'generalNotification';
+        notification.textContent = message;
+        
+        // Style based on type
+        const colors = {
+            info: '#3B82F6',    // Blue
+            success: '#10B981', // Green
+            warning: '#F59E0B', // Yellow
+            error: '#EF4444'    // Red
+        };
+        
+        // Style the notification
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        notification.style.right = '20px';
+        notification.style.backgroundColor = colors[type] || colors.info;
+        notification.style.color = 'white';
+        notification.style.padding = '12px 24px';
+        notification.style.borderRadius = '4px';
+        notification.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+        notification.style.zIndex = '1000';
+        notification.style.transition = 'opacity 0.3s ease-in-out';
+        notification.style.fontWeight = '500';
+        notification.style.fontSize = '14px';
+        notification.style.maxWidth = '300px';
+        
+        // Add to document
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
     }
 
     /**
