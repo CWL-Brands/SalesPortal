@@ -41,6 +41,7 @@ class KanvaCalculator {
         this.isAdmin = false;
         this.isReady = false;
         this.currentShippingZone = null;
+        this.isRetailMode = false; // Default to distribution pricing
         
         // Settings
         this.settings = {
@@ -149,6 +150,101 @@ class KanvaCalculator {
         this.updateAdminUI();
         
         console.log('✅ UI initialized with product reference tiles');
+    }
+
+    /**
+     * Bind event listeners
+     */
+    bindEvents() {
+        // Pricing mode toggle
+        const pricingToggle = document.getElementById('pricingModeToggle');
+        if (pricingToggle) {
+            pricingToggle.addEventListener('change', (e) => {
+                this.isRetailMode = e.target.checked;
+                console.log(`💰 Pricing mode changed to: ${this.isRetailMode ? 'Retail' : 'Distribution'}`);
+                
+                // Show notification to user
+                this.showNotification(`Pricing mode changed to ${this.isRetailMode ? 'Retail' : 'Distribution'}`, 'info');
+                
+                // Update product catalog with new pricing
+                this.populateProductReference();
+                
+                // Update any existing line items with new pricing
+                this.updateAllLineItemPricing();
+                
+                // Force refresh the order details
+                if (this.orderDetailsManager) {
+                    this.orderDetailsManager.renderLineItemDetails();
+                }
+                
+                // Recalculate totals
+                this.calculateAll();
+            });
+        }
+        
+        console.log('✅ Event listeners bound');
+    }
+
+    /**
+     * Update pricing for all existing line items
+     */
+    updateAllLineItemPricing() {
+        console.log('🔄 Updating all line item pricing with mode:', this.isRetailMode ? 'Retail' : 'Distribution');
+        
+        // First, update the product data in each line item
+        this.lineItems.forEach(lineItem => {
+            // Make sure we have the latest product data
+            if (lineItem.productKey) {
+                lineItem.productData = this.data.products[lineItem.productKey];
+            }
+        });
+        
+        // Then update pricing for each line item
+        this.lineItems.forEach(lineItem => {
+            const product = lineItem.productData;
+            if (product) {
+                // Get current price based on pricing mode
+                const currentPrice = this.getCurrentPrice(product);
+                
+                // Skip update if user has overridden the price
+                if (lineItem.customUnitPrice === undefined) {
+                    lineItem.unitPrice = currentPrice;
+                    console.log(`📊 Updated line item ${lineItem.id}: ${product.name} - Unit Price: $${currentPrice.toFixed(2)}`);
+                } else {
+                    console.log(`📊 Skipping price update for ${lineItem.id}: ${product.name} - Custom price set: $${lineItem.customUnitPrice.toFixed(2)}`);
+                }
+            }
+        });
+        
+        // Refresh the UI
+        this.renderProductLines();
+        
+        // Update the order details
+        if (this.orderDetailsManager) {
+            this.orderDetailsManager.renderLineItemDetails();
+        }
+        
+        // Recalculate totals
+        this.calculateAll();
+    }
+
+    /**
+     * Get current price based on pricing mode
+     */
+    getCurrentPrice(product) {
+        if (!product) return 0;
+        
+        // Log the pricing mode and available prices for debugging
+        console.log(`🏷️ Getting price for ${product.name || 'product'}:`, {
+            mode: this.isRetailMode ? 'Retail' : 'Distribution',
+            retailPrice: product.retailPrice,
+            distributionPrice: product.price
+        });
+        
+        if (this.isRetailMode && product.retailPrice !== undefined) {
+            return parseFloat(product.retailPrice);
+        }
+        return parseFloat(product.price || 0);
     }
 
     /**
@@ -803,7 +899,7 @@ class KanvaCalculator {
     }
 
     /**
-     * Calculate shipping based on zone and manual override
+     * Calculate shipping based on display boxes, master cases, and zone
      */
     calculateShipping() {
         const manualShippingInput = document.getElementById('manualShipping');
@@ -819,19 +915,77 @@ class KanvaCalculator {
             return;
         }
         
+        // Calculate total display boxes and master cases
+        const totalDisplayBoxes = this.lineItems.reduce((total, item) => {
+            return total + (item.displayBoxes || 0);
+        }, 0);
+        
+        const totalMasterCases = this.lineItems.reduce((total, item) => {
+            return total + (item.masterCases || 0);
+        }, 0);
+        
+        // Check for retail free shipping (2+ master cases)
+        if (this.isRetailMode && totalMasterCases >= 2) {
+            this.quote.shipping = 0;
+            console.log(`🚚 Free shipping applied: Retail customer with ${totalMasterCases} master cases (2+ required)`);
+            return;
+        }
+        
         // Get the zone data using the zone key
         const zoneData = this.data.shipping.zones[this.currentShippingZone];
-        if (!zoneData) {
+        if (!zoneData || !zoneData.zoneNumber) {
             console.error(`❌ Zone data not found for: ${this.currentShippingZone}`);
             this.quote.shipping = 0;
             return;
         }
         
-        // Use LTL percentage for shipping calculation (convert percentage to decimal)
-        const ltlPercentage = zoneData.ltlPercentage / 100;
-        this.quote.shipping = this.quote.subtotal * ltlPercentage;
+        const zoneNumber = zoneData.zoneNumber;
+        const displayBoxShipping = this.data.shipping.displayBoxShipping;
         
-        console.log(`🚚 Shipping calculated: ${this.formatCurrency(this.quote.shipping)} (${zoneData.ltlPercentage}% of ${this.formatCurrency(this.quote.subtotal)})`);
+        // Check if we should use LTL rates (12+ master cases)
+        const ltlThreshold = this.data.shipping.ltlThreshold || 12;
+        if (totalMasterCases >= ltlThreshold) {
+            // Use LTL percentage for large orders
+            const ltlPercentage = zoneData.ltlPercentage / 100;
+            this.quote.shipping = this.quote.subtotal * ltlPercentage;
+            console.log(`🚚 LTL Shipping calculated: ${this.formatCurrency(this.quote.shipping)} (${zoneData.ltlPercentage}% of ${this.formatCurrency(this.quote.subtotal)}) - ${totalMasterCases} master cases`);
+            return;
+        }
+        
+        // Use display box-based shipping for smaller orders
+        if (!displayBoxShipping || !displayBoxShipping.ranges) {
+            console.error('❌ Display box shipping data not found');
+            this.quote.shipping = 0;
+            return;
+        }
+        
+        let shippingRate = 0;
+        const zoneKey = `zone${zoneNumber}`;
+        
+        // Determine shipping rate based on display box quantity
+        if (totalDisplayBoxes >= 1 && totalDisplayBoxes <= 3) {
+            shippingRate = displayBoxShipping.ranges['1-3'][zoneKey] || 0;
+        } else if (totalDisplayBoxes >= 4 && totalDisplayBoxes <= 8) {
+            shippingRate = displayBoxShipping.ranges['4-8'][zoneKey] || 0;
+        } else if (totalDisplayBoxes >= 9 && totalDisplayBoxes <= 11) {
+            shippingRate = displayBoxShipping.ranges['9-11'][zoneKey] || 0;
+        } else if (totalDisplayBoxes >= 12) {
+            // Use master case rates for 12+ display boxes (1+ master cases)
+            const masterCaseRate = displayBoxShipping.masterCaseRates[zoneKey] || 0;
+            
+            if (this.isRetailMode) {
+                // Retail customers pay flat rate regardless of quantity
+                shippingRate = masterCaseRate;
+            } else {
+                // Distribution customers pay per master case
+                shippingRate = masterCaseRate * totalMasterCases;
+            }
+        }
+        
+        this.quote.shipping = shippingRate;
+        
+        const modeText = this.isRetailMode ? 'Retail' : 'Distribution';
+        console.log(`🚚 ${modeText} shipping calculated: ${this.formatCurrency(this.quote.shipping)} (Zone ${zoneNumber}, ${totalDisplayBoxes} display boxes, ${totalMasterCases} master cases)`);
     }
 
     /**
@@ -840,7 +994,29 @@ class KanvaCalculator {
     updateCalculationDisplay() {
         // Update main calculation display
         document.getElementById('subtotalAmount').textContent = this.formatCurrency(this.quote.subtotal);
-        document.getElementById('shippingAmount').textContent = this.formatCurrency(this.quote.shipping);
+        
+        // Update shipping display with enhanced information
+        const shippingAmountElement = document.getElementById('shippingAmount');
+        if (shippingAmountElement) {
+            const totalMasterCases = this.lineItems.reduce((total, item) => total + (item.masterCases || 0), 0);
+            const totalDisplayBoxes = this.lineItems.reduce((total, item) => total + (item.displayBoxes || 0), 0);
+            
+            if (this.isRetailMode && this.quote.shipping === 0 && totalMasterCases >= 2) {
+                // Show free shipping for retail customers
+                const zoneData = this.data.shipping.zones[this.currentShippingZone];
+                const estimatedShipping = zoneData ? 
+                    (this.data.shipping.displayBoxShipping?.masterCaseRates?.[`zone${zoneData.zoneNumber}`] || 20) : 20;
+                
+                shippingAmountElement.innerHTML = `
+                    <span style="text-decoration: line-through; color: #666; margin-right: 8px;">$${estimatedShipping.toFixed(2)}</span>
+                    <span style="color: #10B981; font-weight: bold;">FREE</span>
+                    <span style="font-size: 12px; color: #10B981; margin-left: 4px;">(Retail 2+ cases)</span>
+                `;
+            } else {
+                shippingAmountElement.textContent = this.formatCurrency(this.quote.shipping);
+            }
+        }
+        
         document.getElementById('creditCardFee').textContent = this.formatCurrency(this.quote.creditCardFee);
         document.getElementById('totalAmount').textContent = this.formatCurrency(this.quote.total);
         
@@ -990,6 +1166,15 @@ class KanvaCalculator {
         if (field === 'productKey') {
             lineItem.productKey = value;
             lineItem.productData = this.data.products[value] || null;
+            
+            // Reset custom unit price when product changes
+            delete lineItem.customUnitPrice;
+            
+            // Set unit price based on current pricing mode
+            if (lineItem.productData) {
+                lineItem.unitPrice = this.getCurrentPrice(lineItem.productData);
+                console.log(`🔄 Set unit price for ${lineItem.productData.name} to $${lineItem.unitPrice.toFixed(2)} (${this.isRetailMode ? 'Retail' : 'Distribution'} mode)`);
+            }
         } else if (field === 'masterCases') {
             lineItem.masterCases = parseInt(value) || 0;
             // Auto-calculate display boxes (12 per master case)
@@ -999,11 +1184,24 @@ class KanvaCalculator {
             // Auto-calculate master cases (12 display boxes = 1 master case)
             lineItem.masterCases = Math.floor(lineItem.displayBoxes / 12);
         } else if (field === 'customUnitPrice') {
-            lineItem.customUnitPrice = parseFloat(value) || 0;
+            const newPrice = parseFloat(value) || 0;
+            lineItem.customUnitPrice = newPrice;
+            
+            // Log the price override
+            if (lineItem.productData) {
+                const defaultPrice = this.getCurrentPrice(lineItem.productData);
+                console.log(`💰 Custom price set for ${lineItem.productData.name}: $${newPrice.toFixed(2)} (Default: $${defaultPrice.toFixed(2)})`);
+                this.showNotification(`Custom price set: $${newPrice.toFixed(2)}`, 'info');
+            }
         }
 
         // Check for upsell opportunities
         this.checkUpsellOpportunity(lineItem);
+        
+        // Update order details if available
+        if (this.orderDetailsManager) {
+            this.orderDetailsManager.renderLineItemDetails();
+        }
         
         this.renderProductLines();
         this.calculateAll();
@@ -1083,6 +1281,28 @@ class KanvaCalculator {
     }
 
     /**
+     * Reset a line item's unit price to the default based on current pricing mode
+     */
+    resetUnitPrice(lineId) {
+        const lineItem = this.lineItems.find(item => item.id === lineId);
+        if (!lineItem || !lineItem.productData) return;
+        
+        // Remove custom price override
+        delete lineItem.customUnitPrice;
+        
+        // Get current price based on pricing mode
+        const currentPrice = this.getCurrentPrice(lineItem.productData);
+        lineItem.unitPrice = currentPrice;
+        
+        console.log(`🔄 Reset unit price for ${lineItem.productData.name} to $${currentPrice.toFixed(2)}`);
+        this.showNotification(`Price reset to ${this.isRetailMode ? 'retail' : 'distribution'} default`, 'info');
+        
+        // Refresh UI
+        this.renderProductLines();
+        this.calculateAll();
+    }
+
+    /**
      * Render product lines
      */
     renderProductLines() {
@@ -1102,7 +1322,11 @@ class KanvaCalculator {
 
         container.innerHTML = this.lineItems.map(lineItem => {
             const product = lineItem.productData;
-            const defaultUnitPrice = product ? (product.price || (product.pricing && product.pricing.unit) || 0) : 0;
+            
+            // Get the default unit price based on current pricing mode
+            const defaultUnitPrice = product ? this.getCurrentPrice(product) : 0;
+            
+            // Allow custom price override if set by user
             const currentUnitPrice = lineItem.customUnitPrice !== undefined ? lineItem.customUnitPrice : defaultUnitPrice;
             const isPriceOverridden = lineItem.customUnitPrice !== undefined;
             
@@ -1207,16 +1431,27 @@ class KanvaCalculator {
 
         const product = lineItem.productData;
         const displayBoxes = lineItem.displayBoxes;
+        const masterCases = lineItem.masterCases || 0;
         
-        // Get unit price
-        let unitPrice = product.price || (product.pricing && product.pricing.unit) || 0;
+        // Get unit price based on pricing mode or custom override
+        let unitPrice;
         
         if (lineItem.customUnitPrice !== undefined) {
+            // Use custom price if set
             unitPrice = lineItem.customUnitPrice;
+            console.log(`💳 Using custom price for ${product.name}: $${unitPrice.toFixed(2)}`);
+        } else {
+            // Use current price based on pricing mode
+            unitPrice = this.getCurrentPrice(product);
+            console.log(`💸 Using ${this.isRetailMode ? 'retail' : 'distribution'} price for ${product.name}: $${unitPrice.toFixed(2)}`);
         }
         
-        // Calculate total (12 units per display box)
-        const totalUnits = displayBoxes * 12;
+        // Calculate total units (from both display boxes and master cases)
+        const displayBoxUnits = displayBoxes * 12;
+        const masterCaseUnits = masterCases * (product.unitsPerCase || 144); // Default to 144 units per case
+        const totalUnits = displayBoxUnits + masterCaseUnits;
+        
+        // Calculate line total
         const lineTotal = totalUnits * unitPrice;
         
         return this.formatCurrency(lineTotal);
@@ -1246,6 +1481,17 @@ class KanvaCalculator {
         if (!container || !this.data.products) return;
 
         container.innerHTML = '';
+        
+        // Add pricing mode indicator
+        const pricingModeIndicator = document.createElement('div');
+        pricingModeIndicator.className = 'pricing-mode-indicator';
+        pricingModeIndicator.innerHTML = `
+            <span class="pricing-mode-label">Current Pricing Mode:</span>
+            <span class="pricing-mode-value ${this.isRetailMode ? 'retail' : 'distribution'}">
+                ${this.isRetailMode ? 'Retail' : 'Distribution'}
+            </span>
+        `;
+        container.appendChild(pricingModeIndicator);
 
         Object.entries(this.data.products).forEach(([key, product]) => {
             const tile = document.createElement('div');
@@ -1264,11 +1510,15 @@ class KanvaCalculator {
                 const categoryName = product.category.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
                 badges.push(`<span class="product-badge badge-category">${categoryName}</span>`);
             }
+            
+            // Add pricing mode badge
+            badges.push(`<span class="product-badge badge-pricing-mode ${this.isRetailMode ? 'retail' : 'distribution'}">${this.isRetailMode ? 'Retail' : 'Distribution'}</span>`);
 
-            // Calculate pricing
-            const unitPrice = product.price.toFixed(2);
-            const displayBoxPrice = (product.price * product.unitsPerDisplayBox).toFixed(2);
-            const masterCasePrice = (product.price * product.unitsPerCase).toFixed(2);
+            // Calculate pricing based on current mode
+            const currentPrice = this.getCurrentPrice(product);
+            const unitPrice = currentPrice.toFixed(2);
+            const displayBoxPrice = (currentPrice * (product.unitsPerDisplayBox || 12)).toFixed(2);
+            const masterCasePrice = (currentPrice * product.unitsPerCase).toFixed(2);
 
             tile.innerHTML = `
                 <button class="add-to-quote-btn" title="Add to Quote">+</button>
@@ -1293,7 +1543,7 @@ class KanvaCalculator {
                             <span class="price-value price-primary">$${unitPrice}</span>
                         </div>
                         <div class="price-row">
-                            <span class="price-label">Display Box (${product.unitsPerDisplayBox}):</span>
+                            <span class="price-label">Display Box (${product.unitsPerDisplayBox || 12}):</span>
                             <span class="price-value">$${displayBoxPrice}</span>
                         </div>
                         <div class="price-row">
@@ -1789,6 +2039,25 @@ class KanvaCalculator {
             this.renderProductLines();
             this.calculateAll();
         }
+    }
+
+    /**
+     * Get shipping zone for a given state
+     */
+    getShippingZone(state) {
+        if (!state || !this.data.shipping?.zones) return null;
+        
+        // Iterate through zones to find matching state
+        for (const [zoneKey, zone] of Object.entries(this.data.shipping.zones)) {
+            if (zone.states && zone.states.includes(state.toUpperCase())) {
+                return {
+                    ...zone,
+                    key: zoneKey
+                };
+            }
+        }
+        
+        return null;
     }
 
     /**

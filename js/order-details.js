@@ -28,6 +28,12 @@ class OrderDetailsManager {
             `;
             return;
         }
+        
+        // Log current pricing mode for debugging
+        console.log(`📜 Rendering order details with pricing mode: ${this.calculator.isRetailMode ? 'Retail' : 'Distribution'}`);
+        
+        // Ensure line items have the latest pricing information
+        this.updateLineItemPricing();
 
         let html = `
             <div class="line-items-table-container">
@@ -217,6 +223,40 @@ class OrderDetailsManager {
     /**
      * Add logo to PDF
      */
+    /**
+     * Update line item pricing based on current pricing mode
+     */
+    updateLineItemPricing() {
+        if (!this.calculator || !this.calculator.quote || !this.calculator.quote.lineItems) return;
+        
+        // Update each line item with the current pricing based on mode
+        this.calculator.quote.lineItems.forEach(item => {
+            if (!item.productData) return;
+            
+            // Get the product data
+            const product = item.productData;
+            
+            // Skip if custom price is set
+            if (item.customUnitPrice !== undefined) {
+                console.log(`💳 Using custom price for ${product.name}: $${item.customUnitPrice.toFixed(2)}`);
+                return;
+            }
+            
+            // Get current price based on pricing mode
+            const currentPrice = this.calculator.getCurrentPrice(product);
+            
+            // Update unit price
+            item.unitPrice = currentPrice;
+            
+            // Calculate line total
+            const totalUnits = (item.cases * (product.unitsPerCase || 144)) + 
+                             (item.displayBoxes * 12);
+            item.lineTotal = currentPrice * totalUnits;
+            
+            console.log(`💸 Updated ${product.name} price to $${currentPrice.toFixed(2)} (${this.calculator.isRetailMode ? 'Retail' : 'Distribution'} mode)`);
+        });
+    }
+    
     async addLogo(doc) {
         try {
             // Try to load logo image
