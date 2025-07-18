@@ -194,8 +194,8 @@ class KanvaCalculator {
         // First, update the product data in each line item
         this.lineItems.forEach(lineItem => {
             // Make sure we have the latest product data
-            if (lineItem.productKey) {
-                lineItem.productData = this.data.products[lineItem.productKey];
+            if (lineItem.productId) {
+                lineItem.productData = this.data.products[lineItem.productId];
             }
         });
         
@@ -815,7 +815,7 @@ class KanvaCalculator {
             
             const product = lineItem.productData;
             const cases = lineItem.masterCases;
-            const productKey = lineItem.productKey;
+            const productId = lineItem.productId;
             const unitsPerCase = product.unitsPerCase || 1;
             const displayBoxes = lineItem.displayBoxes || cases * 12;
             
@@ -824,8 +824,8 @@ class KanvaCalculator {
             
             // Apply tier pricing if available, otherwise use base price
             let unitPrice = baseUnitPrice;
-            if (tier && tier.prices && tier.prices[productKey]) {
-                unitPrice = tier.prices[productKey];
+            if (tier && tier.prices && tier.prices[productId]) {
+                unitPrice = tier.prices[productId];
             }
             
             const lineTotal = cases * unitPrice * unitsPerCase;
@@ -836,7 +836,7 @@ class KanvaCalculator {
             
             // Add to products array for display
             this.quote.products.push({
-                key: productKey,
+                key: productId,
                 name: product.name || product.title || 'Unknown Product',
                 sku: product.sku || product.id || '',
                 cases: cases,
@@ -851,7 +851,7 @@ class KanvaCalculator {
             // Also populate lineItems for order details manager
             this.quote.lineItems.push({
                 id: lineItem.id,
-                productKey: productKey,
+                productId: productId,
                 productName: product.name || product.title || 'Unknown Product',
                 sku: product.sku || product.id || '',
                 cases: cases,
@@ -1131,7 +1131,7 @@ class KanvaCalculator {
         const lineId = `line_${Date.now()}`;
         const newLine = {
             id: lineId,
-            productKey: '',
+            productId: '',
             masterCases: 0,
             displayBoxes: 0,
             productData: null
@@ -1163,8 +1163,8 @@ class KanvaCalculator {
         const lineItem = this.lineItems.find(item => item.id === lineId);
         if (!lineItem) return;
 
-        if (field === 'productKey') {
-            lineItem.productKey = value;
+        if (field === 'productId') {
+            lineItem.productId = value;
             lineItem.productData = this.data.products[value] || null;
             
             // Reset custom unit price when product changes
@@ -1342,10 +1342,10 @@ class KanvaCalculator {
                 <div class="grid grid-3" style="gap: 1rem;">
                     <div class="form-group">
                         <label class="form-label">Product</label>
-                        <select class="form-control" onchange="calculator.updateProductLine('${lineItem.id}', 'productKey', this.value)">
+                        <select class="form-control" onchange="calculator.updateProductLine('${lineItem.id}', 'productId', this.value)">
                             <option value="">Select Product...</option>
                             ${Object.entries(this.data.products).map(([key, product]) => `
-                                <option value="${key}" ${lineItem.productKey === key ? 'selected' : ''}>
+                                <option value="${key}" ${lineItem.productId === key ? 'selected' : ''}>
                                     ${product.name || product.title || key}
                                 </option>
                             `).join('')}
@@ -1496,7 +1496,7 @@ class KanvaCalculator {
         Object.entries(this.data.products).forEach(([key, product]) => {
             const tile = document.createElement('div');
             tile.className = 'product-tile';
-            tile.dataset.productKey = key;
+            tile.dataset.productId = key;
 
             // Create badges
             const badges = [];
@@ -1607,14 +1607,14 @@ class KanvaCalculator {
     /**
      * Select product from reference tile
      */
-    selectProductFromTile(productKey) {
+    selectProductFromTile(productId) {
         // Remove previous selections
         document.querySelectorAll('.product-tile').forEach(tile => {
             tile.classList.remove('selected');
         });
         
         // Mark this tile as selected
-        const selectedTile = document.querySelector(`[data-product-key="${productKey}"]`);
+        const selectedTile = document.querySelector(`[data-product-id="${productId}"]`);
         if (selectedTile) {
             selectedTile.classList.add('selected');
             
@@ -1631,17 +1631,17 @@ class KanvaCalculator {
         }
 
         // Set the product for the first empty line or create a new one
-        let targetLine = this.lineItems.find(item => !item.productKey);
+        let targetLine = this.lineItems.find(item => !item.productId);
         if (!targetLine) {
             this.addProductLine();
             targetLine = this.lineItems[this.lineItems.length - 1];
         }
 
         // Update the line with selected product
-        this.updateProductLine(targetLine.id, 'productKey', productKey);
+        this.updateProductLine(targetLine.id, 'productId', productId);
         
         // Show green bar notification
-        const productName = this.data.products[productKey]?.name || 'Product';
+        const productName = this.data.products[productId]?.name || 'Product';
         this.showGreenBarNotification(`✓ ${productName} added to quote`);
         
         // Log to console for debugging

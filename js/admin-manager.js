@@ -428,22 +428,35 @@ class AdminManager {
     }
 
     /**
+     * Get next available product ID
+     */
+    getNextProductId() {
+        const existingIds = Object.keys(this.data.products).map(id => parseInt(id)).filter(id => !isNaN(id));
+        const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
+        return maxId + 1;
+    }
+
+    /**
      * Add new product
      */
     addProduct(event) {
         event.preventDefault();
         const formData = new FormData(event.target);
+        const productId = this.getNextProductId();
         const productData = {
+            productId: productId,
             name: formData.get('name'),
             price: parseFloat(formData.get('price')),
+            retailPrice: parseFloat(formData.get('price')) * 1.1, // Default retail price 10% higher
             msrp: parseFloat(formData.get('msrp')),
             description: formData.get('description'),
-            unitsPerCase: 12,
+            unitsPerCase: 144,
             displayBoxesPerCase: 12,
+            unitsPerDisplayBox: 12,
             category: 'custom'
         };
 
-        this.data.products[formData.get('key')] = productData;
+        this.data.products[productId.toString()] = productData;
         
         // Update calculator if available
         if (this.calculator) {

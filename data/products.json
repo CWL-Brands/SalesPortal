@@ -1,5 +1,6 @@
 {
-  "focus": {
+  "1": {
+    "productId": 1,
     "name": "Focus+Flow",
     "price": 4.5,
     "retailPrice": 5,
@@ -30,7 +31,8 @@
     },
     "casesPerPallet": 56
   },
-  "release": {
+  "2": {
+    "productId": 2,
     "name": "Release+Relax",
     "price": 4.5,
     "retailPrice": 5,
@@ -61,7 +63,8 @@
     },
     "casesPerPallet": 56
   },
-  "zoom": {
+  "3": {
+    "productId": 3,
     "name": "Kanva Zoom",
     "price": 3.2,
     "retailPrice": 4,
@@ -92,7 +95,8 @@
     },
     "casesPerPallet": 56
   },
-  "mango": {
+  "4": {
+    "productId": 4,
     "name": "Mango Extract",
     "price": 4.25,
     "retailPrice": 5.25,
@@ -123,7 +127,8 @@
     },
     "casesPerPallet": 54
   },
-  "raw": {
+  "5": {
+    "productId": 5,
     "name": "Raw+Releaf",
     "price": 4.5,
     "retailPrice": 5.5,
