@@ -3028,36 +3028,37 @@ async saveProductField(productId, field, value) {
                 if (result.success) {
                     console.log('✅ Fishbowl ERP settings saved to server');
                 
-                // Update status indicator
-                const statusElement = document.getElementById('fishbowl-status');
-                if (statusElement) {
-                    this.updateIntegrationStatus(statusElement, 'ok', 'Configured');
+                    // Update status indicator
+                    const statusElement = document.getElementById('fishbowl-status');
+                    if (statusElement) {
+                        this.updateIntegrationStatus(statusElement, 'ok', 'Configured');
+                    }
+                    
+                    // Configure Fishbowl integration with new credentials if available
+                    if (window.fishbowlIntegration) {
+                        await window.fishbowlIntegration.configure({
+                            host: host,
+                            port: port,
+                            username: username,
+                            password: password
+                        });
+                    } else if (window.FishbowlIntegration) {
+                        // Create new instance with the credentials
+                        window.fishbowlIntegration = new window.FishbowlIntegration({
+                            host: host,
+                            port: port,
+                            username: username,
+                            password: password
+                        });
+                    }
+                    
+                    if (showAlert) alert('Fishbowl ERP settings saved successfully!');
+                    return true;
+                } else {
+                    console.error('Failed to save Fishbowl settings:', result.message);
+                    if (showAlert) alert(`Failed to save Fishbowl settings: ${result.message}`);
+                    return false;
                 }
-                
-                // Configure Fishbowl integration with new credentials if available
-                if (window.fishbowlIntegration) {
-                    await window.fishbowlIntegration.configure({
-                        host: host,
-                        port: port,
-                        username: username,
-                        password: password
-                    });
-                } else if (window.FishbowlIntegration) {
-                    // Create new instance with the credentials
-                    window.fishbowlIntegration = new window.FishbowlIntegration({
-                        host: host,
-                        port: port,
-                        username: username,
-                        password: password
-                    });
-                }
-                
-                if (showAlert) alert('Fishbowl ERP settings saved successfully!');
-                return true;
-            } else {
-                console.error('Failed to save Fishbowl settings:', result.message);
-                if (showAlert) alert(`Failed to save Fishbowl settings: ${result.message}`);
-                return false;
             }
         } catch (error) {
             console.error('Error saving Fishbowl settings:', error);
@@ -3172,7 +3173,7 @@ async saveProductField(productId, field, value) {
                         }
                     }
                 }
-                }
+            }
             } catch (jsonError) {
                 console.error('❌ Error parsing integrations data JSON:', jsonError);
             }
