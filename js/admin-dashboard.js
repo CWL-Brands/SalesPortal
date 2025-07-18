@@ -2996,26 +2996,37 @@ async saveProductField(productId, field, value) {
             return false;
         }
         
+        // Check if we're running on GitHub Pages
+        const isGitHubPages = window.location.hostname.includes('github.io');
+        
+        const connectionData = {
+            host: host,
+            port: port,
+            username: username,
+            password: password,
+            lastUpdated: new Date().toISOString()
+        };
+        
         try {
-            // Save to server via API
-            const response = await fetch('/api/connections/fishbowl', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    host: host,
-                    port: port,
-                    username: username,
-                    password: password,
-                    lastUpdated: new Date().toISOString()
-                })
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                console.log('✅ Fishbowl ERP settings saved to server');
+            if (isGitHubPages) {
+                // Save to localStorage in GitHub Pages mode
+                localStorage.setItem('fishbowl-connection', JSON.stringify(connectionData));
+                this.connectionData.fishbowl = connectionData;
+                console.log('✅ Fishbowl ERP settings saved to localStorage');
+            } else {
+                // Save to server via API
+                const response = await fetch('/api/connections/fishbowl', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(connectionData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('✅ Fishbowl ERP settings saved to server');
                 
                 // Update status indicator
                 const statusElement = document.getElementById('fishbowl-status');
@@ -3059,6 +3070,16 @@ async saveProductField(productId, field, value) {
      * Load integrations data from the server
      */
     async loadIntegrationsData() {
+        // Check if we're running on GitHub Pages
+        const isGitHubPages = window.location.hostname.includes('github.io');
+        
+        if (isGitHubPages) {
+            console.log('💾 Loading integrations data from localStorage (GitHub Pages mode)...');
+            // Skip server call and just update UI with localStorage data
+            this.updateConnectionStatuses();
+            return;
+        }
+        
         console.log('📂 Loading integrations data from server...');
         
         try {
