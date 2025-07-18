@@ -248,9 +248,18 @@ class OrderDetailsManager {
             // Update unit price
             item.unitPrice = currentPrice;
             
-            // Calculate line total
-            const totalUnits = (item.cases * (product.unitsPerCase || 144)) + 
-                             (item.displayBoxes * 12);
+            // Calculate line total (don't double-count master cases and display boxes)
+            // Master cases take precedence since display boxes are calculated from them
+            let totalUnits;
+            if (item.cases > 0) {
+                // Use master cases calculation
+                totalUnits = item.cases * (product.unitsPerCase || 144);
+                console.log(`📦 Order details using master cases: ${item.cases} cases × ${product.unitsPerCase || 144} units = ${totalUnits} units`);
+            } else {
+                // Use display boxes calculation
+                totalUnits = item.displayBoxes * 12;
+                console.log(`📦 Order details using display boxes: ${item.displayBoxes} boxes × 12 units = ${totalUnits} units`);
+            }
             item.lineTotal = currentPrice * totalUnits;
             
             console.log(`💸 Updated ${product.name} price to $${currentPrice.toFixed(2)} (${this.calculator.isRetailMode ? 'Retail' : 'Distribution'} mode)`);

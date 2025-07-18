@@ -160,7 +160,13 @@ class KanvaCalculator {
         const pricingToggle = document.getElementById('pricingModeToggle');
         if (pricingToggle) {
             console.log('🔗 Pricing toggle found and binding event listener');
-            pricingToggle.addEventListener('change', (e) => {
+            
+            // Remove any existing event listeners to prevent duplicates
+            pricingToggle.removeEventListener('change', this.pricingToggleHandler);
+            
+            // Create bound handler function
+            this.pricingToggleHandler = (e) => {
+                console.log('🔄 Pricing toggle event triggered');
                 this.isRetailMode = e.target.checked;
                 console.log(`💰 Pricing mode changed to: ${this.isRetailMode ? 'Retail' : 'Distribution'}`);
                 console.log('🔄 Current toggle state:', e.target.checked);
@@ -170,19 +176,28 @@ class KanvaCalculator {
                 this.showNotification(`Pricing mode changed to ${this.isRetailMode ? 'Retail' : 'Distribution'}`, 'info');
                 
                 // Update product catalog with new pricing
+                console.log('🔄 Calling populateProductReference...');
                 this.populateProductReference();
                 
                 // Update any existing line items with new pricing
+                console.log('🔄 Calling updateAllLineItemPricing...');
                 this.updateAllLineItemPricing();
                 
                 // Force refresh the order details
                 if (this.orderDetailsManager) {
+                    console.log('🔄 Calling renderLineItemDetails...');
                     this.orderDetailsManager.renderLineItemDetails();
                 }
                 
                 // Recalculate totals
+                console.log('🔄 Calling calculateAll...');
                 this.calculateAll();
-            });
+                
+                console.log('✅ Pricing toggle event completed');
+            };
+            
+            // Add the event listener
+            pricingToggle.addEventListener('change', this.pricingToggleHandler);
         } else {
             console.warn('⚠️ Pricing toggle element not found! ID: pricingModeToggle');
         }
@@ -371,23 +386,53 @@ class KanvaCalculator {
         }
         
         const zoneData = this.data.shipping.zones[this.currentShippingZone];
-        if (!zoneData) {
-            shippingZoneInfo.innerHTML = '<p class="text-muted">No shipping information available</p>';
-            return;
-        }
+        if (!zoneData) return;
+        
+        // Get ground shipping rates for this zone
+        const groundRates = this.getGroundShippingRates(zoneData.zoneNumber);
         
         shippingZoneInfo.innerHTML = `
             <div class="shipping-zone-details">
                 <div class="zone-header">
-                    <span class="zone-name">${this.currentShippingZone.toUpperCase()}</span>
+                    <span class="zone-name">${zoneData.name.toUpperCase()}</span>
                     <span class="zone-color" style="background-color: ${zoneData.color || '#ccc'}"></span>
                 </div>
                 <div class="zone-info">
-                    <p><strong>LTL Rate:</strong> ${zoneData.ltlPercentage}% of subtotal</p>
-                    <p><strong>States:</strong> ${zoneData.states ? zoneData.states.join(', ') : 'N/A'}</p>
+                    <div class="shipping-methods">
+                        <div class="ltl-shipping">
+                            <p><strong>🚛 LTL Freight (12+ Master Cases):</strong> ${zoneData.ltlPercentage}% of subtotal</p>
+                        </div>
+                        <div class="ground-shipping">
+                            <p><strong>📦 Ground Shipping (1-11 Master Cases):</strong></p>
+                            <ul class="shipping-rates">
+                                <li>1-3 cases: $${groundRates['1-3']} per mastercase</li>
+                                <li>4-8 cases: $${groundRates['4-8']} per mastercase</li>
+                                <li>9-11 cases: $${groundRates['9-11']} per mastercase</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <p class="zone-states"><strong>States:</strong> ${zoneData.states ? zoneData.states.join(', ') : 'N/A'}</p>
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * Get ground shipping rates for a specific zone
+     */
+    getGroundShippingRates(zoneNumber) {
+        if (!this.data.shipping || !this.data.shipping.displayBoxShipping) {
+            return { '1-3': 0, '4-8': 0, '9-11': 0 };
+        }
+        
+        const ranges = this.data.shipping.displayBoxShipping.ranges;
+        const zoneKey = `zone${zoneNumber}`;
+        
+        return {
+            '1-3': ranges['1-3'][zoneKey] || 0,
+            '4-8': ranges['4-8'][zoneKey] || 0,
+            '9-11': ranges['9-11'][zoneKey] || 0
+        };
     }
 
     /**
@@ -1425,7 +1470,7 @@ class KanvaCalculator {
                     <div class="form-group">
                         <label class="form-label">Total Units</label>
                         <div class="form-control" style="background: #f8f9fa; font-weight: 600;">
-                            ${lineItem.displayBoxes ? (lineItem.displayBoxes * 12).toLocaleString() : '0'} units
+                            ${this.calculateTotalUnits(lineItem).toLocaleString()} units
                         </div>
                     </div>
                     
@@ -1466,15 +1511,41 @@ class KanvaCalculator {
             console.log(`💸 Using ${this.isRetailMode ? 'retail' : 'distribution'} price for ${product.name}: $${unitPrice.toFixed(2)}`);
         }
         
-        // Calculate total units (from both display boxes and master cases)
-        const displayBoxUnits = displayBoxes * 12;
-        const masterCaseUnits = masterCases * (product.unitsPerCase || 144); // Default to 144 units per case
-        const totalUnits = displayBoxUnits + masterCaseUnits;
+        // Calculate total units (master cases take precedence, display boxes are calculated from them)
+        // Don't double-count: if we have master cases, use those; otherwise use display boxes
+        let totalUnits;
+        if (masterCases > 0) {
+            // Use master cases calculation (each master case contains 144 units)
+            totalUnits = masterCases * (product.unitsPerCase || 144);
+            console.log(`📦 Using master cases calculation: ${masterCases} cases × ${product.unitsPerCase || 144} units = ${totalUnits} units`);
+        } else {
+            // Use display boxes calculation (each display box contains 12 units)
+            totalUnits = displayBoxes * 12;
+            console.log(`📦 Using display boxes calculation: ${displayBoxes} boxes × 12 units = ${totalUnits} units`);
+        }
         
         // Calculate line total
         const lineTotal = totalUnits * unitPrice;
         
         return this.formatCurrency(lineTotal);
+    }
+
+    /**
+     * Calculate total units for a line item (without double-counting)
+     */
+    calculateTotalUnits(lineItem) {
+        if (!lineItem.productData) return 0;
+        
+        const product = lineItem.productData;
+        const masterCases = lineItem.masterCases || 0;
+        const displayBoxes = lineItem.displayBoxes || 0;
+        
+        // Don't double-count: if we have master cases, use those; otherwise use display boxes
+        if (masterCases > 0) {
+            return masterCases * (product.unitsPerCase || 144);
+        } else {
+            return displayBoxes * 12;
+        }
     }
 
     /**
@@ -1502,16 +1573,8 @@ class KanvaCalculator {
 
         container.innerHTML = '';
         
-        // Add pricing mode indicator
-        const pricingModeIndicator = document.createElement('div');
-        pricingModeIndicator.className = 'pricing-mode-indicator';
-        pricingModeIndicator.innerHTML = `
-            <span class="pricing-mode-label">Current Pricing Mode:</span>
-            <span class="pricing-mode-value ${this.isRetailMode ? 'retail' : 'distribution'}">
-                ${this.isRetailMode ? 'Retail' : 'Distribution'}
-            </span>
-        `;
-        container.appendChild(pricingModeIndicator);
+        // Pricing mode is now indicated by the toggle switch itself
+        // No need for separate pricing mode indicator
 
         Object.entries(this.data.products).forEach(([key, product]) => {
             const tile = document.createElement('div');
@@ -2165,6 +2228,50 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Make calculator globally available for HTML onclick handlers
     window.calculator = calculator;
+    window.kanvaCalculator = calculator; // Also make available as kanvaCalculator for consistency
+    
+    // Ensure pricing toggle event listener is properly bound after initialization
+    const pricingToggle = document.getElementById('pricingModeToggle');
+    if (pricingToggle && calculator) {
+        console.log('🔄 Re-binding pricing toggle event listener after initialization');
+        
+        // Remove any existing listeners
+        pricingToggle.removeEventListener('change', calculator.pricingToggleHandler);
+        
+        // Create new handler
+        calculator.pricingToggleHandler = (e) => {
+            console.log('🔄 Pricing toggle event triggered');
+            calculator.isRetailMode = e.target.checked;
+            console.log(`💰 Pricing mode changed to: ${calculator.isRetailMode ? 'Retail' : 'Distribution'}`);
+            
+            // Show notification to user
+            calculator.showNotification(`Pricing mode changed to ${calculator.isRetailMode ? 'Retail' : 'Distribution'}`, 'info');
+            
+            // Update product catalog with new pricing
+            console.log('🔄 Calling populateProductReference...');
+            calculator.populateProductReference();
+            
+            // Update any existing line items with new pricing
+            console.log('🔄 Calling updateAllLineItemPricing...');
+            calculator.updateAllLineItemPricing();
+            
+            // Force refresh the order details
+            if (calculator.orderDetailsManager) {
+                console.log('🔄 Calling renderLineItemDetails...');
+                calculator.orderDetailsManager.renderLineItemDetails();
+            }
+            
+            // Recalculate totals
+            console.log('🔄 Calling calculateAll...');
+            calculator.calculateAll();
+            
+            console.log('✅ Pricing toggle event completed');
+        };
+        
+        // Add the event listener
+        pricingToggle.addEventListener('change', calculator.pricingToggleHandler);
+        console.log('✅ Pricing toggle event listener re-bound after initialization');
+    }
 });
 
 console.log('✅ Consolidated Kanva Calculator module loaded successfully');
