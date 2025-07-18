@@ -4,55 +4,79 @@
   "masterCasesPerLayer": 11,
   "halfPallet": 22,
   "fullPallet": 56,
-  "standardShipping": {
-    "description": "Flat rate shipping for orders under master case quantities",
-    "perDisplayBox": {
-      "west": 8.5,
-      "mountain": 10,
-      "southwest": 12.5,
-      "midwest": 15,
-      "southeast": 17.5,
-      "northeast": 20,
-      "remote": 25
+  "ltlThreshold": 12,
+  "freightClass": 70,
+  "palletDimensions": {
+    "length": 48,
+    "width": 40,
+    "description": "Standard pallet dimensions in inches"
+  },
+  "displayBoxShipping": {
+    "description": "Fixed shipping rates by display box quantity ranges (applies to orders with 1-11 master cases)",
+    "ranges": {
+      "1-3": {
+        "zone1": 5,
+        "zone2": 10,
+        "zone3": 10,
+        "zone4": 15
+      },
+      "4-8": {
+        "zone1": 10,
+        "zone2": 10,
+        "zone3": 15,
+        "zone4": 20
+      },
+      "9-11": {
+        "zone1": 10,
+        "zone2": 15,
+        "zone3": 20,
+        "zone4": 25
+      },
+      "12+": {
+        "zone1": 20,
+        "zone2": 20,
+        "zone3": 25,
+        "zone4": 30
+      }
     },
-    "baseRate": {
-      "west": 15,
-      "mountain": 18,
-      "southwest": 22,
-      "midwest": 25,
-      "southeast": 28,
-      "northeast": 32,
-      "remote": 40
+    "masterCaseRates": {
+      "description": "Per master case shipping rates (multiply by quantity for distribution customers)",
+      "zone1": 20,
+      "zone2": 20,
+      "zone3": 25,
+      "zone4": 30
     }
   },
   "zones": {
-    "west": {
-      "name": "West",
+    "zone1": {
+      "name": "Zone 1",
       "states": [
         "CA",
         "NV",
         "OR",
         "WA",
-        "ID",
-        "AZ",
-        "UT"
+        "ID"
       ],
       "ltlPercentage": 1,
-      "color": "#dc2626"
+      "color": "#dc2626",
+      "zoneNumber": 1
     },
-    "mountain": {
-      "name": "Mountain",
+    "zone2": {
+      "name": "Zone 2",
       "states": [
+        "UT",
         "MT",
         "WY",
         "CO",
+        "AZ",
         "NM"
       ],
       "ltlPercentage": 1,
-      "color": "#f59e0b"
+      "color": "#f59e0b",
+      "zoneNumber": 2
     },
-    "southwest": {
-      "name": "Southwest",
+    "zone3": {
+      "name": "Zone 3",
       "states": [
         "TX",
         "OK",
@@ -60,14 +84,7 @@
         "NE",
         "AR",
         "LA",
-        "MS"
-      ],
-      "ltlPercentage": 1.5,
-      "color": "#3b82f6"
-    },
-    "midwest": {
-      "name": "Midwest",
-      "states": [
+        "MS",
         "ND",
         "SD",
         "MN",
@@ -77,45 +94,40 @@
         "IL",
         "IN",
         "MI",
-        "OH"
-      ],
-      "ltlPercentage": 1.5,
-      "color": "#10b981"
-    },
-    "southeast": {
-      "name": "Southeast",
-      "states": [
+        "OH",
         "AL",
         "TN",
-        "KY",
+        "KY"
+      ],
+      "ltlPercentage": 1.5,
+      "color": "#3b82f6",
+      "zoneNumber": 3
+    },
+    "zone4": {
+      "name": "Zone 4",
+      "states": [
         "WV",
         "VA",
         "NC",
         "SC",
         "GA",
-        "FL"
-      ],
-      "ltlPercentage": 2,
-      "color": "#f97316"
-    },
-    "northeast": {
-      "name": "Northeast",
-      "states": [
-        "ME",
-        "NH",
-        "VT",
-        "MA",
-        "RI",
-        "CT",
-        "NY",
-        "NJ",
+        "FL",
+        "DC",
         "PA",
         "DE",
         "MD",
-        "DC"
+        "RI",
+        "NY",
+        "CT",
+        "MA",
+        "NH",
+        "VT",
+        "ME",
+        "NJ"
       ],
       "ltlPercentage": 2,
-      "color": "#eab308"
+      "color": "#f97316",
+      "zoneNumber": 4
     },
     "remote": {
       "name": "Remote",
@@ -123,8 +135,9 @@
         "AK",
         "HI"
       ],
-      "ltlPercentage": 2,
-      "color": "#6b7280"
+      "ltlPercentage": 2.5,
+      "color": "#6b7280",
+      "zoneNumber": 5
     }
   },
   "creditCardFee": 0.03

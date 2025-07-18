@@ -550,7 +550,8 @@ class AdminDashboard {
                                 <th>ID</th>
                                 <th>Image</th>
                                 <th>Product Name</th>
-                                <th>Price</th>
+                                <th>Distro</th>
+                                <th>Retail</th>
                                 <th>MSRP</th>
                                 <th>Cost</th>
                                 <th>Category</th>
@@ -560,7 +561,7 @@ class AdminDashboard {
                             </tr>
                         </thead>
                         <tbody id="products-table-body">
-                            <tr><td colspan="10" class="loading-row">Loading products data...</td></tr>
+                            <tr><td colspan="11" class="loading-row">Loading products data...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -592,6 +593,7 @@ class AdminDashboard {
                     id,
                     name: product.name,
                     price: product.price,
+                    retailPrice: product.retailPrice || product.price, // Fallback to price if no retail price
                     msrp: product.msrp,
                     cost: (product.price * 0.7).toFixed(2), // Estimated cost
                     category: product.category,
@@ -643,6 +645,7 @@ class AdminDashboard {
                     </td>
                     <td class="product-name editable" data-field="name">${product.name}</td>
                     <td class="product-price editable" data-field="price">$${product.price}</td>
+                    <td class="product-retail-price editable" data-field="retailPrice">$${product.retailPrice || 'N/A'}</td>
                     <td class="product-msrp editable" data-field="msrp">$${product.msrp || 'N/A'}</td>
                     <td class="product-cost editable" data-field="cost">$${product.cost || 'N/A'}</td>
                     <td class="product-category editable" data-field="category">${product.category}</td>
@@ -3505,7 +3508,7 @@ async saveProductField(productId, field, value) {
                     <div class="form-row">
                         <div class="form-group">
                             <label for="product-price">
-                                <span class="label-text">Price</span>
+                                <span class="label-text">Distribution Price</span>
                                 <span class="required-indicator">*</span>
                             </label>
                             <div class="input-with-suffix">
@@ -3513,9 +3516,24 @@ async saveProductField(productId, field, value) {
                                        placeholder="4.50" class="form-input">
                                 <span class="input-suffix">$</span>
                             </div>
-                            <small class="form-help">Wholesale price per unit</small>
+                            <small class="form-help">Wholesale price per unit for distributors</small>
                         </div>
                         
+                        <div class="form-group">
+                            <label for="product-retail-price">
+                                <span class="label-text">Retail Price</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <div class="input-with-suffix">
+                                <input type="number" id="product-retail-price" name="retailPrice" step="0.01" required 
+                                       placeholder="5.50" class="form-input">
+                                <span class="input-suffix">$</span>
+                            </div>
+                            <small class="form-help">Direct retail price per unit for stores</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
                         <div class="form-group">
                             <label for="product-msrp">
                                 <span class="label-text">MSRP</span>
@@ -3526,6 +3544,10 @@ async saveProductField(productId, field, value) {
                                 <span class="input-suffix">$</span>
                             </div>
                             <small class="form-help">Manufacturer's suggested retail price</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <!-- Spacer for layout -->
                         </div>
                     </div>
                     
@@ -3714,6 +3736,7 @@ async saveProductField(productId, field, value) {
             const productData = {
                 name: formData.get('name'),
                 price: parseFloat(formData.get('price')),
+                retailPrice: parseFloat(formData.get('retailPrice')),
                 msrp: parseFloat(formData.get('msrp')) || null,
                 category: formData.get('category'),
                 unitsPerCase: parseInt(formData.get('unitsPerCase')) || 1,
@@ -4033,6 +4056,7 @@ async saveProductField(productId, field, value) {
                 document.getElementById('product-id').value = productId;
                 document.getElementById('product-name').value = product.name || '';
                 document.getElementById('product-price').value = product.price || '';
+                document.getElementById('product-retail-price').value = product.retailPrice || '';
                 document.getElementById('product-msrp').value = product.msrp || '';
                 document.getElementById('product-category').value = product.category || '';
                 document.getElementById('product-units').value = product.unitsPerCase || '';
