@@ -3,13 +3,13 @@
     "threshold": 0,
     "name": "Tier 1",
     "description": "Standard pricing for 0-55 master cases",
-    "margin": "10.00%",
+    "margin": "10%",
     "prices": {
-      "focus": 4.50,
-      "release": 4.50,
-      "zoom": 3.20,
+      "focus": 4.5,
+      "release": 4.5,
+      "zoom": 3.2,
       "mango": 4.25,
-      "raw": 4.50
+      "raw": 4.5
     }
   },
   "tier2": {
@@ -20,8 +20,8 @@
     "prices": {
       "focus": 4.35,
       "release": 4.35,
-      "zoom": 3.10,
-      "mango": 4.10,
+      "zoom": 3.1,
+      "mango": 4.1,
       "raw": 4.35
     }
   },
@@ -33,7 +33,7 @@
     "prices": {
       "focus": 4.25,
       "release": 4.25,
-      "zoom": 3.00,
+      "zoom": 3,
       "mango": 3.95,
       "raw": 4.25
     }

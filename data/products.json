@@ -27,7 +27,7 @@
     "name": "Release+Relax",
     "price": 4.5,
     "msrp": 9.99,
-    "unitsPerCase": 96,
+    "unitsPerCase": 144,
     "displayBoxesPerCase": 8,
     "unitsPerDisplayBox": 12,
     "description": "Kanna + Kava blend for stress relief",
@@ -105,7 +105,7 @@
     "description": "Pure leaf, pure relief - Kratom leaf + Kava extract",
     "category": "2oz_wellness",
     "isNewProduct": true,
-    "image": "assets/product_renders/Kanva_RAW+Releaf_DisplayBox.png",
+    "image": "assets/product_renders/raw_1752802086661.png",
     "masterCaseDimensions": {
       "length": 14,
       "width": 10,

@@ -14,13 +14,20 @@ class AdminDashboard {
         this.isInitialized = false;
         this.isLoggedIn = false;
         this.currentSection = 'products';
+        this.currentTab = 'products';
+        this.adminManager = null;
+        this.isLoggedIn = false;
+        this.modal = null;
+        this.loginModal = null;
+        this.connectionData = {}; // Store real connection data
         
         // Admin emails loaded from data file
         this.adminEmails = [];
         this.defaultPassword = 'K@nva2025'; // Default password for all admin emails
         
-        // Load admin emails
+        // Load admin emails and connection data
         this.loadAdminEmails();
+        this.loadConnectionData();
         
         console.log('🎛️ AdminDashboard instance created');
     }
@@ -30,17 +37,173 @@ class AdminDashboard {
      */
     async loadAdminEmails() {
         try {
-            const response = await fetch('data/admin-emails.json');
+            const response = await fetch('/data/admin-emails.json');
             if (response.ok) {
-                this.adminEmails = await response.json();
-                console.log('✅ Admin emails loaded:', this.adminEmails.length, 'emails');
+                const data = await response.json();
+                // Handle both array format and object format
+                this.adminEmails = Array.isArray(data) ? data : (data.emails || []);
+                console.log('✅ Admin emails loaded:', this.adminEmails.length, this.adminEmails);
             } else {
-                console.warn('⚠️ Could not load admin emails, using fallback');
-                this.adminEmails = ['admin@kanvabotanicals.com'];
+                console.warn('⚠️ Could not load admin emails, using defaults');
+                this.adminEmails = ['ben@kanvabotanicals.com'];
             }
         } catch (error) {
             console.error('❌ Error loading admin emails:', error);
-            this.adminEmails = ['admin@kanvabotanicals.com'];
+            this.adminEmails = ['ben@kanvabotanicals.com'];
+        }
+    }
+    
+    /**
+     * Load real connection data from server
+     */
+    async loadConnectionData() {
+        try {
+            console.log('🔄 Loading connection data from server...');
+            const response = await fetch('/api/connections');
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    this.connectionData = result.data || {};
+                    console.log('✅ Connection data loaded:', Object.keys(this.connectionData));
+                    
+                    // Update UI with real connection statuses
+                    this.updateConnectionStatuses();
+                } else {
+                    console.warn('⚠️ Failed to load connection data:', result.message);
+                }
+            } else {
+                console.warn('⚠️ Could not load connection data from server');
+            }
+        } catch (error) {
+            console.error('❌ Error loading connection data:', error);
+        }
+    }
+    
+    /**
+     * Update UI with real connection statuses
+     */
+    updateConnectionStatuses() {
+        const integrations = ['github', 'copper', 'shipstation', 'fishbowl'];
+        
+        integrations.forEach(integration => {
+            const statusElement = document.getElementById(`${integration}-status`);
+            if (statusElement) {
+                const connectionInfo = this.connectionData[integration];
+                if (connectionInfo && this.isConnectionValid(integration, connectionInfo)) {
+                    this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
+                } else {
+                    this.updateIntegrationStatus(statusElement, 'warning', 'Not Configured');
+                }
+            }
+        });
+    }
+    
+    /**
+     * Check if connection data is valid
+     */
+    isConnectionValid(integration, connectionInfo) {
+        if (!connectionInfo) return false;
+        
+        switch (integration) {
+            case 'github':
+                return connectionInfo.token && connectionInfo.repo;
+            case 'copper':
+                return connectionInfo.apiKey && connectionInfo.email;
+            case 'shipstation':
+                return connectionInfo.apiKey && connectionInfo.apiSecret;
+            case 'fishbowl':
+                return connectionInfo.username && connectionInfo.password && connectionInfo.host;
+            default:
+                return false;
+        }
+    }
+    
+    /**
+     * Save connection data to server
+     */
+    async saveConnectionData(integration, connectionData) {
+        try {
+            console.log(`💾 Saving ${integration} connection data...`);
+            
+            const response = await fetch(`/api/connections/${integration}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(connectionData)
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    // Update local connection data
+                    this.connectionData[integration] = connectionData;
+                    console.log(`✅ ${integration} connection data saved successfully`);
+                    return true;
+                } else {
+                    console.warn(`⚠️ Failed to save ${integration} connection:`, result.message);
+                    return false;
+                }
+            } else {
+                console.warn(`⚠️ Server returned ${response.status} when saving ${integration} connection`);
+                return false;
+            }
+        } catch (error) {
+            console.error(`❌ Error saving ${integration} connection:`, error);
+            return false;
+        }
+    }
+    
+    /**
+     * Populate form fields with existing connection data
+     */
+    populateConnectionForms() {
+        // GitHub form population
+        if (this.connectionData.github) {
+            const github = this.connectionData.github;
+            const ownerInput = document.getElementById('github-owner');
+            const repoInput = document.getElementById('github-repo');
+            const tokenInput = document.getElementById('github-token');
+            
+            if (ownerInput && github.owner) ownerInput.value = github.owner;
+            if (repoInput && github.repoName) repoInput.value = github.repoName;
+            if (tokenInput && github.token) tokenInput.value = github.token;
+        }
+        
+        // Copper CRM form population
+        if (this.connectionData.copper) {
+            const copper = this.connectionData.copper;
+            const apiKeyInput = document.getElementById('copper-api-key');
+            const emailInput = document.getElementById('copper-email');
+            const envSelect = document.getElementById('copper-environment');
+            
+            if (apiKeyInput && copper.apiKey) apiKeyInput.value = copper.apiKey;
+            if (emailInput && copper.email) emailInput.value = copper.email;
+            if (envSelect && copper.environment) envSelect.value = copper.environment;
+        }
+        
+        // ShipStation form population
+        if (this.connectionData.shipstation) {
+            const shipstation = this.connectionData.shipstation;
+            const apiKeyInput = document.getElementById('shipstation-api-key');
+            const apiSecretInput = document.getElementById('shipstation-api-secret');
+            const envSelect = document.getElementById('shipstation-environment');
+            
+            if (apiKeyInput && shipstation.apiKey) apiKeyInput.value = shipstation.apiKey;
+            if (apiSecretInput && shipstation.apiSecret) apiSecretInput.value = shipstation.apiSecret;
+            if (envSelect && shipstation.environment) envSelect.value = shipstation.environment;
+        }
+        
+        // Fishbowl ERP form population
+        if (this.connectionData.fishbowl) {
+            const fishbowl = this.connectionData.fishbowl;
+            const serverInput = document.getElementById('fishbowl-server');
+            const usernameInput = document.getElementById('fishbowl-username');
+            const passwordInput = document.getElementById('fishbowl-password');
+            
+            if (serverInput && fishbowl.host) serverInput.value = fishbowl.host;
+            if (usernameInput && fishbowl.username) usernameInput.value = fishbowl.username;
+            if (passwordInput && fishbowl.password) passwordInput.value = fishbowl.password;
         }
     }
 
@@ -98,7 +261,28 @@ class AdminDashboard {
         setTimeout(() => {
             document.body.appendChild(this.floatingButton);
             console.log('✅ Floating admin button created and appended to body');
+            
+            // Bind click event
+            this.floatingButton.addEventListener('click', () => {
+                console.log('🔧 Admin button clicked!');
+                if (this.isLoggedIn) {
+                    console.log('👤 User already logged in, showing admin dashboard');
+                    this.showAdminModal();
+                } else {
+                    console.log('🔐 User not logged in, showing login modal');
+                    this.showLoginModal();
+                }
+            });
         }, 500); // Small delay to ensure DOM is ready
+    }
+    
+    /**
+     * Bind event listeners
+     */
+    bindEvents() {
+        // This method is called during initialization
+        // Additional event bindings can be added here
+        console.log('🔗 Admin dashboard events bound');
     }
 
     /**
@@ -196,7 +380,7 @@ class AdminDashboard {
             }
         });
 
-        document.getElementById('admin-login-form').addEventListener('submit', (e) => {
+        document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const email = document.getElementById('admin-email').value.toLowerCase().trim();
@@ -209,6 +393,18 @@ class AdminDashboard {
             console.log('  Expected password:', this.defaultPassword);
             console.log('  Available admin emails:', this.adminEmails);
             console.log('  Password match:', password === this.defaultPassword);
+            
+            // Check if admin emails are loaded, if not try to load them
+            if (this.adminEmails.length === 0) {
+                console.log('⏳ Admin emails not loaded yet, attempting to load...');
+                await this.loadAdminEmails();
+                
+                // If still empty after loading, use fallback
+                if (this.adminEmails.length === 0) {
+                    console.log('⚠️ Using fallback admin emails');
+                    this.adminEmails = ['ben@kanvabotanicals.com'];
+                }
+            }
             
             // Check if email is in admin list and password matches
             const isValidAdmin = this.adminEmails.some(adminEmail => 
@@ -243,34 +439,7 @@ class AdminDashboard {
         });
     }
 
-    /**
-     * Show login modal
-     */
-    showLoginModal() {
-        this.loginModal.style.display = 'block';
-    }
-
-    /**
-     * Hide login modal
-     */
-    hideLoginModal() {
-        this.loginModal.style.display = 'none';
-    }
-
-    /**
-     * Show admin modal
-     */
-    showAdminModal() {
-        this.adminModal.style.display = 'block';
-        this.showAdminSection('products'); // Default to products section
-    }
-
-    /**
-     * Hide admin modal
-     */
-    hideAdminModal() {
-        this.adminModal.style.display = 'none';
-    }
+    // Modal methods are now at the end of the class with proper login state management
     
     /**
      * Adjust modal height based on content
@@ -315,6 +484,9 @@ class AdminDashboard {
      * Show admin section
      */
     showAdminSection(section) {
+        // Set current section for data operations
+        this.currentSection = section;
+        
         // Update navigation buttons
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.classList.remove('active');
@@ -400,6 +572,14 @@ class AdminDashboard {
      * Load products data from JSON file
      */
     async loadProductsData() {
+        // Prevent multiple simultaneous loads
+        if (this.loadingProducts) {
+            console.log('⏳ Products data already loading, skipping...');
+            return;
+        }
+        
+        this.loadingProducts = true;
+        
         try {
             console.log('🔄 Loading products data...');
             const response = await fetch('data/products.json');
@@ -416,6 +596,7 @@ class AdminDashboard {
                     cost: (product.price * 0.7).toFixed(2), // Estimated cost
                     category: product.category,
                     unitsPerCase: product.unitsPerCase,
+                    image: product.image || null, // Product image path
                     active: true // Default to active
                 }));
                 
@@ -428,6 +609,8 @@ class AdminDashboard {
         } catch (error) {
             console.error('❌ Error loading products:', error);
             this.renderProductsError();
+        } finally {
+            this.loadingProducts = false;
         }
     }
     
@@ -439,15 +622,24 @@ class AdminDashboard {
         if (!tbody) return;
         
         tbody.innerHTML = products.map(product => {
-            // Get image source - use product image or fallback to logo
-            const imageSrc = product.picture || 'assets/logo/Kanva_Logo_White_Master.png';
+            // Get image source - use product image or fallback to placeholder
+            const imageSrc = product.image || 'assets/logo/Kanva_Logo_White_Master.png';
+            const hasImage = product.image && product.image.trim() !== '';
             
             return `
                 <tr data-product-id="${product.id}">
                     <td class="product-id">${product.id}</td>
                     <td class="product-image">
-                        <img src="${imageSrc}" alt="${product.name}" class="product-thumbnail" 
-                             onerror="this.src='assets/logo/Kanva_Logo_White_Master.png'" />
+                        <div class="image-container">
+                            <img src="${imageSrc}" alt="${product.name}" class="product-thumbnail" 
+                                 onerror="this.src='assets/logo/Kanva_Logo_White_Master.png'" />
+                            <div class="image-actions">
+                                <button class="btn-small btn-edit-image" onclick="window.adminDashboard.editProductImage('${product.id}')" title="Edit Image">
+                                    📷
+                                </button>
+                                ${hasImage ? `<button class="btn-small btn-delete-image" onclick="window.adminDashboard.deleteProductImage('${product.id}')" title="Delete Image">🗑️</button>` : ''}
+                            </div>
+                        </div>
                     </td>
                     <td class="product-name editable" data-field="name">${product.name}</td>
                     <td class="product-price editable" data-field="price">$${product.price}</td>
@@ -508,32 +700,42 @@ class AdminDashboard {
      * Load tiers data from JSON file
      */
     async loadTiersData() {
+        if (this.loadingTiers) return;
+        this.loadingTiers = true;
+        
         try {
             console.log('🔄 Loading tiers data...');
             const response = await fetch('data/tiers.json');
-            if (response.ok) {
-                const tiersData = await response.json();
-                console.log('✅ Tiers data loaded:', tiersData);
-                
-                // Convert object to array format for table rendering
-                const tiersArray = Object.entries(tiersData).map(([id, tier]) => ({
-                    id,
-                    name: tier.name,
-                    minQuantity: tier.minQuantity || tier.threshold,
-                    discount: tier.discount,
-                    description: tier.description,
-                    active: true
-                }));
-                
-                console.log('📊 Processed tiers array:', tiersArray);
-                this.renderTiersTable(tiersArray);
-            } else {
-                console.error('❌ Failed to load tiers data:', response.status, response.statusText);
-                this.renderTiersError();
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
+            
+            const data = await response.json();
+            
+            // Convert object to array if needed
+            if (Array.isArray(data)) {
+                this.tiersData = data;
+            } else {
+                this.tiersData = Object.entries(data).map(([key, value]) => ({
+                    id: key,
+                    name: value.name,
+                    threshold: value.threshold || value.minQuantity || 0,
+                    margin: value.margin || value.discount || '0%',
+                    description: value.description || '',
+                    active: value.active !== false,
+                    ...value
+                }));
+            }
+            
+            console.log('✅ Tiers data loaded:', this.tiersData);
+            this.renderTiersTable();
+            
         } catch (error) {
             console.error('❌ Error loading tiers:', error);
             this.renderTiersError();
+        } finally {
+            this.loadingTiers = false;
         }
     }
 
@@ -541,33 +743,165 @@ class AdminDashboard {
      * Load shipping data from JSON file
      */
     async loadShippingData() {
+        if (this.loadingShipping) return;
+        this.loadingShipping = true;
+        
         try {
             console.log('🔄 Loading shipping data...');
             const response = await fetch('data/shipping.json');
-            if (response.ok) {
-                const shippingData = await response.json();
-                console.log('✅ Shipping data loaded:', shippingData);
-                
-                // Convert zones object to array format for table rendering
-                const zonesArray = Object.entries(shippingData.zones || {}).map(([id, zone]) => ({
-                    id,
-                    name: zone.name,
-                    ltlPercentage: zone.ltlPercentage,
-                    states: Array.isArray(zone.states) ? zone.states.join(', ') : '',
-                    color: zone.color || '#4CAF50',
-                    active: true
-                }));
-                
-                console.log('📊 Processed shipping zones array:', zonesArray);
-                this.renderShippingTable(zonesArray);
-            } else {
-                console.error('❌ Failed to load shipping data:', response.status, response.statusText);
-                this.renderShippingError();
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
+            
+            const data = await response.json();
+            
+            // Convert zones object to array if needed
+            if (data.zones) {
+                this.shippingData = Object.entries(data.zones).map(([key, value]) => ({
+                    id: key,
+                    name: value.name,
+                    ltlPercentage: value.ltlPercentage || 0,
+                    states: value.states || [],
+                    color: value.color || '#4CAF50',
+                    active: value.active !== false,
+                    ...value
+                }));
+            } else if (Array.isArray(data)) {
+                this.shippingData = data;
+            } else {
+                this.shippingData = Object.entries(data).map(([key, value]) => ({
+                    id: key,
+                    ...value
+                }));
+            }
+            
+            console.log('✅ Shipping data loaded:', this.shippingData);
+            this.renderShippingTable();
+            
         } catch (error) {
             console.error('❌ Error loading shipping:', error);
             this.renderShippingError();
+        } finally {
+            this.loadingShipping = false;
         }
+    }
+
+    /**
+     * Render tiers section with table structure
+     */
+    renderTiersSection() {
+        // Load tiers data and render table
+        this.loadTiersData();
+        
+        return `
+            <div class="card">
+                <div class="card-header">
+                    <h3>Tier Management</h3>
+                    <div class="action-bar">
+                        <button class="btn btn-primary" onclick="window.adminDashboard.addNewTier()">
+                            ➕ Add New Tier
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.adminDashboard.exportTiers()">
+                            📄 Export
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.adminDashboard.loadTiersData()">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Threshold</th>
+                                <th>Margin</th>
+                                <th>Description</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tiers-table-body">
+                            <tr><td colspan="7" class="loading-row">Loading tiers data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render shipping section with table structure
+     */
+    renderShippingSection() {
+        // Load shipping data and render table
+        this.loadShippingData();
+        
+        return `
+            <div class="card">
+                <div class="card-header">
+                    <h3>Shipping Zone Management</h3>
+                    <div class="action-bar">
+                        <button class="btn btn-primary" onclick="window.adminDashboard.addNewShippingZone()">
+                            ➕ Add New Zone
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.adminDashboard.exportShipping()">
+                            📄 Export
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.adminDashboard.loadShippingData()">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>LTL %</th>
+                                <th>States</th>
+                                <th>Color</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shipping-table-body">
+                            <tr><td colspan="7" class="loading-row">Loading shipping data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render integrations section
+     */
+    renderIntegrationsSection() {
+        return `
+            <div class="integrations-container">
+                <div class="integration-tabs">
+                    <button class="integration-tab active" data-tab="github" onclick="window.adminDashboard.showIntegrationTab('github')">
+                        GitHub
+                    </button>
+                    <button class="integration-tab" data-tab="copper" onclick="window.adminDashboard.showIntegrationTab('copper')">
+                        Copper CRM
+                    </button>
+                    <button class="integration-tab" data-tab="shipstation" onclick="window.adminDashboard.showIntegrationTab('shipstation')">
+                        ShipStation
+                    </button>
+                    <button class="integration-tab" data-tab="fishbowl" onclick="window.adminDashboard.showIntegrationTab('fishbowl')">
+                        Fishbowl ERP
+                    </button>
+                </div>
+                <div class="integration-content" id="integration-content">
+                    ${this.renderGitHubIntegration()}
+                </div>
+            </div>
+        `;
     }
 
 /**
@@ -816,6 +1150,156 @@ async saveProductField(productId, field, value) {
     }
     
     /**
+     * Show product edit modal
+     */
+    showProductEditModal(productId = null) {
+        const isEdit = productId !== null;
+        const title = isEdit ? `Edit Product ${productId}` : 'Add New Product';
+        
+        // Get existing product data if editing
+        let productData = {};
+        if (isEdit) {
+            const row = document.querySelector(`tr[data-product-id="${productId}"]`);
+            if (row) {
+                productData = {
+                    id: productId,
+                    name: row.querySelector('.product-name').textContent,
+                    price: parseFloat(row.querySelector('.product-price').textContent.replace('$', '')),
+                    msrp: parseFloat(row.querySelector('.product-msrp').textContent.replace('$', '')) || 0,
+                    cost: parseFloat(row.querySelector('.product-cost').textContent.replace('$', '')) || 0,
+                    category: row.querySelector('.product-category').textContent,
+                    unitsPerCase: parseInt(row.querySelector('.product-units').textContent) || 1
+                };
+            }
+        }
+        
+        const modalHTML = `
+            <div class="modal-overlay">
+                <div class="product-edit-modal">
+                    <div class="modal-header">
+                        <h3>${title}</h3>
+                        <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form class="product-form" onsubmit="return false;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Product Name:</label>
+                                    <input type="text" name="name" value="${productData.name || ''}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Category:</label>
+                                    <select name="category" required>
+                                        <option value="">Select Category</option>
+                                        <option value="2oz_wellness" ${productData.category === '2oz_wellness' ? 'selected' : ''}>2oz Wellness</option>
+                                        <option value="energy_shots" ${productData.category === 'energy_shots' ? 'selected' : ''}>Energy Shots</option>
+                                        <option value="extract_shots" ${productData.category === 'extract_shots' ? 'selected' : ''}>Extract Shots</option>
+                                        <option value="accessories" ${productData.category === 'accessories' ? 'selected' : ''}>Accessories</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Price ($):</label>
+                                    <input type="number" name="price" step="0.01" value="${productData.price || ''}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>MSRP ($):</label>
+                                    <input type="number" name="msrp" step="0.01" value="${productData.msrp || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label>Cost ($):</label>
+                                    <input type="number" name="cost" step="0.01" value="${productData.cost || ''}">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Units per Case:</label>
+                                    <input type="number" name="unitsPerCase" value="${productData.unitsPerCase || 1}" min="1">
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                        <button class="btn btn-primary" onclick="window.adminDashboard.saveProductForm('${productId || ''}')">
+                            ${isEdit ? 'Update Product' : 'Add Product'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        // Focus first input
+        setTimeout(() => {
+            const firstInput = document.querySelector('.product-edit-modal input[name="name"]');
+            if (firstInput) firstInput.focus();
+        }, 100);
+    }
+
+    /**
+     * Save product form data
+     */
+    async saveProductForm(productId) {
+        const form = document.querySelector('.product-form');
+        const formData = new FormData(form);
+        
+        const productData = {
+            name: formData.get('name'),
+            category: formData.get('category'),
+            price: parseFloat(formData.get('price')),
+            msrp: parseFloat(formData.get('msrp')) || 0,
+            cost: parseFloat(formData.get('cost')) || 0,
+            unitsPerCase: parseInt(formData.get('unitsPerCase')) || 1
+        };
+        
+        try {
+            // Load current products data
+            const response = await fetch('data/products.json');
+            if (!response.ok) throw new Error('Failed to load products data');
+            
+            const productsData = await response.json();
+            
+            if (productId) {
+                // Update existing product
+                if (productsData[productId]) {
+                    Object.assign(productsData[productId], productData);
+                } else {
+                    throw new Error(`Product ${productId} not found`);
+                }
+            } else {
+                // Add new product - generate ID from name
+                const newId = productData.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                productsData[newId] = productData;
+            }
+            
+            // Save to backend
+            const saveResult = await this.saveDataToGit('products.json', productsData);
+            
+            if (saveResult.success) {
+                this.showNotification(productId ? 'Product updated successfully' : 'Product added successfully', 'success');
+                
+                // Close modal
+                document.querySelector('.modal-overlay').remove();
+                
+                // Refresh products data
+                this.loadProductsData();
+                
+                // Refresh frontend data if calculator exists
+                this.refreshFrontendData();
+            } else {
+                throw new Error(saveResult.message || 'Failed to save product');
+            }
+        } catch (error) {
+            console.error('Error saving product:', error);
+            this.showNotification(`Failed to save product: ${error.message}`, 'error');
+        }
+    }
+
+    /**
      * Edit product in modal
      */
     editProduct(productId) {
@@ -927,401 +1411,6 @@ async saveProductField(productId, field, value) {
     }
 
     /**
-     * Show product edit modal
-     */
-    showProductEditModal(productId = null) {
-        const isEdit = productId !== null;
-        const title = isEdit ? `Edit Product ${productId}` : 'Add New Product';
-        
-        const modalHTML = `
-            <div class="product-edit-modal">
-                <div class="modal-header">
-                    <h3>${title}</h3>
-                    <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <form class="product-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Product Name:</label>
-                                <input type="text" name="name" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Category:</label>
-                                <select name="category" required>
-                                    <option value="">Select Category</option>
-                                    <option value="Topicals">Topicals</option>
-                                    <option value="Edibles">Edibles</option>
-                                    <option value="Tinctures">Tinctures</option>
-                                    <option value="Accessories">Accessories</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Price ($):</label>
-                                <input type="number" name="price" step="0.01" required>
-                            </div>
-                            <div class="form-group">
-                                <label>MSRP ($):</label>
-                                <input type="number" name="msrp" step="0.01">
-                            </div>
-                            <div class="form-group">
-                                <label>Cost ($):</label>
-                                <input type="number" name="cost" step="0.01">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Units per Case:</label>
-                                <input type="number" name="unitsPerCase" value="1" min="1">
-                            </div>
-                            <div class="form-group">
-                                <label>Status:</label>
-                                <select name="active">
-                                    <option value="true">Active</option>
-                                    <option value="false">Inactive</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group" style="width: 100%;">
-                                <label>Product Picture:</label>
-                                <div class="image-upload-container">
-                                    <input type="file" name="picture" accept="image/*" class="file-input-hidden" onchange="window.adminDashboard.handlePictureUpload(event)">
-                                    <div class="picture-preview">
-                                        <img class="image-preview" src="assets/logo/Kanva_Logo_White_Master.png" alt="Product preview">
-                                        <div class="upload-placeholder" style="color: #6c757d; font-size: 14px; margin-top: 10px;">
-                                            📷 Click to upload product image (200x200 recommended)
-                                        </div>
-                                    </div>
-                                    <button type="button" class="image-upload-btn" onclick="this.parentElement.querySelector('input[type=file]').click()">
-                                        Choose Image
-                                    </button>
-                                    <button type="button" class="btn btn-outline-secondary" onclick="window.adminDashboard.clearPictureUpload(this)" style="display: none; margin-top: 8px;">
-                                        Remove Image
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
-                                Cancel
-                            </button>
-                            <button type="submit" class="btn btn-primary">
-                                ${isEdit ? 'Update' : 'Create'} Product
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        `;
-        
-        // Create modal overlay
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay';
-        overlay.innerHTML = modalHTML;
-        document.body.appendChild(overlay);
-        
-        // If editing, populate form with existing data
-        if (isEdit) {
-            this.populateProductForm(productId);
-        }
-        
-        // Handle click outside modal to close
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
-                overlay.remove();
-            }
-        });
-        
-        // Handle form submission
-        const form = overlay.querySelector('.product-form');
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // Disable form during submission
-            const submitBtn = form.querySelector('button[type="submit"]');
-            const originalText = submitBtn.textContent;
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Saving...';
-            
-            try {
-                await this.saveProductForm(form, productId);
-                overlay.remove();
-            } catch (error) {
-                console.error('Error saving product:', error);
-                this.showNotification('Failed to save product. Please try again.', 'error');
-            } finally {
-                // Re-enable form
-                submitBtn.disabled = false;
-                submitBtn.textContent = originalText;
-            }
-        });
-    }
-
-    /**
-     * Resize image to thumbnail size
-     */
-    resizeImage(file, maxWidth = 200, maxHeight = 200, quality = 0.8) {
-        return new Promise((resolve) => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-            
-            img.onload = () => {
-                // Calculate new dimensions
-                let { width, height } = img;
-                
-                if (width > height) {
-                    if (width > maxWidth) {
-                        height = (height * maxWidth) / width;
-                        width = maxWidth;
-                    }
-                } else {
-                    if (height > maxHeight) {
-                        width = (width * maxHeight) / height;
-                        height = maxHeight;
-                    }
-                }
-                
-                // Set canvas dimensions
-                canvas.width = width;
-                canvas.height = height;
-                
-                // Draw and resize image
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                // Convert to base64
-                const resizedDataUrl = canvas.toDataURL('image/jpeg', quality);
-                resolve(resizedDataUrl);
-            };
-            
-            img.src = URL.createObjectURL(file);
-        });
-    }
-
-    /**
-     * Populate product form with existing data
-     */
-    populateProductForm(productId) {
-        // Find the product data
-        const product = this.productsData.find(p => p.id === productId);
-        if (!product) return;
-        
-        const form = document.querySelector('.product-form');
-        if (!form) return;
-        
-        // Populate form fields
-        form.querySelector('input[name="name"]').value = product.name || '';
-        form.querySelector('select[name="category"]').value = product.category || '';
-        form.querySelector('input[name="price"]').value = product.price || '';
-        form.querySelector('input[name="msrp"]').value = product.msrp || '';
-        form.querySelector('input[name="cost"]').value = product.cost || '';
-        form.querySelector('input[name="unitsPerCase"]').value = product.unitsPerCase || 1;
-        form.querySelector('select[name="active"]').value = product.active ? 'true' : 'false';
-        
-        // Handle existing product image
-        const container = form.querySelector('.image-upload-container');
-        const previewImg = container.querySelector('.image-preview');
-        const placeholder = container.querySelector('.upload-placeholder');
-        const removeBtn = container.querySelector('.btn-outline-secondary');
-        const fileInput = container.querySelector('input[type="file"]');
-        
-        if (product.picture) {
-            // Use existing product image
-            previewImg.src = product.picture;
-            previewImg.style.display = 'block';
-            placeholder.style.display = 'none';
-            removeBtn.style.display = 'inline-block';
-            
-            // Store existing image data
-            fileInput.setAttribute('data-image-data', product.picture);
-            
-            console.log('✅ Loaded existing product image for editing');
-        } else {
-            // Use fallback logo as placeholder
-            previewImg.src = 'assets/logo/Kanva_Logo_White_Master.png';
-            previewImg.style.display = 'block';
-            placeholder.style.display = 'block';
-            placeholder.textContent = '📷 Click to upload product image (200x200 recommended)';
-            removeBtn.style.display = 'none';
-            
-            // Don't store fallback image as data - let user choose to keep or replace
-            fileInput.removeAttribute('data-image-data');
-            
-            console.log('🖼️ Using fallback logo for product without image');
-        }
-    }
-
-    /**
-     * Save product form data
-     */
-    async saveProductForm(form, productId) {
-        const formData = new FormData(form);
-        const fileInput = form.querySelector('input[name="picture"]');
-        const imageData = fileInput.getAttribute('data-image-data');
-        
-        // Create product object
-        const productData = {
-            name: formData.get('name'),
-            category: formData.get('category'),
-            price: parseFloat(formData.get('price')) || 0,
-            msrp: parseFloat(formData.get('msrp')) || 0,
-            cost: parseFloat(formData.get('cost')) || 0,
-            unitsPerCase: parseInt(formData.get('unitsPerCase')) || 1,
-            active: formData.get('active') === 'true',
-            picture: imageData || null
-        };
-        
-        let isNewProduct = false;
-        let productKey = '';
-        
-        if (productId) {
-            // Update existing product
-            const productIndex = this.productsData.findIndex(p => p.id === productId);
-            if (productIndex !== -1) {
-                // Preserve the product ID
-                productData.id = productId;
-                
-                // If no new image was uploaded, keep the existing one
-                if (!productData.picture && this.productsData[productIndex].picture) {
-                    productData.picture = this.productsData[productIndex].picture;
-                    console.log('✅ Preserved existing product image');
-                }
-                
-                this.productsData[productIndex] = { ...this.productsData[productIndex], ...productData };
-                productKey = this.productsData[productIndex].name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-                this.showNotification(`Product "${productData.name}" updated successfully`, 'success');
-            }
-        } else {
-            // Add new product
-            isNewProduct = true;
-            const newProduct = {
-                id: `PROD-${Date.now()}`,
-                ...productData
-            };
-            this.productsData.push(newProduct);
-            productKey = newProduct.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-            this.showNotification(`Product "${productData.name}" created successfully`, 'success');
-        }
-        
-        // Refresh the products table
-        this.renderProductsTable();
-        
-        // Save to Git repository if AdminManager is available
-        if (this.adminManager && typeof this.adminManager.saveData === 'function') {
-            try {
-                // Show saving notification
-                this.showNotification('Saving to Git repository...', 'info');
-                
-                // Convert products array to object format for Git storage
-                const productsForGit = {};
-                this.productsData.forEach(product => {
-                    // Use a clean key based on product name
-                    const key = product.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-                    
-                    // Ensure we have all required fields
-                    productsForGit[key] = {
-                        id: product.id,
-                        name: product.name,
-                        category: product.category || '',
-                        price: product.price || 0,
-                        msrp: product.msrp || 0,
-                        cost: product.cost || 0,
-                        unitsPerCase: product.unitsPerCase || 1,
-                        active: product.active !== undefined ? product.active : true,
-                        picture: product.picture || null,
-                        description: product.description || '',
-                        displayBoxesPerCase: product.displayBoxesPerCase || product.unitsPerCase || 1,
-                        lastUpdated: new Date().toISOString()
-                    };
-                });
-                
-                // Log the product being saved for debugging
-                if (productKey && productsForGit[productKey]) {
-                    const savedProduct = productsForGit[productKey];
-                    console.log(`Saving product ${savedProduct.id} with image: ${savedProduct.picture ? 'Yes (length: ' + savedProduct.picture.substring(0, 30) + '...)' : 'No'}`);
-                }
-                
-                // Save to Git
-                const success = await this.adminManager.saveData('products', productsForGit);
-                
-                if (success) {
-                    this.showNotification(
-                        `Product data saved to Git repository! ${isNewProduct ? 'New product' : 'Product updates'} are now live.`,
-                        'success'
-                    );
-                    console.log('✅ Products saved to Git repository successfully');
-                } else {
-                    this.showNotification(
-                        'Product saved locally but failed to sync with Git repository. Changes may not persist.',
-                        'warning'
-                    );
-                    console.warn('⚠️ Failed to save products to Git repository');
-                }
-            } catch (error) {
-                console.error('❌ Error saving to Git:', error);
-                this.showNotification(
-                    'Product saved locally but Git sync failed. Please check your connection.',
-                    'warning'
-                );
-            }
-        } else {
-            console.warn('⚠️ AdminManager or saveData method not available');
-            this.showNotification(
-                'Product saved locally. Git integration not available.',
-                'warning'
-            );
-        }
-    }
-    
-    /**
-     * Convert table to CSV
-     */
-    tableToCSV(table) {
-        const rows = [];
-        const headers = Array.from(table.querySelectorAll('thead th'))
-            .map(th => th.textContent.trim());
-        rows.push(headers.join(','));
-        
-        const dataRows = table.querySelectorAll('tbody tr');
-        dataRows.forEach(row => {
-            const cells = Array.from(row.querySelectorAll('td'))
-                .slice(0, -1) // Exclude actions column
-                .map(td => {
-                    let text = td.textContent.trim();
-                    // Handle CSV escaping
-                    if (text.includes(',') || text.includes('"')) {
-                        text = `"${text.replace(/"/g, '""')}"`;
-                    }
-                    return text;
-                });
-            rows.push(cells.join(','));
-        });
-        
-        return rows.join('\n');
-    }
-    
-    /**
-     * Download CSV file
-     */
-    downloadCSV(csvContent, filename) {
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        
-        if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', filename);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    }
-
-    /**
      * Render tiers section
      */
     renderTiersSection() {
@@ -1414,6 +1503,7 @@ async saveProductField(productId, field, value) {
         // Set a timeout to adjust modal height after rendering
         setTimeout(() => this.adjustModalHeight(), 100);
         setTimeout(() => this.initIntegrationTabs(), 200);
+        setTimeout(() => this.populateConnectionForms(), 300);
         
         return `
             <div class="integrations-section">
@@ -1667,6 +1757,129 @@ async saveProductField(productId, field, value) {
     }
 
     /**
+     * Render tiers table
+     */
+    renderTiersTable() {
+        const tableBody = document.getElementById('tiers-table-body');
+        if (!tableBody) return;
+        
+        if (!this.tiersData || this.tiersData.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="7" class="no-data-row">No tiers data available</td></tr>';
+            return;
+        }
+        
+        const rows = this.tiersData.map(tier => `
+            <tr>
+                <td>${tier.id}</td>
+                <td class="editable" data-field="name" data-id="${tier.id}">${tier.name || ''}</td>
+                <td class="editable" data-field="minQuantity" data-id="${tier.id}">${tier.minQuantity || tier.threshold || 0}</td>
+                <td class="editable" data-field="discount" data-id="${tier.id}">${tier.discount || 0}%</td>
+                <td class="editable" data-field="description" data-id="${tier.id}">${tier.description || ''}</td>
+                <td>
+                    <span class="status-badge ${tier.active ? 'active' : 'inactive'}">
+                        ${tier.active ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td class="actions">
+                    <button class="btn btn-sm btn-primary" onclick="window.adminDashboard.editTier('${tier.id}')">
+                        ✏️ Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="window.adminDashboard.deleteTier('${tier.id}')">
+                        🗑️ Delete
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        
+        tableBody.innerHTML = rows;
+    }
+    
+    /**
+     * Render shipping table
+     */
+    renderShippingTable() {
+        const tableBody = document.getElementById('shipping-table-body');
+        if (!tableBody) return;
+        
+        if (!this.shippingData || this.shippingData.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="7" class="no-data-row">No shipping data available</td></tr>';
+            return;
+        }
+        
+        const rows = this.shippingData.map(zone => `
+            <tr>
+                <td>${zone.id}</td>
+                <td class="editable" data-field="name" data-id="${zone.id}">${zone.name || ''}</td>
+                <td class="editable" data-field="ltlPercentage" data-id="${zone.id}">${zone.ltlPercentage || 0}%</td>
+                <td class="editable" data-field="states" data-id="${zone.id}">${Array.isArray(zone.states) ? zone.states.join(', ') : zone.states || ''}</td>
+                <td>
+                    <span class="color-indicator" style="background-color: ${zone.color || '#4CAF50'};"></span>
+                    ${zone.color || '#4CAF50'}
+                </td>
+                <td>
+                    <span class="status-badge ${zone.active ? 'active' : 'inactive'}">
+                        ${zone.active ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td class="actions">
+                    <button class="btn btn-sm btn-primary" onclick="window.adminDashboard.editShippingZone('${zone.id}')">
+                        ✏️ Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="window.adminDashboard.deleteShippingZone('${zone.id}')">
+                        🗑️ Delete
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        
+        tableBody.innerHTML = rows;
+    }
+    
+    /**
+     * Render tiers error
+     */
+    renderTiersError() {
+        const tableBody = document.getElementById('tiers-table-body');
+        if (!tableBody) return;
+        
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="error-row">
+                    <div class="error-message">
+                        <span class="error-icon">❌</span>
+                        Failed to load tiers data
+                        <button class="btn btn-sm btn-primary" onclick="window.adminDashboard.loadTiersData()" style="margin-left: 10px;">
+                            🔄 Try Again
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+    
+    /**
+     * Render shipping error
+     */
+    renderShippingError() {
+        const tableBody = document.getElementById('shipping-table-body');
+        if (!tableBody) return;
+        
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="error-row">
+                    <div class="error-message">
+                        <span class="error-icon">❌</span>
+                        Failed to load shipping data
+                        <button class="btn btn-sm btn-primary" onclick="window.adminDashboard.loadShippingData()" style="margin-left: 10px;">
+                            🔄 Try Again
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    /**
      * Show admin dashboard (public method for compatibility)
      */
     show() {
@@ -1706,7 +1919,65 @@ async saveProductField(productId, field, value) {
      * Test GitHub integration (called by the UI button)
      */
     async testGitHubIntegration() {
-        return this.testGitHubConnection();
+        console.log('🧪 Testing GitHub integration...');
+        
+        const owner = document.getElementById('github-owner')?.value || 'benatkanva';
+        const repo = document.getElementById('github-repo')?.value || 'kanva-quotes';
+        const token = document.getElementById('github-token')?.value;
+        
+        const statusElement = document.getElementById('github-status');
+        this.updateIntegrationStatus(statusElement, 'testing', 'Testing...');
+        
+        if (!token) {
+            this.updateIntegrationStatus(statusElement, 'error', 'No Token');
+            this.showNotification('Please enter a GitHub token first', 'error');
+            return;
+        }
+        
+        try {
+            // Make real API call to GitHub
+            const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (response.ok) {
+                const repoData = await response.json();
+                this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
+                
+                // Save successful connection data
+                await this.saveConnectionData('github', {
+                    token: token,
+                    repo: `${owner}/${repo}`,
+                    owner: owner,
+                    repoName: repo,
+                    timestamp: new Date().toISOString(),
+                    repoData: {
+                        full_name: repoData.full_name,
+                        default_branch: repoData.default_branch,
+                        description: repoData.description
+                    }
+                });
+                
+                this.showNotification(`GitHub connection successful! Repository: ${repoData.full_name}`, 'success');
+                
+            } else if (response.status === 401) {
+                this.updateIntegrationStatus(statusElement, 'error', 'Unauthorized');
+                this.showNotification('GitHub token is invalid or expired', 'error');
+            } else if (response.status === 404) {
+                this.updateIntegrationStatus(statusElement, 'error', 'Not Found');
+                this.showNotification('Repository not found or no access', 'error');
+            } else {
+                throw new Error(`GitHub API returned ${response.status}`);
+            }
+            
+        } catch (error) {
+            console.error('GitHub integration test failed:', error);
+            this.updateIntegrationStatus(statusElement, 'error', 'Test Failed');
+            this.showNotification(`GitHub test failed: ${error.message}`, 'error');
+        }
     }
 
     /**
@@ -1738,73 +2009,16 @@ async saveProductField(productId, field, value) {
                     tabContent.classList.add('active');
                 }
                 
+                // Reload connection statuses to persist state
+                this.updateConnectionStatuses();
+                
+                // Populate forms with existing data
+                setTimeout(() => this.populateConnectionForms(), 50);
+                
                 // Adjust modal height after tab switch
                 setTimeout(() => this.adjustModalHeight(), 100);
             });
         });
-    }
-    
-    /**
-     * Test GitHub integration
-     */
-    async testGitHubConnection() {
-        console.log('🧪 Testing GitHub integration...');
-        
-        const owner = document.getElementById('github-owner')?.value || 'benatkanva';
-        const repo = document.getElementById('github-repo')?.value || 'kanva-quotes';
-        const token = document.getElementById('github-token')?.value;
-        
-        const statusElement = document.getElementById('github-status');
-        this.updateIntegrationStatus(statusElement, 'testing', 'Testing...');
-        
-        try {
-            if (window.GitConnector) {
-                // Configure GitConnector with the form values
-                const gitConnector = new window.GitConnector({ 
-                    repo: `${owner}/${repo}`, 
-                    token: token 
-                });
-                
-                // Test the connection
-                const testResult = await gitConnector.testConnection();
-                
-                if (testResult.success) {
-                    // Update UI to show success
-                    this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
-                    
-                    // Save the connection to the server if successful
-                    await gitConnector.saveConnectionToServer();
-                    
-                    // Show detailed connection info
-                    const details = testResult.details;
-                    let message = `✅ GitHub API Connection Successful\n\n`;
-                    message += `Repository: ${details.full_name}\n`;
-                    message += `Owner: ${details.owner}\n`;
-                    message += `Default Branch: ${details.default_branch || 'main'}\n`;
-                    message += `Description: ${details.description || 'No description'}\n`;
-                    
-                    alert(message);
-                    
-                    // Update the admin manager with the new token
-                    if (this.adminManager) {
-                        this.adminManager.github.token = token;
-                        this.adminManager.github.owner = owner;
-                        this.adminManager.github.repo = repo;
-                    }
-                } else {
-                    // Update UI to show error
-                    this.updateIntegrationStatus(statusElement, 'error', testResult.message);
-                    alert(`❌ GitHub Connection Failed\n\nError: ${testResult.message}`);
-                }
-            } else {
-                this.updateIntegrationStatus(statusElement, 'error', 'GitConnector not loaded');
-                alert('❌ GitConnector not loaded. Please refresh the page and try again.');
-            }
-        } catch (error) {
-            console.error('GitHub test failed:', error);
-            this.updateIntegrationStatus(statusElement, 'error', 'Test Failed');
-            alert(`❌ GitHub Test Failed\n\nError: ${error.message}`);
-        }
     }
 
     /**
@@ -1875,15 +2089,44 @@ async saveProductField(productId, field, value) {
                 throw new Error('API Key and Email are required');
             }
             
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Make real API call to Copper CRM
+            const response = await fetch('https://api.copper.com/developer_api/v1/account', {
+                method: 'GET',
+                headers: {
+                    'X-PW-AccessToken': apiKey,
+                    'X-PW-Application': 'developer_api',
+                    'X-PW-UserEmail': email,
+                    'Content-Type': 'application/json'
+                }
+            });
             
-            // For demo purposes, we'll simulate a successful connection
-            // In a real implementation, you would make an actual API call to Copper
-            this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
-            
-            // Show success message
-            this.showNotification('Copper CRM connection successful!', 'success');
+            if (response.ok) {
+                const accountData = await response.json();
+                this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
+                
+                // Save successful connection data
+                await this.saveConnectionData('copper', {
+                    apiKey: apiKey,
+                    email: email,
+                    environment: environment,
+                    timestamp: new Date().toISOString(),
+                    accountData: {
+                        name: accountData.name,
+                        id: accountData.id
+                    }
+                });
+                
+                this.showNotification(`Copper CRM connection successful! Account: ${accountData.name}`, 'success');
+                
+            } else if (response.status === 401) {
+                this.updateIntegrationStatus(statusElement, 'error', 'Unauthorized');
+                this.showNotification('Copper CRM API key is invalid or email is incorrect', 'error');
+            } else if (response.status === 403) {
+                this.updateIntegrationStatus(statusElement, 'error', 'Forbidden');
+                this.showNotification('Access denied. Check your Copper CRM permissions', 'error');
+            } else {
+                throw new Error(`Copper CRM API returned ${response.status}`);
+            }
             
         } catch (error) {
             console.error('Copper CRM connection error:', error);
@@ -1910,15 +2153,43 @@ async saveProductField(productId, field, value) {
                 throw new Error('API Key and API Secret are required');
             }
             
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Create basic auth header
+            const credentials = btoa(`${apiKey}:${apiSecret}`);
+            const baseUrl = environment === 'sandbox' ? 'https://ssapi.shipstation.com' : 'https://ssapi.shipstation.com';
             
-            // For demo purposes, we'll simulate a successful connection
-            // In a real implementation, you would make an actual API call to ShipStation
-            this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
+            // Make real API call to ShipStation
+            const response = await fetch(`${baseUrl}/accounts`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Basic ${credentials}`,
+                    'Content-Type': 'application/json'
+                }
+            });
             
-            // Show success message
-            this.showNotification('ShipStation connection successful!', 'success');
+            if (response.ok) {
+                const accountData = await response.json();
+                this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
+                
+                // Save successful connection data
+                await this.saveConnectionData('shipstation', {
+                    apiKey: apiKey,
+                    apiSecret: apiSecret,
+                    environment: environment,
+                    timestamp: new Date().toISOString(),
+                    accountData: accountData
+                });
+                
+                this.showNotification('ShipStation connection successful!', 'success');
+                
+            } else if (response.status === 401) {
+                this.updateIntegrationStatus(statusElement, 'error', 'Unauthorized');
+                this.showNotification('ShipStation API credentials are invalid', 'error');
+            } else if (response.status === 403) {
+                this.updateIntegrationStatus(statusElement, 'error', 'Forbidden');
+                this.showNotification('Access denied. Check your ShipStation permissions', 'error');
+            } else {
+                throw new Error(`ShipStation API returned ${response.status}`);
+            }
             
         } catch (error) {
             console.error('ShipStation connection error:', error);
@@ -2562,6 +2833,501 @@ async saveProductField(productId, field, value) {
     }
 
     /**
+     * Setup inline editing for table cells
+     */
+    setupInlineEditing() {
+        const editableCells = document.querySelectorAll('.editable');
+        
+        editableCells.forEach(cell => {
+            cell.addEventListener('click', (e) => {
+                this.startInlineEdit(e.target);
+            });
+        });
+    }
+
+    /**
+     * Start inline editing for a cell
+     */
+    startInlineEdit(cell) {
+        if (cell.querySelector('input')) return; // Already editing
+        
+        const originalValue = cell.textContent.replace('$', '').trim();
+        const field = cell.dataset.field;
+        const productId = cell.dataset.id || cell.closest('tr').dataset.productId;
+        
+        // Create input element
+        const input = document.createElement('input');
+        input.type = field === 'price' || field === 'msrp' || field === 'cost' || field === 'unitsPerCase' ? 'number' : 'text';
+        input.value = originalValue;
+        input.className = 'inline-edit-input';
+        
+        // Replace cell content with input
+        cell.innerHTML = '';
+        cell.appendChild(input);
+        input.focus();
+        input.select();
+        
+        // Handle save on Enter or blur
+        const saveEdit = async () => {
+            const newValue = input.value.trim();
+            if (newValue !== originalValue) {
+                await this.saveInlineEdit(productId, field, newValue, cell);
+            } else {
+                // Restore original value
+                cell.textContent = field.includes('price') || field.includes('cost') ? `$${originalValue}` : originalValue;
+            }
+        };
+        
+        // Handle cancel on Escape
+        const cancelEdit = () => {
+            cell.textContent = field.includes('price') || field.includes('cost') ? `$${originalValue}` : originalValue;
+        };
+        
+        input.addEventListener('blur', saveEdit);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveEdit();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+    }
+
+    /**
+     * Save inline edit changes
+     */
+    async saveInlineEdit(itemId, field, newValue, cell) {
+        try {
+            console.log(`💾 Saving ${field} for item ${itemId}: ${newValue}`);
+            console.log(`🔍 Current section: ${this.currentSection}`);
+            
+            // Determine data type based on current section
+            let success = false;
+            if (this.currentSection === 'products') {
+                console.log('📎 Using updateProductData');
+                success = await this.updateProductData(itemId, field, newValue);
+            } else if (this.currentSection === 'tiers') {
+                console.log('📎 Using updateTierData');
+                success = await this.updateTierData(itemId, field, newValue);
+            } else if (this.currentSection === 'shipping') {
+                console.log('📎 Using updateShippingData');
+                success = await this.updateShippingData(itemId, field, newValue);
+            } else {
+                console.error(`❌ Unknown section: ${this.currentSection}`);
+                throw new Error(`Unknown section: ${this.currentSection}`);
+            }
+            
+            if (success) {
+                // Update cell display
+                const displayValue = field.includes('price') || field.includes('cost') || field.includes('Percentage') ? 
+                    (field.includes('Percentage') ? `${newValue}%` : `$${newValue}`) : newValue;
+                cell.textContent = displayValue;
+                
+                // Show success feedback
+                cell.classList.add('edit-success');
+                setTimeout(() => cell.classList.remove('edit-success'), 2000);
+                
+                this.showNotification(`Updated ${field} successfully`, 'success');
+                
+                // Refresh frontend data if calculator exists
+                this.refreshFrontendData();
+            } else {
+                throw new Error('Failed to update data');
+            }
+        } catch (error) {
+            console.error('Failed to save inline edit:', error);
+            cell.textContent = field.includes('price') || field.includes('cost') ? `$${cell.dataset.originalValue || '0'}` : cell.dataset.originalValue || '';
+            cell.classList.add('edit-error');
+            setTimeout(() => cell.classList.remove('edit-error'), 2000);
+            this.showNotification(`Failed to update ${field}: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Update product data and save to backend
+     */
+    async updateProductData(productId, field, newValue) {
+        try {
+            // Load current products data
+            const response = await fetch('data/products.json');
+            if (!response.ok) throw new Error('Failed to load products data');
+            
+            const productsData = await response.json();
+            
+            // Update the specific field
+            if (productsData[productId]) {
+                // Convert numeric fields
+                if (field === 'price' || field === 'msrp' || field === 'cost') {
+                    productsData[productId][field] = parseFloat(newValue);
+                } else if (field === 'unitsPerCase') {
+                    productsData[productId][field] = parseInt(newValue);
+                } else {
+                    productsData[productId][field] = newValue;
+                }
+                
+                console.log(`Updated product ${productId}:`, productsData[productId]);
+                
+                // Save to backend via Git API
+                const saveResult = await this.saveDataToGit('products.json', productsData);
+                
+                if (saveResult.success) {
+                    console.log('✅ Product data saved to Git successfully');
+                    return true;
+                } else {
+                    throw new Error(saveResult.message || 'Failed to save to Git');
+                }
+            } else {
+                throw new Error(`Product ${productId} not found`);
+            }
+        } catch (error) {
+            console.error('Error updating product data:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Update tier data and save to backend
+     */
+    async updateTierData(tierId, field, newValue) {
+        try {
+            // Load current tiers data
+            const response = await fetch('data/tiers.json');
+            if (!response.ok) throw new Error('Failed to load tiers data');
+            
+            const tiersData = await response.json();
+            
+            // Update the specific field
+            if (tiersData[tierId]) {
+                // Convert numeric fields
+                if (field === 'threshold' || field === 'minQuantity') {
+                    tiersData[tierId][field] = parseInt(newValue);
+                } else if (field === 'margin' || field === 'discount') {
+                    // Remove % sign if present
+                    const numValue = parseFloat(newValue.toString().replace('%', ''));
+                    tiersData[tierId][field] = field === 'margin' ? `${numValue}%` : numValue;
+                } else {
+                    tiersData[tierId][field] = newValue;
+                }
+                
+                console.log(`Updated tier ${tierId}:`, tiersData[tierId]);
+                
+                // Save to backend via Git API
+                const saveResult = await this.saveDataToGit('tiers.json', tiersData);
+                
+                if (saveResult.success) {
+                    console.log('✅ Tier data saved to Git successfully');
+                    return true;
+                } else {
+                    throw new Error(saveResult.message || 'Failed to save to Git');
+                }
+            } else {
+                throw new Error(`Tier ${tierId} not found`);
+            }
+        } catch (error) {
+            console.error('Error updating tier data:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Update shipping data and save to backend
+     */
+    async updateShippingData(zoneId, field, newValue) {
+        try {
+            // Load current shipping data
+            const response = await fetch('data/shipping.json');
+            if (!response.ok) throw new Error('Failed to load shipping data');
+            
+            const shippingData = await response.json();
+            
+            // Update the specific field in zones
+            if (shippingData.zones && shippingData.zones[zoneId]) {
+                // Convert numeric fields
+                if (field === 'ltlPercentage') {
+                    shippingData.zones[zoneId][field] = parseFloat(newValue);
+                } else if (field === 'states') {
+                    // Convert comma-separated string to array
+                    shippingData.zones[zoneId][field] = newValue.split(',').map(s => s.trim());
+                } else {
+                    shippingData.zones[zoneId][field] = newValue;
+                }
+                
+                console.log(`Updated shipping zone ${zoneId}:`, shippingData.zones[zoneId]);
+                
+                // Save to backend via Git API
+                const saveResult = await this.saveDataToGit('shipping.json', shippingData);
+                
+                if (saveResult.success) {
+                    console.log('✅ Shipping data saved to Git successfully');
+                    return true;
+                } else {
+                    throw new Error(saveResult.message || 'Failed to save to Git');
+                }
+            } else {
+                throw new Error(`Shipping zone ${zoneId} not found`);
+            }
+        } catch (error) {
+            console.error('Error updating shipping data:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Save data to Git repository
+     */
+    async saveDataToGit(filename, data) {
+        try {
+            console.log(`🔄 Saving ${filename} to Git...`);
+            
+            // Use AdminManager if available
+            if (this.adminManager && typeof this.adminManager.saveData === 'function') {
+                const result = await this.adminManager.saveData(`data/${filename}`, JSON.stringify(data, null, 2));
+                return { success: true, result };
+            }
+            
+            // Fallback to direct API call
+            const response = await fetch('/api/save-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: `data/${filename}`,
+                    data: JSON.stringify(data, null, 2),
+                    message: `Update ${filename} via admin dashboard`
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                return { success: true, result };
+            } else {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+        } catch (error) {
+            console.error('Error saving to Git:', error);
+            return { success: false, message: error.message };
+        }
+    }
+
+    /**
+     * Render tiers table
+     */
+    renderTiersTable(tiers = null) {
+        const tableBody = document.getElementById('tiers-table-body');
+        if (!tableBody) return;
+        
+        const tiersData = tiers || this.tiersData;
+        
+        if (!tiersData || tiersData.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="7" class="no-data-row">No tiers data available</td></tr>';
+            return;
+        }
+        
+        const rows = tiersData.map(tier => `
+            <tr data-tier-id="${tier.id}">
+                <td>${tier.id}</td>
+                <td class="editable" data-field="name" data-id="${tier.id}">${tier.name || ''}</td>
+                <td class="editable" data-field="threshold" data-id="${tier.id}">${tier.threshold || tier.minQuantity || 0}</td>
+                <td class="editable" data-field="margin" data-id="${tier.id}">${tier.margin || tier.discount || '0%'}</td>
+                <td class="editable" data-field="description" data-id="${tier.id}">${tier.description || ''}</td>
+                <td>
+                    <span class="status-badge ${tier.active !== false ? 'active' : 'inactive'}">
+                        ${tier.active !== false ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td class="actions">
+                    <button class="btn btn-sm btn-primary" onclick="window.adminDashboard.editTier('${tier.id}')">
+                        ✏️ Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="window.adminDashboard.deleteTier('${tier.id}')">
+                        🗑️ Delete
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        
+        tableBody.innerHTML = rows;
+        
+        // Setup inline editing
+        this.setupInlineEditing();
+    }
+    
+    /**
+     * Render shipping table
+     */
+    renderShippingTable(shipping = null) {
+        const tableBody = document.getElementById('shipping-table-body');
+        if (!tableBody) return;
+        
+        const shippingData = shipping || this.shippingData;
+        
+        if (!shippingData || shippingData.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="7" class="no-data-row">No shipping data available</td></tr>';
+            return;
+        }
+        
+        const rows = shippingData.map(zone => `
+            <tr data-zone-id="${zone.id}">
+                <td>${zone.id}</td>
+                <td class="editable" data-field="name" data-id="${zone.id}">${zone.name || ''}</td>
+                <td class="editable" data-field="ltlPercentage" data-id="${zone.id}">${zone.ltlPercentage || 0}%</td>
+                <td class="editable" data-field="states" data-id="${zone.id}">${Array.isArray(zone.states) ? zone.states.join(', ') : zone.states || ''}</td>
+                <td>
+                    <span class="color-indicator" style="background-color: ${zone.color || '#4CAF50'};"></span>
+                    ${zone.color || '#4CAF50'}
+                </td>
+                <td>
+                    <span class="status-badge ${zone.active !== false ? 'active' : 'inactive'}">
+                        ${zone.active !== false ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td class="actions">
+                    <button class="btn btn-sm btn-primary" onclick="window.adminDashboard.editShippingZone('${zone.id}')">
+                        ✏️ Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="window.adminDashboard.deleteShippingZone('${zone.id}')">
+                        🗑️ Delete
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        
+        tableBody.innerHTML = rows;
+        
+        // Setup inline editing
+        this.setupInlineEditing();
+    }
+    
+    /**
+     * Render tiers error
+     */
+    renderTiersError() {
+        const tableBody = document.getElementById('tiers-table-body');
+        if (!tableBody) return;
+        
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="error-row">
+                    <div class="error-message">
+                        <span class="error-icon">❌</span>
+                        Failed to load tiers data
+                        <button class="btn btn-sm btn-primary" onclick="window.adminDashboard.loadTiersData()" style="margin-left: 10px;">
+                            🔄 Try Again
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+    
+    /**
+     * Render shipping error
+     */
+    renderShippingError() {
+        const tableBody = document.getElementById('shipping-table-body');
+        if (!tableBody) return;
+        
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="error-row">
+                    <div class="error-message">
+                        <span class="error-icon">❌</span>
+                        Failed to load shipping data
+                        <button class="btn btn-sm btn-primary" onclick="window.adminDashboard.loadShippingData()" style="margin-left: 10px;">
+                            🔄 Try Again
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    /**
+     * Edit tier (placeholder for modal)
+     */
+    editTier(tierId) {
+        console.log('Edit tier:', tierId);
+        this.showNotification('Tier editing modal coming soon!', 'info');
+    }
+
+    /**
+     * Delete tier
+     */
+    async deleteTier(tierId) {
+        if (!confirm(`Are you sure you want to delete tier ${tierId}?`)) return;
+        
+        try {
+            // Load current tiers data
+            const response = await fetch('data/tiers.json');
+            if (!response.ok) throw new Error('Failed to load tiers data');
+            
+            const tiersData = await response.json();
+            
+            // Remove the tier
+            delete tiersData[tierId];
+            
+            // Save back to Git
+            const saveResult = await this.saveDataToGit('tiers.json', tiersData);
+            
+            if (saveResult.success) {
+                this.showNotification(`Tier ${tierId} deleted successfully`, 'success');
+                this.loadTiersData(); // Reload data
+            } else {
+                throw new Error(saveResult.message || 'Failed to save changes');
+            }
+        } catch (error) {
+            console.error('Error deleting tier:', error);
+            this.showNotification(`Failed to delete tier: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Edit shipping zone (placeholder for modal)
+     */
+    editShippingZone(zoneId) {
+        console.log('Edit shipping zone:', zoneId);
+        this.showNotification('Shipping zone editing modal coming soon!', 'info');
+    }
+
+    /**
+     * Delete shipping zone
+     */
+    async deleteShippingZone(zoneId) {
+        if (!confirm(`Are you sure you want to delete shipping zone ${zoneId}?`)) return;
+        
+        try {
+            // Load current shipping data
+            const response = await fetch('data/shipping.json');
+            if (!response.ok) throw new Error('Failed to load shipping data');
+            
+            const shippingData = await response.json();
+            
+            // Remove the zone from zones object
+            if (shippingData.zones && shippingData.zones[zoneId]) {
+                delete shippingData.zones[zoneId];
+                
+                // Save back to Git
+                const saveResult = await this.saveDataToGit('shipping.json', shippingData);
+                
+                if (saveResult.success) {
+                    this.showNotification(`Shipping zone ${zoneId} deleted successfully`, 'success');
+                    this.loadShippingData(); // Reload data
+                } else {
+                    throw new Error(saveResult.message || 'Failed to save changes');
+                }
+            } else {
+                throw new Error(`Shipping zone ${zoneId} not found`);
+            }
+        } catch (error) {
+            console.error('Error deleting shipping zone:', error);
+            this.showNotification(`Failed to delete shipping zone: ${error.message}`, 'error');
+        }
+    }
+
+    /**
      * Clear picture upload and reset to default state
      */
     clearPictureUpload(removeBtn) {
@@ -2592,6 +3358,1687 @@ async saveProductField(productId, field, value) {
 
     addNewShippingZone() {
         alert('Add New Shipping Zone functionality would be implemented here.');
+    }
+
+    /**
+     * Add new tier (placeholder)
+     */
+    addNewTier() {
+        this.showNotification('Add New Tier functionality coming soon!', 'info');
+    }
+
+    /**
+     * Export tiers data
+     */
+    exportTiers() {
+        try {
+            if (!this.tiersData || this.tiersData.length === 0) {
+                this.showNotification('No tiers data to export', 'warning');
+                return;
+            }
+            
+            const csvContent = this.convertToCSV(this.tiersData, ['id', 'name', 'threshold', 'margin', 'description']);
+            this.downloadCSV(csvContent, 'tiers-export.csv');
+            this.showNotification('Tiers data exported successfully', 'success');
+        } catch (error) {
+            console.error('Export error:', error);
+            this.showNotification('Failed to export tiers data', 'error');
+        }
+    }
+
+    /**
+     * Export shipping data
+     */
+    exportShipping() {
+        try {
+            if (!this.shippingData || this.shippingData.length === 0) {
+                this.showNotification('No shipping data to export', 'warning');
+                return;
+            }
+            
+            const csvContent = this.convertToCSV(this.shippingData, ['id', 'name', 'ltlPercentage', 'states', 'color']);
+            this.downloadCSV(csvContent, 'shipping-export.csv');
+            this.showNotification('Shipping data exported successfully', 'success');
+        } catch (error) {
+            console.error('Export error:', error);
+            this.showNotification('Failed to export shipping data', 'error');
+        }
+    }
+
+    /**
+     * Convert data to CSV format
+     */
+    convertToCSV(data, headers) {
+        const csvHeaders = headers.join(',');
+        const csvRows = data.map(item => {
+            return headers.map(header => {
+                const value = item[header];
+                if (Array.isArray(value)) {
+                    return `"${value.join('; ')}"`;
+                }
+                return `"${value || ''}"`;
+            }).join(',');
+        });
+        
+        return [csvHeaders, ...csvRows].join('\n');
+    }
+
+    /**
+     * Download CSV file
+     */
+    downloadCSV(csvContent, filename) {
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+    /**
+     * Add new product
+     */
+    addNewProduct() {
+        console.log('➕ Adding new product...');
+        this.showProductModal();
+    }
+
+    /**
+     * Show product modal for adding/editing
+     */
+    showProductModal(productId = null) {
+        const isEdit = productId !== null;
+        const title = isEdit ? '✏️ Edit Product' : '➕ Add New Product';
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="product-edit-modal modern-modal">
+                <div class="modal-header">
+                    <div class="modal-title-section">
+                        <div class="modal-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 7L12 3L4 7M20 7L12 11M20 7V17L12 21M12 11L4 7M12 11V21M4 7V17L12 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3>${isEdit ? 'Edit Product' : 'Add New Product'}</h3>
+                            <p class="modal-subtitle">${isEdit ? 'Update product information and settings' : 'Create a new product for the catalog'}</p>
+                        </div>
+                    </div>
+                    <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <form id="product-form" class="modal-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="product-id">
+                                <span class="label-text">Product ID</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <input type="text" id="product-id" name="id" required ${isEdit ? 'readonly style="background: #f8f9fa; color: #6c757d;"' : ''} 
+                                   placeholder="e.g., focus, release, zoom" class="form-input">
+                            <small class="form-help">Unique identifier for this product</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="product-name">
+                                <span class="label-text">Product Name</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <input type="text" id="product-name" name="name" required 
+                                   placeholder="e.g., Focus+Flow" class="form-input">
+                            <small class="form-help">Display name for customers</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="product-price">
+                                <span class="label-text">Price</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <div class="input-with-suffix">
+                                <input type="number" id="product-price" name="price" step="0.01" required 
+                                       placeholder="4.50" class="form-input">
+                                <span class="input-suffix">$</span>
+                            </div>
+                            <small class="form-help">Wholesale price per unit</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="product-msrp">
+                                <span class="label-text">MSRP</span>
+                            </label>
+                            <div class="input-with-suffix">
+                                <input type="number" id="product-msrp" name="msrp" step="0.01" 
+                                       placeholder="9.99" class="form-input">
+                                <span class="input-suffix">$</span>
+                            </div>
+                            <small class="form-help">Manufacturer's suggested retail price</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="product-category">
+                                <span class="label-text">Category</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <select id="product-category" name="category" required class="form-input">
+                                <option value="">Select Category</option>
+                                <option value="2oz_wellness">2oz Wellness</option>
+                                <option value="energy_shots">Energy Shots</option>
+                                <option value="extract_shots">Extract Shots</option>
+                                <option value="supplements">Supplements</option>
+                                <option value="beverages">Beverages</option>
+                            </select>
+                            <small class="form-help">Product category for organization</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="product-units">
+                                <span class="label-text">Units Per Case</span>
+                            </label>
+                            <input type="number" id="product-units" name="unitsPerCase" 
+                                   placeholder="144" class="form-input">
+                            <small class="form-help">Number of units in a master case</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label for="product-description">
+                            <span class="label-text">Description</span>
+                        </label>
+                        <textarea id="product-description" name="description" rows="3" 
+                                  placeholder="Product description..." class="form-textarea"></textarea>
+                        <small class="form-help">Detailed product description for customers</small>
+                    </div>
+                    
+                    <!-- Image Upload Section -->
+                    <div class="form-group">
+                        <label>Product Image</label>
+                        <div class="image-upload-section">
+                            <div class="current-image" id="current-image" style="display: none;">
+                                <img id="current-image-preview" src="" alt="Current image" />
+                                <button type="button" class="btn btn-small btn-secondary" onclick="window.adminDashboard.removeCurrentImage()">
+                                    Remove Image
+                                </button>
+                            </div>
+                            
+                            <div class="image-drop-zone-small" id="product-image-drop-zone">
+                                <div class="drop-zone-content">
+                                    <div class="drop-zone-icon">📷</div>
+                                    <p>Drag & drop image or <button type="button" class="btn-link" onclick="document.getElementById('product-image-input').click()">browse</button></p>
+                                    <small>Recommended: 200x200px, JPG/PNG</small>
+                                </div>
+                            </div>
+                            
+                            <input type="file" id="product-image-input" accept="image/*" style="display: none;" />
+                            
+                            <div class="image-preview-small" id="product-image-preview" style="display: none;">
+                                <img id="preview-image-small" src="" alt="Preview" />
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M13.5 4.5L6 12L2.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            ${isEdit ? 'Update Product' : 'Create Product'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        this.setupProductFormHandlers(productId);
+        
+        // Load existing product data if editing
+        if (isEdit) {
+            this.loadProductDataIntoForm(productId);
+        }
+    }
+
+    /**
+     * Setup product form handlers
+     */
+    setupProductFormHandlers(productId) {
+        const form = document.getElementById('product-form');
+        const imageDropZone = document.getElementById('product-image-drop-zone');
+        const imageInput = document.getElementById('product-image-input');
+        const imagePreview = document.getElementById('product-image-preview');
+        const previewImage = document.getElementById('preview-image-small');
+        
+        let selectedImageFile = null;
+        
+        // Form submission
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveProductForm(productId, selectedImageFile);
+        });
+        
+        // Image drag and drop
+        imageDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            imageDropZone.classList.add('drag-over');
+        });
+        
+        imageDropZone.addEventListener('dragleave', () => {
+            imageDropZone.classList.remove('drag-over');
+        });
+        
+        imageDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            imageDropZone.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleImageSelection(files[0]);
+            }
+        });
+        
+        // File input change
+        imageInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleImageSelection(e.target.files[0]);
+            }
+        });
+        
+        // Handle image selection
+        function handleImageSelection(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Please select an image file (JPG, PNG, etc.)');
+                return;
+            }
+            
+            selectedImageFile = file;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                imagePreview.style.display = 'block';
+                imageDropZone.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // Store reference for form submission
+        this.selectedProductImageFile = selectedImageFile;
+    }
+
+    /**
+     * Remove current image preview
+     */
+    removeCurrentImage() {
+        const currentImage = document.getElementById('current-image');
+        const imageDropZone = document.getElementById('product-image-drop-zone');
+        const imagePreview = document.getElementById('product-image-preview');
+        
+        currentImage.style.display = 'none';
+        imagePreview.style.display = 'none';
+        imageDropZone.style.display = 'block';
+        
+        this.selectedProductImageFile = null;
+    }
+
+    /**
+     * Save product form
+     */
+    async saveProductForm(productId, imageFile) {
+        try {
+            const form = document.getElementById('product-form');
+            const formData = new FormData(form);
+            
+            // Convert form data to object
+            const productData = {
+                name: formData.get('name'),
+                price: parseFloat(formData.get('price')),
+                msrp: parseFloat(formData.get('msrp')) || null,
+                category: formData.get('category'),
+                unitsPerCase: parseInt(formData.get('unitsPerCase')) || 1,
+                description: formData.get('description') || '',
+                image: null // Will be set after image upload
+            };
+            
+            const newProductId = productId || formData.get('id');
+            
+            // Upload image if provided
+            if (imageFile) {
+                const imagePath = await this.uploadProductImageFile(newProductId, imageFile);
+                productData.image = imagePath;
+            }
+            
+            // Save product data
+            const success = await this.saveNewProductData(newProductId, productData);
+            
+            if (success) {
+                this.showNotification(productId ? 'Product updated successfully' : 'Product added successfully', 'success');
+                document.querySelector('.modal-overlay').remove();
+                this.loadProductsData(); // Refresh table
+                this.refreshFrontendData(); // Refresh frontend
+            } else {
+                throw new Error('Failed to save product data');
+            }
+        } catch (error) {
+            console.error('Error saving product:', error);
+            this.showNotification(`Failed to save product: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Upload product image file
+     */
+    async uploadProductImageFile(productId, file) {
+        try {
+            // Create a canvas to resize the image
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            return new Promise((resolve, reject) => {
+                img.onload = async () => {
+                    // Resize to 200x200
+                    canvas.width = 200;
+                    canvas.height = 200;
+                    
+                    // Draw image with proper scaling
+                    const scale = Math.min(200 / img.width, 200 / img.height);
+                    const x = (200 - img.width * scale) / 2;
+                    const y = (200 - img.height * scale) / 2;
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, 200, 200);
+                    ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                    
+                    // Convert to blob
+                    canvas.toBlob(async (blob) => {
+                        try {
+                            // Generate filename
+                            const timestamp = Date.now();
+                            const filename = `${productId}_${timestamp}.png`;
+                            
+                            // Upload file to server
+                            const formData = new FormData();
+                            formData.append('image', blob, filename);
+                            formData.append('productId', productId);
+                            
+                            const uploadResponse = await fetch('/api/upload-image', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            if (uploadResponse.ok) {
+                                const result = await uploadResponse.json();
+                                resolve(result.path);
+                            } else {
+                                reject(new Error('Failed to upload image to server'));
+                            }
+                        } catch (error) {
+                            reject(error);
+                        }
+                    }, 'image/png', 0.9);
+                };
+                
+                img.onerror = () => reject(new Error('Failed to load image'));
+                img.src = URL.createObjectURL(file);
+            });
+        } catch (error) {
+            throw new Error(`Failed to process image: ${error.message}`);
+        }
+    }
+
+    /**
+     * Save new product data
+     */
+    async saveNewProductData(productId, productData) {
+        try {
+            // Load current products data
+            const response = await fetch('data/products.json');
+            if (!response.ok) throw new Error('Failed to load products data');
+            
+            const productsData = await response.json();
+            
+            // Add/update product
+            productsData[productId] = productData;
+            
+            // Save to backend
+            const saveResult = await this.saveDataToGit('products.json', productsData);
+            
+            if (saveResult.success) {
+                console.log('✅ Product data saved successfully');
+                return true;
+            } else {
+                throw new Error(saveResult.message || 'Failed to save to Git');
+            }
+        } catch (error) {
+            console.error('Error saving product data:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Refresh products data
+     */
+    refreshProductsData() {
+        console.log('🔄 Refreshing products data...');
+        this.loadProductsData();
+    }
+
+    /**
+     * Export products data to CSV
+     */
+    exportProductsData() {
+        try {
+            console.log('📄 Exporting products data...');
+            
+            // Get table data
+            const table = document.getElementById('products-table');
+            if (!table) {
+                this.showNotification('No products data to export', 'error');
+                return;
+            }
+            
+            const rows = table.querySelectorAll('tbody tr');
+            if (rows.length === 0) {
+                this.showNotification('No products data to export', 'error');
+                return;
+            }
+            
+            // Create CSV content
+            const headers = ['ID', 'Name', 'Price', 'MSRP', 'Cost', 'Category', 'Units Per Case', 'Status'];
+            let csvContent = headers.join(',') + '\n';
+            
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 8) {
+                    const rowData = [
+                        cells[0].textContent.trim(), // ID
+                        `"${cells[2].textContent.trim()}"`, // Name (quoted for safety)
+                        cells[3].textContent.replace('$', ''), // Price
+                        cells[4].textContent.replace('$', ''), // MSRP
+                        cells[5].textContent.replace('$', ''), // Cost
+                        cells[6].textContent.trim(), // Category
+                        cells[7].textContent.trim(), // Units
+                        cells[8].textContent.trim() // Status
+                    ];
+                    csvContent += rowData.join(',') + '\n';
+                }
+            });
+            
+            // Download CSV
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `kanva-products-${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            this.showNotification('Products data exported successfully', 'success');
+        } catch (error) {
+            console.error('Error exporting products data:', error);
+            this.showNotification(`Failed to export data: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Delete product
+     */
+    async deleteProduct(productId) {
+        const confirmed = await this.showConfirmDialog(
+            `Are you sure you want to delete product "${productId}"?<br><br>This action cannot be undone and will remove the product from both the admin dashboard and the main application.`,
+            'Delete Product',
+            'Delete Product',
+            'Cancel'
+        );
+        
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            console.log(`🗑️ Deleting product: ${productId}`);
+            
+            // Load current products data
+            const response = await fetch('data/products.json');
+            if (!response.ok) throw new Error('Failed to load products data');
+            
+            const productsData = await response.json();
+            
+            if (productsData[productId]) {
+                // Remove product from data
+                delete productsData[productId];
+                
+                // Save updated data
+                const saveResult = await this.saveDataToGit('products.json', productsData);
+                
+                if (saveResult.success) {
+                    this.showNotification('Product deleted successfully', 'success');
+                    
+                    // Immediately remove from admin table
+                    const productRow = document.querySelector(`tr[data-product-id="${productId}"]`);
+                    if (productRow) {
+                        productRow.style.transition = 'all 0.3s ease';
+                        productRow.style.opacity = '0';
+                        productRow.style.transform = 'translateX(-20px)';
+                        setTimeout(() => {
+                            productRow.remove();
+                        }, 300);
+                    }
+                    
+                    // Refresh admin table data
+                    setTimeout(() => {
+                        this.loadProductsData();
+                    }, 400);
+                    
+                    // Immediately refresh frontend
+                    this.refreshFrontendData();
+                    
+                    // Force refresh main UI product tiles
+                    this.forceRefreshMainUI();
+                } else {
+                    throw new Error(saveResult.message || 'Failed to save changes');
+                }
+            } else {
+                throw new Error(`Product ${productId} not found`);
+            }
+        } catch (error) {
+            console.error('Error deleting product:', error);
+            this.showNotification(`Failed to delete product: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Edit product (opens modal with existing data)
+     */
+    editProduct(productId) {
+        console.log(`✏️ Editing product: ${productId}`);
+        this.showProductModal(productId);
+    }
+
+    /**
+     * Toggle product status
+     */
+    async toggleProductStatus(productId) {
+        try {
+            console.log(`🔄 Toggling status for product: ${productId}`);
+            
+            // Load current products data
+            const response = await fetch('data/products.json');
+            if (!response.ok) throw new Error('Failed to load products data');
+            
+            const productsData = await response.json();
+            
+            if (productsData[productId]) {
+                // Toggle active status (assuming we add this field)
+                const currentStatus = productsData[productId].active !== false; // Default to true
+                productsData[productId].active = !currentStatus;
+                
+                // Save updated data
+                const saveResult = await this.saveDataToGit('products.json', productsData);
+                
+                if (saveResult.success) {
+                    const newStatus = productsData[productId].active ? 'activated' : 'deactivated';
+                    this.showNotification(`Product ${newStatus} successfully`, 'success');
+                    this.loadProductsData(); // Refresh table
+                    this.refreshFrontendData(); // Refresh frontend
+                } else {
+                    throw new Error(saveResult.message || 'Failed to save changes');
+                }
+            } else {
+                throw new Error(`Product ${productId} not found`);
+            }
+        } catch (error) {
+            console.error('Error toggling product status:', error);
+            this.showNotification(`Failed to toggle status: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Load product data into form for editing
+     */
+    async loadProductDataIntoForm(productId) {
+        try {
+            const response = await fetch('data/products.json');
+            if (!response.ok) throw new Error('Failed to load products data');
+            
+            const productsData = await response.json();
+            const product = productsData[productId];
+            
+            if (product) {
+                // Populate form fields
+                document.getElementById('product-id').value = productId;
+                document.getElementById('product-name').value = product.name || '';
+                document.getElementById('product-price').value = product.price || '';
+                document.getElementById('product-msrp').value = product.msrp || '';
+                document.getElementById('product-category').value = product.category || '';
+                document.getElementById('product-units').value = product.unitsPerCase || '';
+                document.getElementById('product-description').value = product.description || '';
+                
+                // Show current image if exists
+                if (product.image) {
+                    const currentImage = document.getElementById('current-image');
+                    const currentImagePreview = document.getElementById('current-image-preview');
+                    const imageDropZone = document.getElementById('product-image-drop-zone');
+                    
+                    currentImagePreview.src = product.image;
+                    currentImage.style.display = 'block';
+                    imageDropZone.style.display = 'none';
+                }
+            }
+        } catch (error) {
+            console.error('Error loading product data:', error);
+            this.showNotification(`Failed to load product data: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Edit product image
+     */
+    editProductImage(productId) {
+        console.log(`📷 Editing image for product: ${productId}`);
+        this.showImageUploadModal(productId);
+    }
+
+    /**
+     * Delete product image
+     */
+    async deleteProductImage(productId) {
+        if (!confirm('Are you sure you want to delete this product image?')) {
+            return;
+        }
+
+        try {
+            console.log(`🗑️ Deleting image for product: ${productId}`);
+            
+            // Update product data to remove image
+            const success = await this.updateProductData(productId, 'image', null);
+            
+            if (success) {
+                this.showNotification('Product image deleted successfully', 'success');
+                this.loadProductsData(); // Refresh table
+            } else {
+                throw new Error('Failed to delete image');
+            }
+        } catch (error) {
+            console.error('Error deleting product image:', error);
+            this.showNotification(`Failed to delete image: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Show image upload modal
+     */
+    showImageUploadModal(productId) {
+        const modal = document.createElement('div');
+        modal.className = 'image-upload-modal';
+        modal.innerHTML = `
+            <div class="image-upload-content">
+                <div class="image-upload-header">
+                    <h3>📷 Upload Product Image</h3>
+                    <button class="btn-close" onclick="this.closest('.image-upload-modal').remove()">×</button>
+                </div>
+                
+                <div class="image-drop-zone" id="image-drop-zone">
+                    <div class="drop-zone-content">
+                        <div class="drop-zone-icon">📷</div>
+                        <p><strong>Drag & drop an image here</strong></p>
+                        <p>or <button type="button" class="btn btn-secondary" onclick="document.getElementById('image-file-input').click()">Browse Files</button></p>
+                        <small>Recommended: 200x200px, JPG/PNG format</small>
+                    </div>
+                </div>
+                
+                <input type="file" id="image-file-input" accept="image/*" />
+                
+                <div class="image-preview" id="image-preview" style="display: none;">
+                    <img id="preview-image" src="" alt="Preview" />
+                </div>
+                
+                <div class="image-upload-actions">
+                    <button class="btn btn-secondary" onclick="this.closest('.image-upload-modal').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="upload-image-btn" disabled onclick="window.adminDashboard.uploadProductImage('${productId}')">Upload Image</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        this.setupImageUploadHandlers(productId);
+    }
+
+    /**
+     * Setup image upload handlers
+     */
+    setupImageUploadHandlers(productId) {
+        const dropZone = document.getElementById('image-drop-zone');
+        const fileInput = document.getElementById('image-file-input');
+        const preview = document.getElementById('image-preview');
+        const previewImage = document.getElementById('preview-image');
+        const uploadBtn = document.getElementById('upload-image-btn');
+        
+        let selectedFile = null;
+        
+        // Drag and drop handlers
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelection(files[0]);
+            }
+        });
+        
+        // File input handler
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelection(e.target.files[0]);
+            }
+        });
+        
+        // Handle file selection
+        function handleFileSelection(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Please select an image file (JPG, PNG, etc.)');
+                return;
+            }
+            
+            selectedFile = file;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImage.src = e.target.result;
+                preview.style.display = 'block';
+                uploadBtn.disabled = false;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // Store selected file for upload
+        this.selectedImageFile = selectedFile;
+    }
+
+    /**
+     * Upload product image
+     */
+    async uploadProductImage(productId) {
+        const fileInput = document.getElementById('image-file-input');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            this.showNotification('Please select an image file', 'error');
+            return;
+        }
+        
+        try {
+            console.log(`📤 Uploading image for product: ${productId}`);
+            
+            // Create a canvas to resize the image
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = async () => {
+                // Resize to 200x200
+                canvas.width = 200;
+                canvas.height = 200;
+                
+                // Draw image with proper scaling
+                const scale = Math.min(200 / img.width, 200 / img.height);
+                const x = (200 - img.width * scale) / 2;
+                const y = (200 - img.height * scale) / 2;
+                
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, 200, 200);
+                ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                
+                // Convert to blob
+                canvas.toBlob(async (blob) => {
+                    try {
+                        // Generate filename
+                        const timestamp = Date.now();
+                        const filename = `${productId}_${timestamp}.png`;
+                        const imagePath = `assets/product_renders/${filename}`;
+                        
+                        // Upload file to server
+                        const formData = new FormData();
+                        formData.append('image', blob, filename);
+                        formData.append('productId', productId);
+                        
+                        const uploadResponse = await fetch('/api/upload-image', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        if (uploadResponse.ok) {
+                            const uploadResult = await uploadResponse.json();
+                            // Use the path returned from server
+                            const imagePath = uploadResult.path;
+                            
+                            // Update product data with new image path
+                            const success = await this.updateProductData(productId, 'image', imagePath);
+                            
+                            if (success) {
+                                this.showNotification('Image uploaded successfully', 'success');
+                                document.querySelector('.image-upload-modal').remove();
+                                this.loadProductsData(); // Refresh table
+                                this.refreshFrontendData(); // Refresh frontend immediately
+                            } else {
+                                throw new Error('Failed to update product data');
+                            }
+                        } else {
+                            throw new Error('Failed to upload image to server');
+                        }
+                    } catch (error) {
+                        console.error('Error uploading image:', error);
+                        this.showNotification(`Failed to upload image: ${error.message}`, 'error');
+                    }
+                }, 'image/png', 0.9);
+            };
+            
+            img.src = URL.createObjectURL(file);
+            
+        } catch (error) {
+            console.error('Error processing image:', error);
+            this.showNotification(`Failed to process image: ${error.message}`, 'error');
+        }
+    }
+
+    // ==================== TIER MANAGEMENT METHODS ====================
+
+    /**
+     * Add new tier
+     */
+    addNewTier() {
+        console.log('➕ Adding new tier...');
+        this.showTierModal();
+    }
+
+    /**
+     * Show tier modal for adding/editing
+     */
+    showTierModal(tierId = null) {
+        const isEdit = tierId !== null;
+        const title = isEdit ? '✏️ Edit Tier' : '➕ Add New Tier';
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="tier-edit-modal modern-modal">
+                <div class="modal-header">
+                    <div class="modal-title-section">
+                        <div class="modal-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L15.09 8.26L22 9L17 14L18.18 21L12 17.77L5.82 21L7 14L2 9L8.91 8.26L12 2Z" fill="currentColor"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3>${isEdit ? 'Edit Pricing Tier' : 'Add New Pricing Tier'}</h3>
+                            <p class="modal-subtitle">${isEdit ? 'Update pricing tier configuration' : 'Create a new pricing tier for volume discounts'}</p>
+                        </div>
+                    </div>
+                    <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <form id="add-tier-form" class="modal-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tier-id">
+                                <span class="label-text">Tier ID</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <input type="text" id="tier-id" name="tierId" required placeholder="e.g., tier1, tier2, tier3" class="form-input" ${isEdit ? 'readonly style="background: #f8f9fa; color: #6c757d;"' : ''}>
+                            <small class="form-help">Unique identifier for this tier</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="tier-name">
+                                <span class="label-text">Tier Name</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <input type="text" id="tier-name" name="tierName" required placeholder="e.g., Bronze, Silver, Gold" class="form-input">
+                            <small class="form-help">Display name for customers</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tier-threshold">
+                                <span class="label-text">Minimum Quantity</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <input type="number" id="tier-threshold" name="threshold" required placeholder="1000" class="form-input">
+                            <small class="form-help">Minimum order quantity to qualify</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="tier-margin">
+                                <span class="label-text">Discount Percentage</span>
+                            </label>
+                            <div class="input-with-suffix">
+                                <input type="number" id="tier-margin" name="margin" step="0.1" placeholder="25.0" class="form-input">
+                                <span class="input-suffix">%</span>
+                            </div>
+                            <small class="form-help">Discount percentage for this tier</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label for="tier-description">
+                            <span class="label-text">Description</span>
+                        </label>
+                        <textarea id="tier-description" name="description" placeholder="Describe the benefits and requirements for this tier..." class="form-textarea"></textarea>
+                        <small class="form-help">Optional description of tier benefits</small>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M13.5 4.5L6 12L2.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            ${isEdit ? 'Update Tier' : 'Create Tier'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        this.setupTierFormHandlers(tierId);
+        
+        // Load existing tier data if editing
+        if (isEdit) {
+            this.loadTierDataIntoForm(tierId);
+        }
+    }
+
+    /**
+     * Setup tier form handlers
+     */
+    setupTierFormHandlers(tierId) {
+        const form = document.getElementById('add-tier-form');
+        
+        if (!form) {
+            console.error('❌ Tier form not found');
+            return;
+        }
+        
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveTierForm(tierId);
+        });
+    }
+
+    /**
+     * Save tier form
+     */
+    async saveTierForm(tierId) {
+        try {
+            const form = document.getElementById('add-tier-form');
+            if (!form) {
+                throw new Error('Tier form not found');
+            }
+            
+            // Get form values directly from inputs
+            const tierIdInput = document.getElementById('tier-id');
+            const tierNameInput = document.getElementById('tier-name');
+            const tierThresholdInput = document.getElementById('tier-threshold');
+            const tierMarginInput = document.getElementById('tier-margin');
+            const tierDescriptionInput = document.getElementById('tier-description');
+            
+            const tierData = {
+                name: tierNameInput.value.trim(),
+                threshold: parseInt(tierThresholdInput.value) || 0,
+                margin: tierMarginInput.value ? `${tierMarginInput.value}%` : null,
+                description: tierDescriptionInput.value.trim() || ''
+            };
+            
+            const newTierId = tierId || tierIdInput.value.trim();
+            
+            if (!newTierId || !tierData.name) {
+                throw new Error('Tier ID and Name are required');
+            }
+            
+            const success = await this.saveNewTierData(newTierId, tierData);
+            
+            if (success) {
+                this.showNotification(tierId ? 'Tier updated successfully' : 'Tier added successfully', 'success');
+                document.querySelector('.modal-overlay').remove();
+                this.loadTiersData();
+                this.refreshFrontendData();
+            } else {
+                throw new Error('Failed to save tier data');
+            }
+        } catch (error) {
+            console.error('Error saving tier:', error);
+            this.showNotification(`Failed to save tier: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Save new tier data
+     */
+    async saveNewTierData(tierId, tierData) {
+        try {
+            const response = await fetch('data/tiers.json');
+            if (!response.ok) throw new Error('Failed to load tiers data');
+            
+            const tiersData = await response.json();
+            tiersData[tierId] = tierData;
+            
+            const saveResult = await this.saveDataToGit('tiers.json', tiersData);
+            
+            if (saveResult.success) {
+                console.log('✅ Tier data saved successfully');
+                return true;
+            } else {
+                throw new Error(saveResult.message || 'Failed to save to Git');
+            }
+        } catch (error) {
+            console.error('Error saving tier data:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Delete tier
+     */
+    async deleteTier(tierId) {
+        const confirmed = await this.showConfirmDialog(
+            `Are you sure you want to delete tier "${tierId}"?<br><br>This action cannot be undone and will affect pricing calculations.`,
+            'Delete Tier',
+            'Delete Tier',
+            'Cancel'
+        );
+        
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            console.log(`🗑️ Deleting tier: ${tierId}`);
+            
+            const response = await fetch('data/tiers.json');
+            if (!response.ok) throw new Error('Failed to load tiers data');
+            
+            const tiersData = await response.json();
+            
+            if (tiersData[tierId]) {
+                delete tiersData[tierId];
+                
+                const saveResult = await this.saveDataToGit('tiers.json', tiersData);
+                
+                if (saveResult.success) {
+                    this.showNotification('Tier deleted successfully', 'success');
+                    this.loadTiersData();
+                    this.refreshFrontendData();
+                } else {
+                    throw new Error(saveResult.message || 'Failed to save changes');
+                }
+            } else {
+                throw new Error(`Tier ${tierId} not found`);
+            }
+        } catch (error) {
+            console.error('Error deleting tier:', error);
+            this.showNotification(`Failed to delete tier: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Edit tier
+     */
+    editTier(tierId) {
+        console.log(`✏️ Editing tier: ${tierId}`);
+        this.showTierModal(tierId);
+    }
+
+    /**
+     * Load tier data into form
+     */
+    async loadTierDataIntoForm(tierId) {
+        try {
+            const response = await fetch('data/tiers.json');
+            if (!response.ok) throw new Error('Failed to load tiers data');
+            
+            const tiersData = await response.json();
+            const tier = tiersData[tierId];
+            
+            if (tier) {
+                document.getElementById('tier-id').value = tierId;
+                document.getElementById('tier-name').value = tier.name || '';
+                document.getElementById('tier-threshold').value = tier.threshold || '';
+                document.getElementById('tier-margin').value = tier.margin ? tier.margin.replace('%', '') : '';
+                document.getElementById('tier-description').value = tier.description || '';
+            }
+        } catch (error) {
+            console.error('Error loading tier data:', error);
+            this.showNotification(`Failed to load tier data: ${error.message}`, 'error');
+        }
+    }
+
+    // ==================== SHIPPING MANAGEMENT METHODS ====================
+
+    /**
+     * Add new shipping zone
+     */
+    addNewShippingZone() {
+        console.log('➕ Adding new shipping zone...');
+        this.showShippingModal();
+    }
+
+    /**
+     * Show shipping modal for adding/editing
+     */
+    showShippingModal(zoneId = null) {
+        const isEdit = zoneId !== null;
+        const title = isEdit ? '✏️ Edit Shipping Zone' : '➕ Add New Shipping Zone';
+        
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="shipping-edit-modal modern-modal">
+                <div class="modal-header">
+                    <div class="modal-title-section">
+                        <div class="modal-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3 3H5L5.4 5M7 13H17L21 5H5.4M7 13L5.4 5M7 13L4.7 15.3C4.3 15.7 4.6 16.5 5.1 16.5H17M17 13V19C17 19.6 16.6 20 16 20H8C7.4 20 7 19.6 7 19V13M9 17H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3>${isEdit ? 'Edit Shipping Zone' : 'Add New Shipping Zone'}</h3>
+                            <p class="modal-subtitle">${isEdit ? 'Update shipping zone configuration' : 'Create a new shipping zone for regional pricing'}</p>
+                        </div>
+                    </div>
+                    <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <form id="shipping-form" class="modal-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="zone-id">
+                                <span class="label-text">Zone ID</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <input type="text" id="zone-id" name="id" required ${isEdit ? 'readonly' : ''} 
+                                   placeholder="e.g., west, east, central" class="form-input" ${isEdit ? 'style="background: #f8f9fa; color: #6c757d;"' : ''}>
+                            <small class="form-help">Unique identifier for this zone</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="zone-name">
+                                <span class="label-text">Zone Name</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <input type="text" id="zone-name" name="name" required 
+                                   placeholder="e.g., West Coast, East Coast" class="form-input">
+                            <small class="form-help">Display name for this zone</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="zone-ltl">
+                                <span class="label-text">LTL Percentage</span>
+                                <span class="required-indicator">*</span>
+                            </label>
+                            <div class="input-with-suffix">
+                                <input type="number" id="zone-ltl" name="ltlPercentage" step="0.1" required 
+                                       placeholder="15.0" class="form-input">
+                                <span class="input-suffix">%</span>
+                            </div>
+                            <small class="form-help">Less-than-truckload shipping percentage</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="zone-color">
+                                <span class="label-text">Zone Color</span>
+                            </label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="zone-color" name="color" class="form-color-input" value="#ff6b35">
+                                <div class="color-preview" id="color-preview"></div>
+                            </div>
+                            <small class="form-help">Color identifier for maps and charts</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label for="zone-states">
+                            <span class="label-text">States</span>
+                        </label>
+                        <textarea id="zone-states" name="states" rows="3" 
+                                  placeholder="CA, OR, WA, NV, AZ" class="form-textarea"></textarea>
+                        <small class="form-help">Comma-separated list of state abbreviations covered by this zone</small>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M13.5 4.5L6 12L2.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            ${isEdit ? 'Update Zone' : 'Create Zone'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        this.setupShippingFormHandlers(zoneId);
+        this.setupColorPicker();
+        
+        // Load existing zone data if editing
+        if (isEdit) {
+            this.loadShippingDataIntoForm(zoneId);
+        }
+    }
+
+    /**
+     * Setup color picker functionality
+     */
+    setupColorPicker() {
+        const colorInput = document.getElementById('zone-color');
+        const colorPreview = document.getElementById('color-preview');
+        
+        if (colorInput && colorPreview) {
+            // Update preview when color changes
+            colorInput.addEventListener('input', (e) => {
+                colorPreview.style.backgroundColor = e.target.value;
+            });
+            
+            // Set initial color
+            colorPreview.style.backgroundColor = colorInput.value;
+        }
+    }
+
+    /**
+     * Setup shipping form handlers
+     */
+    setupShippingFormHandlers(zoneId) {
+        const form = document.getElementById('shipping-form');
+        
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveShippingForm(zoneId);
+        });
+    }
+
+    /**
+     * Save shipping form
+     */
+    async saveShippingForm(zoneId) {
+        try {
+            const form = document.getElementById('shipping-form');
+            const formData = new FormData(form);
+            
+            const zoneData = {
+                name: formData.get('name'),
+                ltlPercentage: parseFloat(formData.get('ltlPercentage')),
+                color: formData.get('color') || '#007bff',
+                states: formData.get('states') ? formData.get('states').split(',').map(s => s.trim()) : []
+            };
+            
+            const newZoneId = zoneId || formData.get('id');
+            const success = await this.saveNewShippingData(newZoneId, zoneData);
+            
+            if (success) {
+                this.showNotification(zoneId ? 'Shipping zone updated successfully' : 'Shipping zone added successfully', 'success');
+                document.querySelector('.admin-modal').remove();
+                this.loadShippingData();
+            } else {
+                throw new Error('Failed to save shipping zone data');
+            }
+        } catch (error) {
+            console.error('Error saving shipping zone:', error);
+            this.showNotification(`Failed to save shipping zone: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Save new shipping data
+     */
+    async saveNewShippingData(zoneId, zoneData) {
+        try {
+            const response = await fetch('data/shipping.json');
+            if (!response.ok) throw new Error('Failed to load shipping data');
+            
+            const shippingData = await response.json();
+            
+            if (!shippingData.zones) {
+                shippingData.zones = {};
+            }
+            
+            shippingData.zones[zoneId] = zoneData;
+            
+            const saveResult = await this.saveDataToGit('shipping.json', shippingData);
+            
+            if (saveResult.success) {
+                console.log('✅ Shipping data saved successfully');
+                return true;
+            } else {
+                throw new Error(saveResult.message || 'Failed to save to Git');
+            }
+        } catch (error) {
+            console.error('Error saving shipping data:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Delete shipping zone
+     */
+    async deleteShippingZone(zoneId) {
+        const confirmed = await this.showConfirmDialog(
+            `Are you sure you want to delete shipping zone "${zoneId}"?<br><br>This action cannot be undone and will affect shipping calculations.`,
+            'Delete Shipping Zone',
+            'Delete Zone',
+            'Cancel'
+        );
+        
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            console.log(`🗑️ Deleting shipping zone: ${zoneId}`);
+            
+            const response = await fetch('data/shipping.json');
+            if (!response.ok) throw new Error('Failed to load shipping data');
+            
+            const shippingData = await response.json();
+            
+            if (shippingData.zones && shippingData.zones[zoneId]) {
+                delete shippingData.zones[zoneId];
+                
+                const saveResult = await this.saveDataToGit('shipping.json', shippingData);
+                
+                if (saveResult.success) {
+                    this.showNotification('Shipping zone deleted successfully', 'success');
+                    this.loadShippingData();
+                    this.refreshFrontendData();
+                } else {
+                    throw new Error(saveResult.message || 'Failed to save changes');
+                }
+            } else {
+                throw new Error(`Shipping zone ${zoneId} not found`);
+            }
+        } catch (error) {
+            console.error('Error deleting shipping zone:', error);
+            this.showNotification(`Failed to delete shipping zone: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Edit shipping zone
+     */
+    editShippingZone(zoneId) {
+        console.log(`✏️ Editing shipping zone: ${zoneId}`);
+        this.showShippingModal(zoneId);
+    }
+
+    /**
+     * Load shipping data into form
+     */
+    async loadShippingDataIntoForm(zoneId) {
+        try {
+            const response = await fetch('data/shipping.json');
+            if (!response.ok) throw new Error('Failed to load shipping data');
+            
+            const shippingData = await response.json();
+            const zone = shippingData.zones && shippingData.zones[zoneId];
+            
+            if (zone) {
+                document.getElementById('zone-id').value = zoneId;
+                document.getElementById('zone-name').value = zone.name || '';
+                document.getElementById('zone-ltl').value = zone.ltlPercentage || '';
+                document.getElementById('zone-color').value = zone.color || '#007bff';
+                document.getElementById('zone-states').value = Array.isArray(zone.states) ? zone.states.join(', ') : '';
+            }
+        } catch (error) {
+            console.error('Error loading shipping data:', error);
+            this.showNotification(`Failed to load shipping data: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Show custom confirmation dialog
+     */
+    showConfirmDialog(message, title = 'Confirm Action', confirmText = 'Confirm', cancelText = 'Cancel') {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'confirm-dialog-modal';
+            modal.innerHTML = `
+                <div class="confirm-dialog-content">
+                    <div class="confirm-dialog-header">
+                        <h3>⚠️ ${title}</h3>
+                    </div>
+                    
+                    <div class="confirm-dialog-body">
+                        <p>${message}</p>
+                    </div>
+                    
+                    <div class="confirm-dialog-actions">
+                        <button class="btn btn-secondary" id="confirm-cancel">${cancelText}</button>
+                        <button class="btn btn-danger" id="confirm-ok">${confirmText}</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Focus on cancel button by default
+            const cancelBtn = modal.querySelector('#confirm-cancel');
+            const confirmBtn = modal.querySelector('#confirm-ok');
+            
+            cancelBtn.addEventListener('click', () => {
+                modal.remove();
+                resolve(false);
+            });
+            
+            confirmBtn.addEventListener('click', () => {
+                modal.remove();
+                resolve(true);
+            });
+            
+            // Close on escape key
+            const handleEscape = (e) => {
+                if (e.key === 'Escape') {
+                    modal.remove();
+                    document.removeEventListener('keydown', handleEscape);
+                    resolve(false);
+                }
+            };
+            
+            document.addEventListener('keydown', handleEscape);
+            
+            // Focus on confirm button
+            setTimeout(() => confirmBtn.focus(), 100);
+        });
+    }
+
+    /**
+     * Force refresh main UI product tiles
+     */
+    forceRefreshMainUI() {
+        try {
+            // Clear any cached product data
+            if (window.productData) {
+                delete window.productData;
+            }
+            
+            // Force reload product data in main UI
+            if (window.productManager && typeof window.productManager.loadProducts === 'function') {
+                console.log('🔄 Force refreshing main UI product tiles...');
+                window.productManager.loadProducts();
+            }
+            
+            // Force refresh calculator data
+            if (window.calculator && typeof window.calculator.loadData === 'function') {
+                console.log('🔄 Force refreshing calculator data...');
+                window.calculator.loadData();
+            }
+            
+            // Clear image cache by adding timestamp to image sources
+            const productImages = document.querySelectorAll('img[src*="product_renders"]');
+            productImages.forEach(img => {
+                const originalSrc = img.src.split('?')[0]; // Remove existing timestamp
+                img.src = `${originalSrc}?t=${Date.now()}`;
+            });
+            
+            // If there's a product grid or tiles container, force refresh
+            const productGrid = document.querySelector('.product-grid, .products-container, #product-tiles');
+            if (productGrid) {
+                console.log('🔄 Refreshing product grid display...');
+                // Trigger a refresh by dispatching a custom event
+                productGrid.dispatchEvent(new CustomEvent('forceRefresh'));
+            }
+            
+            // Force refresh any product-related components
+            const productComponents = document.querySelectorAll('[data-component="products"]');
+            productComponents.forEach(component => {
+                if (component.refresh && typeof component.refresh === 'function') {
+                    component.refresh();
+                }
+            });
+            
+            // Dispatch a global refresh event
+            window.dispatchEvent(new CustomEvent('adminProductsUpdated', {
+                detail: {
+                    action: 'refresh',
+                    timestamp: Date.now()
+                }
+            }));
+            
+            console.log('✅ Main UI force refresh completed with cache clearing');
+        } catch (error) {
+            console.error('❌ Error force refreshing main UI:', error);
+        }
+    }
+
+    /**
+     * Refresh frontend data when admin changes are made
+     */
+    refreshFrontendData() {
+        try {
+            // Refresh calculator data if it exists
+            if (window.calculator && typeof window.calculator.loadData === 'function') {
+                console.log('🔄 Refreshing frontend calculator data...');
+                window.calculator.loadData();
+            }
+            
+            // Refresh any other frontend components that use the data
+            if (window.productManager && typeof window.productManager.loadProducts === 'function') {
+                console.log('🔄 Refreshing product manager data...');
+                window.productManager.loadProducts();
+            }
+            
+            // Trigger a custom event for other components to listen to
+            window.dispatchEvent(new CustomEvent('adminDataUpdated', {
+                detail: {
+                    section: this.currentSection,
+                    timestamp: new Date().toISOString()
+                }
+            }));
+            
+            console.log('✅ Frontend data refresh triggered');
+        } catch (error) {
+            console.error('❌ Error refreshing frontend data:', error);
+        }
+    }
+
+    /**
+     * Show login modal
+     */
+    showLoginModal() {
+        console.log('🔐 Showing login modal');
+        if (this.loginModal) {
+            this.loginModal.style.display = 'block';
+        }
+    }
+
+    /**
+     * Hide login modal
+     */
+    hideLoginModal() {
+        console.log('🔐 Hiding login modal');
+        if (this.loginModal) {
+            this.loginModal.style.display = 'none';
+        }
+    }
+
+    /**
+     * Show admin modal
+     */
+    showAdminModal() {
+        console.log('🎛️ Showing admin modal');
+        if (this.adminModal) {
+            this.adminModal.style.display = 'block';
+            this.showAdminSection('products'); // Default to products section
+            this.adjustModalHeight();
+        }
+    }
+
+    /**
+     * Hide admin modal (does NOT log out user)
+     */
+    hideAdminModal() {
+        console.log('🎛️ Hiding admin modal (user remains logged in)');
+        if (this.adminModal) {
+            this.adminModal.style.display = 'none';
+        }
+        // Note: We do NOT set this.isLoggedIn = false here
+        // Only the logout button should log the user out
     }
 }
 

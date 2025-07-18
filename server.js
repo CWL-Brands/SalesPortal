@@ -182,6 +182,123 @@ const server = http.createServer((req, res) => {
             });
             return;
         }
+        else if (pathname === '/api/save-data' && req.method === 'POST') {
+            // Save data to JSON files
+            let body = '';
+            req.on('data', chunk => {
+                body += chunk.toString();
+            });
+            
+            req.on('end', () => {
+                try {
+                    const { filename, data, message } = JSON.parse(body);
+                    
+                    if (!filename || !data) {
+                        throw new Error('Filename and data are required');
+                    }
+                    
+                    // Ensure the file path is safe (within project directory)
+                    const safePath = path.join(__dirname, filename);
+                    const projectDir = path.resolve(__dirname);
+                    const resolvedPath = path.resolve(safePath);
+                    
+                    if (!resolvedPath.startsWith(projectDir)) {
+                        throw new Error('Invalid file path');
+                    }
+                    
+                    // Ensure directory exists
+                    const dir = path.dirname(resolvedPath);
+                    if (!fs.existsSync(dir)) {
+                        fs.mkdirSync(dir, { recursive: true });
+                    }
+                    
+                    // Write data to file
+                    fs.writeFileSync(resolvedPath, data, 'utf8');
+                    
+                    console.log(`✅ Saved data to ${filename}`);
+                    
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: true,
+                        message: `Data saved to ${filename} successfully`,
+                        filename: filename
+                    }));
+                } catch (error) {
+                    console.error('❌ Error saving data:', error);
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        message: 'Failed to save data',
+                        error: error.message
+                    }));
+                }
+            });
+            return;
+        }
+        else if (pathname === '/api/upload-image' && req.method === 'POST') {
+            // Handle image upload
+            const multiparty = require('multiparty');
+            const form = new multiparty.Form();
+            
+            form.parse(req, (err, fields, files) => {
+                if (err) {
+                    console.error('❌ Error parsing form:', err);
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        message: 'Failed to parse upload form',
+                        error: err.message
+                    }));
+                    return;
+                }
+                
+                try {
+                    const productId = fields.productId ? fields.productId[0] : 'unknown';
+                    const imageFile = files.image ? files.image[0] : null;
+                    
+                    if (!imageFile) {
+                        throw new Error('No image file provided');
+                    }
+                    
+                    // Generate filename
+                    const timestamp = Date.now();
+                    const ext = path.extname(imageFile.originalFilename) || '.png';
+                    const filename = `${productId}_${timestamp}${ext}`;
+                    const targetPath = path.join(__dirname, 'assets', 'product_renders', filename);
+                    
+                    // Ensure directory exists
+                    const dir = path.dirname(targetPath);
+                    if (!fs.existsSync(dir)) {
+                        fs.mkdirSync(dir, { recursive: true });
+                    }
+                    
+                    // Move uploaded file to target location
+                    fs.copyFileSync(imageFile.path, targetPath);
+                    
+                    // Clean up temp file
+                    fs.unlinkSync(imageFile.path);
+                    
+                    console.log(`✅ Image uploaded: ${filename}`);
+                    
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: true,
+                        message: 'Image uploaded successfully',
+                        filename: filename,
+                        path: `assets/product_renders/${filename}`
+                    }));
+                } catch (error) {
+                    console.error('❌ Error uploading image:', error);
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        message: 'Failed to upload image',
+                        error: error.message
+                    }));
+                }
+            });
+            return;
+        }
         
         // API endpoint not found
         res.writeHead(404, { 'Content-Type': 'application/json' });

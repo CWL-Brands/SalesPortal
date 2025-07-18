@@ -1651,4 +1651,14 @@ if (document.readyState === 'loading') {
 // Global access to app instance
 window.KanvaApp = App;
 
+// Initialize Admin Dashboard
+if (typeof AdminDashboard !== 'undefined') {
+    console.log('🔧 Initializing Admin Dashboard...');
+    window.adminDashboard = new AdminDashboard();
+    window.adminDashboard.init();
+    console.log('✅ Admin Dashboard initialized successfully');
+} else {
+    console.warn('⚠️ AdminDashboard class not found');
+}
+
 console.log('✅ Main application module loaded successfully');

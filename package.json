@@ -6,7 +6,6 @@
     "doc": "docs",
     "test": "tests"
   },
-
   "repository": {
     "type": "git",
     "url": "git+https://github.com/benatkanva/kanva-quotes.git"
@@ -28,7 +27,8 @@
   },
   "dependencies": {
     "dotenv": "^16.0.3",
-    "fs-extra": "^11.1.0"
+    "fs-extra": "^11.1.0",
+    "multiparty": "^4.2.3"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",

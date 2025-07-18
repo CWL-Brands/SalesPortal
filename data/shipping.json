@@ -7,65 +7,123 @@
   "standardShipping": {
     "description": "Flat rate shipping for orders under master case quantities",
     "perDisplayBox": {
-      "west": 8.50,
-      "mountain": 10.00,
-      "southwest": 12.50,
-      "midwest": 15.00,
-      "southeast": 17.50,
-      "northeast": 20.00,
-      "remote": 25.00
+      "west": 8.5,
+      "mountain": 10,
+      "southwest": 12.5,
+      "midwest": 15,
+      "southeast": 17.5,
+      "northeast": 20,
+      "remote": 25
     },
     "baseRate": {
-      "west": 15.00,
-      "mountain": 18.00,
-      "southwest": 22.00,
-      "midwest": 25.00,
-      "southeast": 28.00,
-      "northeast": 32.00,
-      "remote": 40.00
+      "west": 15,
+      "mountain": 18,
+      "southwest": 22,
+      "midwest": 25,
+      "southeast": 28,
+      "northeast": 32,
+      "remote": 40
     }
   },
   "zones": {
     "west": {
       "name": "West",
-      "states": ["CA", "NV", "OR", "WA", "ID", "AZ", "UT"],
-      "ltlPercentage": 1.0,
+      "states": [
+        "CA",
+        "NV",
+        "OR",
+        "WA",
+        "ID",
+        "AZ",
+        "UT"
+      ],
+      "ltlPercentage": 1,
       "color": "#dc2626"
     },
     "mountain": {
-      "name": "Mountain", 
-      "states": ["MT", "WY", "CO", "NM"],
-      "ltlPercentage": 1.0,
+      "name": "Mountain",
+      "states": [
+        "MT",
+        "WY",
+        "CO",
+        "NM"
+      ],
+      "ltlPercentage": 1,
       "color": "#f59e0b"
     },
     "southwest": {
       "name": "Southwest",
-      "states": ["TX", "OK", "KS", "NE", "AR", "LA", "MS"],
+      "states": [
+        "TX",
+        "OK",
+        "KS",
+        "NE",
+        "AR",
+        "LA",
+        "MS"
+      ],
       "ltlPercentage": 1.5,
       "color": "#3b82f6"
     },
     "midwest": {
       "name": "Midwest",
-      "states": ["ND", "SD", "MN", "IA", "MO", "WI", "IL", "IN", "MI", "OH"],
+      "states": [
+        "ND",
+        "SD",
+        "MN",
+        "IA",
+        "MO",
+        "WI",
+        "IL",
+        "IN",
+        "MI",
+        "OH"
+      ],
       "ltlPercentage": 1.5,
       "color": "#10b981"
     },
     "southeast": {
-      "name": "Southeast", 
-      "states": ["AL", "TN", "KY", "WV", "VA", "NC", "SC", "GA", "FL"],
-      "ltlPercentage": 2.0,
+      "name": "Southeast",
+      "states": [
+        "AL",
+        "TN",
+        "KY",
+        "WV",
+        "VA",
+        "NC",
+        "SC",
+        "GA",
+        "FL"
+      ],
+      "ltlPercentage": 2,
       "color": "#f97316"
     },
     "northeast": {
       "name": "Northeast",
-      "states": ["ME", "NH", "VT", "MA", "RI", "CT", "NY", "NJ", "PA", "DE", "MD", "DC"],
-      "ltlPercentage": 2.0,
+      "states": [
+        "ME",
+        "NH",
+        "VT",
+        "MA",
+        "RI",
+        "CT",
+        "NY",
+        "NJ",
+        "PA",
+        "DE",
+        "MD",
+        "DC"
+      ],
+      "ltlPercentage": 2,
       "color": "#eab308"
     },
     "remote": {
       "name": "Remote",
-      "states": ["AK", "HI"],
-      "ltlPercentage": 2.0,
+      "states": [
+        "AK",
+        "HI"
+      ],
+      "ltlPercentage": 2,
       "color": "#6b7280"
     }
   },
