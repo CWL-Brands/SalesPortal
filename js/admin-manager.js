@@ -40,6 +40,10 @@ class AdminManager {
      * Initialize enhanced admin components
      */
     initializeComponents() {
+        // Check if we're running on GitHub Pages
+        const isGitHubPages = window.location.hostname.includes('github.io');
+        console.log(`🌐 Environment: ${isGitHubPages ? 'GitHub Pages' : 'Local Server'}`);
+        
         // Initialize GitConnector with admin configuration
         if (typeof window.GitConnector !== 'undefined') {
             this.gitConnector = new window.GitConnector({
@@ -58,20 +62,13 @@ class AdminManager {
         
         // Initialize IntegrationValidator
         if (typeof window.IntegrationValidator !== 'undefined') {
-            this.integrationValidator = new window.IntegrationValidator({
-                gitConnector: this.gitConnector,
-                copperIntegration: window.copperIntegration,
-                adminManager: this
-            });
+            this.integrationValidator = new window.IntegrationValidator();
             console.log('✅ IntegrationValidator initialized');
         }
         
         // Initialize AdminDashboard
         if (typeof window.AdminDashboard !== 'undefined') {
-            this.adminDashboard = new window.AdminDashboard({
-                calculator: this.calculator,
-                adminManager: this
-            });
+            this.adminDashboard = new window.AdminDashboard();
             console.log('✅ AdminDashboard initialized');
         }
         

@@ -276,20 +276,27 @@ class AdminDashboard {
                 return;
             }
             
-            // Load environment configuration from server
+            // Check if we're running on GitHub Pages
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            
+            // Load environment configuration from server (only if not on GitHub Pages)
             let envConfig = null;
-            try {
-                console.log('🔄 Loading environment configuration from server...');
-                const response = await fetch('/api/env-config');
-                if (response.ok) {
-                    const result = await response.json();
-                    if (result.success) {
-                        envConfig = result.data.github;
-                        console.log('✅ Environment configuration loaded from server');
+            if (!isGitHubPages) {
+                try {
+                    console.log('🔄 Loading environment configuration from server...');
+                    const response = await fetch('/api/env-config');
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.success) {
+                            envConfig = result.data.github;
+                            console.log('✅ Environment configuration loaded from server');
+                        }
                     }
+                } catch (envError) {
+                    console.warn('⚠️ Failed to load environment config from server:', envError);
                 }
-            } catch (envError) {
-                console.warn('⚠️ Failed to load environment config from server:', envError);
+            } else {
+                console.log('💾 Running on GitHub Pages - skipping server environment config');
             }
             
             // Initialize GitConnector with environment config or defaults
