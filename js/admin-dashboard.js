@@ -21,6 +21,10 @@ class AdminDashboard {
         this.loginModal = null;
         this.connectionData = {}; // Store real connection data
         
+        // Initialize GitConnector for data persistence
+        this.gitConnector = null;
+        this.initializeGitConnector();
+        
         // Admin emails loaded from data file
         this.adminEmails = [];
         this.defaultPassword = 'K@nva2025'; // Default password for all admin emails
@@ -204,6 +208,188 @@ class AdminDashboard {
             if (serverInput && fishbowl.host) serverInput.value = fishbowl.host;
             if (usernameInput && fishbowl.username) usernameInput.value = fishbowl.username;
             if (passwordInput && fishbowl.password) passwordInput.value = fishbowl.password;
+        }
+    }
+
+    /**
+     * Initialize GitConnector for data persistence
+     */
+    async initializeGitConnector() {
+        try {
+            console.log('🐙 Initializing GitConnector...');
+            
+            // Check if GitConnector is available
+            if (typeof window.GitConnector === 'undefined') {
+                console.warn('⚠️ GitConnector not available, data will only be saved locally');
+                return;
+            }
+            
+            // Load environment configuration from server
+            let envConfig = null;
+            try {
+                console.log('🔄 Loading environment configuration from server...');
+                const response = await fetch('/api/env-config');
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        envConfig = result.data.github;
+                        console.log('✅ Environment configuration loaded from server');
+                    }
+                }
+            } catch (envError) {
+                console.warn('⚠️ Failed to load environment config from server:', envError);
+            }
+            
+            // Initialize GitConnector with environment config or defaults
+            const config = envConfig || {
+                repo: 'benatkanva/kanva-quotes',
+                branch: 'main',
+                username: 'kanva-admin',
+                email: 'admin@kanva.com'
+            };
+            
+            this.gitConnector = new window.GitConnector(config);
+            
+            // If we have environment config with token, configure immediately
+            if (envConfig && envConfig.token) {
+                await this.gitConnector.configure({
+                    token: envConfig.token,
+                    repo: envConfig.repo,
+                    branch: envConfig.branch,
+                    username: envConfig.username,
+                    email: envConfig.email
+                });
+                console.log('✅ GitConnector configured with environment variables');
+                
+                // Update connection data for UI
+                this.connectionData.github = {
+                    token: envConfig.token,
+                    repo: envConfig.repo,
+                    owner: envConfig.repo.split('/')[0],
+                    repoName: envConfig.repo.split('/')[1],
+                    branch: envConfig.branch,
+                    username: envConfig.username,
+                    email: envConfig.email
+                };
+                
+                // Update UI to show connected status
+                this.updateConnectionStatuses();
+            } else {
+                // Try to load existing GitHub connection from localStorage as fallback
+                if (this.connectionData.github) {
+                    const github = this.connectionData.github;
+                    await this.gitConnector.configure({
+                        token: github.token,
+                        repo: github.repo || `${github.owner}/${github.repoName}`,
+                        branch: github.branch || 'main',
+                        username: github.username || 'kanva-admin',
+                        email: github.email || 'admin@kanva.com'
+                    });
+                    console.log('✅ GitConnector configured with saved credentials');
+                } else {
+                    console.log('⚠️ No GitHub credentials found, GitConnector initialized with defaults');
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error initializing GitConnector:', error);
+        }
+    }
+    
+    /**
+     * Save data to Git repository
+     * @param {string} filename - The filename to save (e.g., 'products.json')
+     * @param {Object} data - The data to save
+     * @param {string} commitMessage - Optional commit message
+     * @returns {Promise<Object>} - Result object with success status
+     */
+    async saveDataToGit(filename, data, commitMessage = null) {
+        try {
+            console.log(`🐙 Saving ${filename} to Git...`);
+            
+            // Check if GitConnector is available and configured
+            if (!this.gitConnector) {
+                console.warn('⚠️ GitConnector not available, falling back to local server save');
+                return await this.saveDataToServer(filename, data);
+            }
+            
+            // Check if GitConnector has token
+            if (!this.gitConnector.token) {
+                console.warn('⚠️ GitConnector not configured with token, falling back to local server save');
+                return await this.saveDataToServer(filename, data);
+            }
+            
+            // Generate commit message if not provided
+            if (!commitMessage) {
+                const timestamp = new Date().toISOString();
+                commitMessage = `Update ${filename} via Admin Dashboard - ${timestamp}`;
+            }
+            
+            // Save to Git
+            const result = await this.gitConnector.saveFile(
+                `data/${filename}`,
+                data,
+                commitMessage
+            );
+            
+            console.log('✅ Data saved to Git successfully:', result);
+            
+            return {
+                success: true,
+                message: 'Data saved to Git repository',
+                sha: result.sha,
+                url: result.url
+            };
+            
+        } catch (error) {
+            console.error('❌ Error saving to Git:', error);
+            
+            // Fallback to local server save
+            console.log('🔄 Falling back to local server save...');
+            return await this.saveDataToServer(filename, data);
+        }
+    }
+    
+    /**
+     * Save data to local server as fallback
+     * @param {string} filename - The filename to save
+     * @param {Object} data - The data to save
+     * @returns {Promise<Object>} - Result object with success status
+     */
+    async saveDataToServer(filename, data) {
+        try {
+            console.log(`💾 Saving ${filename} to local server...`);
+            
+            const response = await fetch('/api/save-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: filename,
+                    data: data
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    console.log('✅ Data saved to local server successfully');
+                    return {
+                        success: true,
+                        message: 'Data saved to local server'
+                    };
+                } else {
+                    throw new Error(result.message || 'Failed to save data');
+                }
+            } else {
+                throw new Error(`Server returned ${response.status}`);
+            }
+        } catch (error) {
+            console.error('❌ Error saving to local server:', error);
+            return {
+                success: false,
+                message: `Failed to save data: ${error.message}`
+            };
         }
     }
 
@@ -2064,38 +2250,65 @@ async saveProductField(productId, field, value) {
     async testGitHubIntegration() {
         console.log('🧪 Testing GitHub integration...');
         
-        const owner = document.getElementById('github-owner')?.value || 'benatkanva';
-        const repo = document.getElementById('github-repo')?.value || 'kanva-quotes';
-        const token = document.getElementById('github-token')?.value;
-        
         const statusElement = document.getElementById('github-status');
         this.updateIntegrationStatus(statusElement, 'testing', 'Testing...');
         
-        if (!token) {
-            this.updateIntegrationStatus(statusElement, 'error', 'No Token');
-            this.showNotification('Please enter a GitHub token first', 'error');
-            return;
-        }
+        // Declare variables in the correct scope
+        let token, repoOwner, repoName;
         
         try {
-            // Make real API call to GitHub
-            const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+            // Load GitHub configuration from environment variables
+            const envResponse = await fetch('/api/env-config');
+            if (!envResponse.ok) {
+                throw new Error('Failed to load environment configuration');
+            }
+            
+            const envResult = await envResponse.json();
+            if (!envResult.success || !envResult.data || !envResult.data.github) {
+                throw new Error('GitHub configuration not found in environment');
+            }
+            
+            const githubConfig = envResult.data.github;
+            token = githubConfig.token;
+            const owner = githubConfig.username || 'benatkanva';
+            const repo = githubConfig.repo || 'benatkanva/kanva-quotes';
+            
+            // Extract repo name from full repo path if needed
+            repoName = repo.includes('/') ? repo.split('/')[1] : repo;
+            repoOwner = repo.includes('/') ? repo.split('/')[0] : owner;
+            
+            if (!token) {
+                this.updateIntegrationStatus(statusElement, 'error', 'No Token');
+                this.showNotification('GitHub token not found in environment variables', 'error');
+                return;
+            }
+            
+            console.log('🔐 Using GitHub token from environment variables');
+            console.log('📋 Testing repository:', `${repoOwner}/${repoName}`);
+            
+            // Make real API call to GitHub using environment variables
+            const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}`, {
                 headers: {
                     'Authorization': `token ${token}`,
-                    'Accept': 'application/vnd.github.v3+json'
+                    'Accept': 'application/vnd.github.v3+json',
+                    'User-Agent': 'Kanva-Quotes-Admin'
                 }
             });
+            
+            console.log('🔍 GitHub API Response Status:', response.status);
             
             if (response.ok) {
                 const repoData = await response.json();
                 this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
                 
+                console.log('✅ GitHub API connection successful!');
+                
                 // Save successful connection data
                 await this.saveConnectionData('github', {
                     token: token,
-                    repo: `${owner}/${repo}`,
-                    owner: owner,
-                    repoName: repo,
+                    repo: `${repoOwner}/${repoName}`,
+                    owner: repoOwner,
+                    repoName: repoName,
                     timestamp: new Date().toISOString(),
                     repoData: {
                         full_name: repoData.full_name,

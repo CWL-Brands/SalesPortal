@@ -29,58 +29,56 @@ class GitConnector {
     }
     
     /**
-     * Load GitHub connection from server
+     * Load GitHub connection from server using secure env-config endpoint
      */
     async loadConnectionFromServer() {
         try {
-            // Use the secure integration handler if available
-            if (window.secureIntegrationHandler) {
-                const githubConfig = await window.secureIntegrationHandler.getIntegration('github');
+            // First try to load from secure env-config endpoint
+            const envResponse = await fetch('/api/env-config');
+            
+            if (envResponse.ok) {
+                const envResult = await envResponse.json();
                 
-                if (githubConfig) {
-                    // Update configuration from secure handler
+                if (envResult.success && envResult.data && envResult.data.github) {
+                    const githubConfig = envResult.data.github;
+                    
+                    // Update configuration from environment variables
                     if (githubConfig.token) this.token = githubConfig.token;
                     if (githubConfig.repo) this.repo = githubConfig.repo;
                     if (githubConfig.branch) this.branch = githubConfig.branch;
                     if (githubConfig.username) this.username = githubConfig.username;
                     if (githubConfig.email) this.email = githubConfig.email;
                     
-                    console.log('✅ GitHub connection loaded from secure integration handler');
+                    console.log('✅ GitHub connection loaded from environment variables');
                     return;
                 }
             }
             
-            // Fall back to direct API call if secure handler is not available
-            const response = await fetch('data/connections.json');
+            // Fall back to connections.json if env-config fails
+            const response = await fetch('/api/connections');
             
-            // Check if response is ok before trying to parse JSON
-            if (!response.ok) {
-                console.warn(`⚠️ Server returned ${response.status} when loading GitHub connection`);
-                // Load from localStorage as fallback
-                this.loadFromLocalStorage();
-                return;
-            }
-            
-            try {
+            if (response.ok) {
                 const result = await response.json();
                 
-                if (result && result.github) {
-                    const githubConfig = result.github;
+                if (result.success && result.data && result.data.github) {
+                    const githubConfig = result.data.github;
                     
-                    // Update configuration from server
+                    // Update configuration from saved connections
                     if (githubConfig.token) this.token = githubConfig.token;
                     if (githubConfig.repo) this.repo = githubConfig.repo;
                     if (githubConfig.branch) this.branch = githubConfig.branch;
                     if (githubConfig.username) this.username = githubConfig.username;
                     if (githubConfig.email) this.email = githubConfig.email;
                     
-                    console.log('✅ GitHub connection loaded from connections.json');
+                    console.log('✅ GitHub connection loaded from saved connections');
+                    return;
                 }
-            } catch (jsonError) {
-                console.warn('⚠️ Failed to parse GitHub connection response:', jsonError);
-                // Load from localStorage as fallback
-                this.loadFromLocalStorage();
             }
+            
+            // Final fallback to localStorage
+            console.warn('⚠️ Could not load GitHub connection from server, trying localStorage');
+            this.loadFromLocalStorage();
+            
         } catch (error) {
             console.warn('⚠️ Failed to load GitHub connection from server:', error);
             // Load from localStorage as fallback

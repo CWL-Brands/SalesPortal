@@ -1,3 +1,6 @@
+// Load environment variables
+require('dotenv').config();
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -182,6 +185,45 @@ const server = http.createServer((req, res) => {
             });
             return;
         }
+        else if (pathname === '/api/env-config' && req.method === 'GET') {
+            // Securely provide environment variables to admin dashboard
+            try {
+                const envConfig = {
+                    github: {
+                        token: process.env.GITHUB_TOKEN || '',
+                        repo: process.env.GITHUB_REPO || 'benatkanva/kanva-quotes',
+                        branch: process.env.GITHUB_BRANCH || 'main',
+                        username: process.env.GITHUB_USERNAME || 'benatkanva',
+                        email: process.env.GITHUB_EMAIL || 'ben@kanvabotanicals.com'
+                    },
+                    copper: {
+                        apiKey: process.env.COPPER_API_KEY || '',
+                        userEmail: process.env.COPPER_USER_EMAIL || ''
+                    },
+                    shipstation: {
+                        apiKey: process.env.SHIPSTATION_API_KEY || '',
+                        apiSecret: process.env.SHIPSTATION_API_SECRET || ''
+                    }
+                };
+                
+                console.log('🔐 Providing environment config to admin dashboard');
+                
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    data: envConfig
+                }));
+            } catch (error) {
+                console.error('❌ Error providing env config:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: false,
+                    message: 'Failed to load environment configuration',
+                    error: error.message
+                }));
+            }
+            return;
+        }
         else if (pathname === '/api/save-data' && req.method === 'POST') {
             // Save data to JSON files
             let body = '';
@@ -212,8 +254,9 @@ const server = http.createServer((req, res) => {
                         fs.mkdirSync(dir, { recursive: true });
                     }
                     
-                    // Write data to file
-                    fs.writeFileSync(resolvedPath, data, 'utf8');
+                    // Write data to file (stringify if it's an object)
+                    const dataToWrite = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+                    fs.writeFileSync(resolvedPath, dataToWrite, 'utf8');
                     
                     console.log(`✅ Saved data to ${filename}`);
                     
@@ -297,6 +340,54 @@ const server = http.createServer((req, res) => {
                     }));
                 }
             });
+            return;
+        }
+        else if (pathname === '/api/env-config' && req.method === 'GET') {
+            // Get environment configuration for integrations
+            try {
+                // Load environment variables (only expose what's needed for integrations)
+                const envConfig = {
+                    github: {
+                        token: process.env.GITHUB_TOKEN || '',
+                        repo: process.env.GITHUB_REPO || 'benatkanva/kanva-quotes',
+                        branch: process.env.GITHUB_BRANCH || 'main',
+                        username: process.env.GITHUB_USERNAME || 'benatkanva',
+                        email: process.env.GITHUB_EMAIL || 'ben@kanvabotanicals.com'
+                    },
+                    copper: {
+                        apiKey: process.env.COPPER_API_KEY || '',
+                        email: process.env.COPPER_EMAIL || '',
+                        environment: process.env.COPPER_ENVIRONMENT || 'production'
+                    },
+                    shipstation: {
+                        apiKey: process.env.SHIPSTATION_API_KEY || '',
+                        apiSecret: process.env.SHIPSTATION_API_SECRET || '',
+                        environment: process.env.SHIPSTATION_ENVIRONMENT || 'production'
+                    },
+                    fishbowl: {
+                        host: process.env.FISHBOWL_HOST || '',
+                        username: process.env.FISHBOWL_USERNAME || '',
+                        password: process.env.FISHBOWL_PASSWORD || ''
+                    }
+                };
+                
+                console.log('✅ Environment config requested');
+                
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    message: 'Environment configuration loaded',
+                    data: envConfig
+                }));
+            } catch (error) {
+                console.error('❌ Error loading environment config:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: false,
+                    message: 'Failed to load environment configuration',
+                    error: error.message
+                }));
+            }
             return;
         }
         
