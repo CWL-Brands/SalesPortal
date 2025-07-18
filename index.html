@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/modern-styles.css">
     
     <!-- Enhanced Admin Styles -->
-    <link rel="stylesheet" href="css/admin-styles.css">
+    <link rel="stylesheet" href="css/admin-styles.css?v=20250718-1225">
     
     <!-- Copper CRM SDK -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/copper-sdk@latest/dist/copper-sdk.min.js"></script>
@@ -26,9 +26,20 @@
 <body>
     <!-- Loading State -->
     <div id="loading" class="loading-overlay">
-        <div class="loading-spinner">
-            <div class="spinner"></div>
-            <p>Loading Kanva Quote Calculator...</p>
+        <div class="loading-container">
+            <div class="kanva-logo-loader">
+                <div class="logo-circle">
+                    <div class="logo-inner">
+                        <span class="logo-text">K</span>
+                    </div>
+                </div>
+                <div class="loading-dots">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            </div>
+            <p class="loading-text">Loading Kanva Quote Calculator...</p>
         </div>
     </div>
 

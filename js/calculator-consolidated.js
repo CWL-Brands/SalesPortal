@@ -249,27 +249,77 @@ class KanvaCalculator {
     }
 
     /**
-     * Get current price based on pricing mode
+     * Get current price based on pricing mode and volume tiers
      */
     getCurrentPrice(product) {
         if (!product) return 0;
         
-        // Log the pricing mode and available prices for debugging
-        console.log(`🏷️ Getting price for ${product.name || 'product'}:`, {
-            mode: this.isRetailMode ? 'Retail' : 'Distribution',
-            retailPrice: product.retailPrice,
-            distributionPrice: product.price,
-            willUseRetail: this.isRetailMode && product.retailPrice !== undefined
-        });
-        
+        // For retail mode, use fixed retail price (no volume tiers)
         if (this.isRetailMode && product.retailPrice !== undefined) {
             const retailPrice = parseFloat(product.retailPrice);
-            console.log(`💰 Using retail price: $${retailPrice}`);
+            console.log(`💰 Using retail price for ${product.name}: $${retailPrice.toFixed(2)}`);
             return retailPrice;
         }
-        const distributionPrice = parseFloat(product.price || 0);
-        console.log(`💰 Using distribution price: $${distributionPrice}`);
-        return distributionPrice;
+        
+        // For distribution mode, apply volume tier pricing
+        const totalMasterCases = this.calculateTotalMasterCases();
+        const tier = this.determinePricingTier(totalMasterCases);
+        const tierPrice = this.getTierPrice(product, tier);
+        
+        console.log(`💰 Distribution pricing for ${product.name}:`, {
+            totalMasterCases,
+            tier: tier.name,
+            tierPrice: tierPrice.toFixed(2)
+        });
+        
+        return tierPrice;
+    }
+    
+    /**
+     * Calculate total master cases across all line items
+     */
+    calculateTotalMasterCases() {
+        return this.lineItems.reduce((total, lineItem) => {
+            return total + (lineItem.masterCases || 0);
+        }, 0);
+    }
+    
+    /**
+     * Determine which pricing tier applies based on total volume
+     */
+    determinePricingTier(totalMasterCases) {
+        // Default to tier 1 if no tiers data
+        if (!this.data.tiers || Object.keys(this.data.tiers).length === 0) {
+            return { id: '1', name: 'Tier 1', threshold: 0 };
+        }
+        
+        // Sort tiers by threshold (highest first) to find the highest applicable tier
+        const sortedTiers = Object.entries(this.data.tiers)
+            .map(([id, tier]) => ({ id, ...tier }))
+            .sort((a, b) => b.threshold - a.threshold);
+        
+        // Find the highest tier that the total volume qualifies for
+        for (const tier of sortedTiers) {
+            if (totalMasterCases >= tier.threshold) {
+                return tier;
+            }
+        }
+        
+        // Fallback to the lowest tier
+        return sortedTiers[sortedTiers.length - 1] || { id: '1', name: 'Tier 1', threshold: 0 };
+    }
+    
+    /**
+     * Get tier-specific price for a product
+     */
+    getTierPrice(product, tier) {
+        // If we have tier pricing data, use it
+        if (tier && tier.prices && tier.prices[product.productId]) {
+            return parseFloat(tier.prices[product.productId]);
+        }
+        
+        // Fallback to base product price
+        return parseFloat(product.price || 0);
     }
 
     /**
@@ -1244,10 +1294,24 @@ class KanvaCalculator {
             lineItem.masterCases = parseInt(value) || 0;
             // Auto-calculate display boxes (12 per master case)
             lineItem.displayBoxes = lineItem.masterCases * 12;
+            
+            // When quantities change, update tier pricing for all line items
+            // because total volume affects the tier
+            if (!this.isRetailMode) {
+                this.updateAllLineItemPricing();
+                console.log('🔄 Updated tier pricing for all line items due to quantity change');
+            }
         } else if (field === 'displayBoxes') {
             lineItem.displayBoxes = parseInt(value) || 0;
             // Auto-calculate master cases (12 display boxes = 1 master case)
             lineItem.masterCases = Math.floor(lineItem.displayBoxes / 12);
+            
+            // When quantities change, update tier pricing for all line items
+            // because total volume affects the tier
+            if (!this.isRetailMode) {
+                this.updateAllLineItemPricing();
+                console.log('🔄 Updated tier pricing for all line items due to quantity change');
+            }
         } else if (field === 'customUnitPrice') {
             const newPrice = parseFloat(value) || 0;
             lineItem.customUnitPrice = newPrice;

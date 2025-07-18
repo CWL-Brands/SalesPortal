@@ -29,7 +29,8 @@
       "height": 7,
       "weight": 3.5
     },
-    "casesPerPallet": 56
+    "casesPerPallet": 56,
+    "active": false
   },
   "2": {
     "productId": 2,

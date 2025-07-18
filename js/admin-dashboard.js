@@ -556,12 +556,11 @@ class AdminDashboard {
                                 <th>Cost</th>
                                 <th>Category</th>
                                 <th>Units/Case</th>
-                                <th>Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="products-table-body">
-                            <tr><td colspan="11" class="loading-row">Loading products data...</td></tr>
+                            <tr><td colspan="10" class="loading-row">Loading products data...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -650,17 +649,9 @@ class AdminDashboard {
                     <td class="product-cost editable" data-field="cost">$${product.cost || 'N/A'}</td>
                     <td class="product-category editable" data-field="category">${product.category}</td>
                     <td class="product-units editable" data-field="unitsPerCase">${product.unitsPerCase || 1}</td>
-                    <td class="product-status">
-                        <span class="status-badge status-${product.active ? 'active' : 'inactive'}">
-                            ${product.active ? 'Active' : 'Inactive'}
-                        </span>
-                    </td>
                     <td class="product-actions">
                         <button class="btn-small btn-edit" onclick="window.adminDashboard.editProduct('${product.id}')" title="Edit Product">
                             ✏️
-                        </button>
-                        <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleProductStatus('${product.id}')" title="Toggle Status">
-                            ${product.active ? '⏸️' : '▶️'}
                         </button>
                         <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteProduct('${product.id}')" title="Delete Product">
                             🗑️
@@ -759,17 +750,28 @@ class AdminDashboard {
             
             const data = await response.json();
             
+            // Store full shipping data for ground rates access
+            this.fullShippingData = data;
+            
             // Convert zones object to array if needed
             if (data.zones) {
-                this.shippingData = Object.entries(data.zones).map(([key, value]) => ({
-                    id: key,
-                    name: value.name,
-                    ltlPercentage: value.ltlPercentage || 0,
-                    states: value.states || [],
-                    color: value.color || '#4CAF50',
-                    active: value.active !== false,
-                    ...value
-                }));
+                this.shippingData = Object.entries(data.zones).map(([key, value]) => {
+                    // Get ground shipping rates for this zone
+                    const zoneNumber = value.zoneNumber || parseInt(key.replace('zone', ''));
+                    const groundRates = this.extractGroundRates(data, zoneNumber);
+                    
+                    return {
+                        id: key,
+                        name: value.name,
+                        ltlPercentage: value.ltlPercentage || 0,
+                        states: value.states || [],
+                        color: value.color || '#4CAF50',
+                        active: value.active !== false,
+                        zoneNumber: zoneNumber,
+                        groundRates: groundRates,
+                        ...value
+                    };
+                });
             } else if (Array.isArray(data)) {
                 this.shippingData = data;
             } else {
@@ -788,6 +790,24 @@ class AdminDashboard {
         } finally {
             this.loadingShipping = false;
         }
+    }
+
+    /**
+     * Extract ground shipping rates for a specific zone
+     */
+    extractGroundRates(shippingData, zoneNumber) {
+        if (!shippingData.displayBoxShipping || !shippingData.displayBoxShipping.ranges) {
+            return { '1-3': 0, '4-8': 0, '9-11': 0 };
+        }
+        
+        const ranges = shippingData.displayBoxShipping.ranges;
+        const zoneKey = `zone${zoneNumber}`;
+        
+        return {
+            '1-3': ranges['1-3'][zoneKey] || 0,
+            '4-8': ranges['4-8'][zoneKey] || 0,
+            '9-11': ranges['9-11'][zoneKey] || 0
+        };
     }
 
     /**
@@ -859,20 +879,26 @@ class AdminDashboard {
                     </div>
                 </div>
                 <div class="table-container">
-                    <table class="data-table">
+                    <table class="data-table shipping-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Name</th>
-                                <th>LTL %</th>
-                                <th>States</th>
-                                <th>Color</th>
-                                <th>Status</th>
-                                <th>Actions</th>
+                                <th rowspan="2">ID</th>
+                                <th rowspan="2">Name</th>
+                                <th rowspan="2">LTL %</th>
+                                <th colspan="3">Ground Shipping (per master case)</th>
+                                <th rowspan="2">States</th>
+                                <th rowspan="2">Color</th>
+                                <th rowspan="2">Status</th>
+                                <th rowspan="2">Actions</th>
+                            </tr>
+                            <tr>
+                                <th class="ground-header">1-3 Cases</th>
+                                <th class="ground-header">4-8 Cases</th>
+                                <th class="ground-header">9-11 Cases</th>
                             </tr>
                         </thead>
                         <tbody id="shipping-table-body">
-                            <tr><td colspan="7" class="loading-row">Loading shipping data...</td></tr>
+                            <tr><td colspan="10" class="loading-row">Loading shipping data...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -952,31 +978,40 @@ renderShippingTable(zones) {
     const tbody = document.getElementById('shipping-table-body');
     if (!tbody) return;
     
-    tbody.innerHTML = zones.map(zone => `
-        <tr data-zone-id="${zone.id}">
-            <td class="zone-id">${zone.id}</td>
-            <td class="zone-name editable" data-field="name">${zone.name}</td>
-            <td class="zone-ltl editable" data-field="ltlPercentage">${zone.ltlPercentage}%</td>
-            <td class="zone-states" title="${zone.states}">${zone.states.length > 50 ? zone.states.substring(0, 50) + '...' : zone.states}</td>
-            <td class="zone-color">
-                <div class="color-indicator" style="background-color: ${zone.color}; width: 20px; height: 20px; border-radius: 3px; display: inline-block;"></div>
-            </td>
-            <td class="zone-status">
-                <span class="status-badge status-active">✓ Active</span>
-            </td>
-            <td class="zone-actions">
-                <button class="btn-small btn-edit" onclick="window.adminDashboard.editShippingZone('${zone.id}')" title="Edit Zone">
-                    ✏️
-                </button>
-                <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleShippingZoneStatus('${zone.id}')" title="Toggle Status">
-                    ⏸️
-                </button>
-                <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteShippingZone('${zone.id}')" title="Delete Zone">
-                    🗑️
-                </button>
-            </td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = zones.map(zone => {
+        const groundRates = zone.groundRates || { '1-3': 0, '4-8': 0, '9-11': 0 };
+        const statesDisplay = Array.isArray(zone.states) ? zone.states.join(', ') : zone.states;
+        const statesShort = statesDisplay.length > 50 ? statesDisplay.substring(0, 50) + '...' : statesDisplay;
+        
+        return `
+            <tr data-zone-id="${zone.id}">
+                <td class="zone-id">${zone.id}</td>
+                <td class="zone-name editable" data-field="name">${zone.name}</td>
+                <td class="zone-ltl editable" data-field="ltlPercentage">${zone.ltlPercentage}%</td>
+                <td class="ground-rate editable" data-field="ground1-3" data-zone="${zone.zoneNumber}">$${groundRates['1-3']}</td>
+                <td class="ground-rate editable" data-field="ground4-8" data-zone="${zone.zoneNumber}">$${groundRates['4-8']}</td>
+                <td class="ground-rate editable" data-field="ground9-11" data-zone="${zone.zoneNumber}">$${groundRates['9-11']}</td>
+                <td class="zone-states" title="${statesDisplay}">${statesShort}</td>
+                <td class="zone-color">
+                    <div class="color-indicator" style="background-color: ${zone.color}; width: 20px; height: 20px; border-radius: 3px; display: inline-block;"></div>
+                </td>
+                <td class="zone-status">
+                    <span class="status-badge status-active">✓ Active</span>
+                </td>
+                <td class="zone-actions">
+                    <button class="btn-small btn-edit" onclick="window.adminDashboard.editShippingZone('${zone.id}')" title="Edit Zone">
+                        ✏️
+                    </button>
+                    <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleShippingZoneStatus('${zone.id}')" title="Toggle Status">
+                        ⏸️
+                    </button>
+                    <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteShippingZone('${zone.id}')" title="Delete Zone">
+                        🗑️
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
     
     // Add click listeners for inline editing
     this.setupInlineEditing();
@@ -1015,7 +1050,7 @@ renderShippingError() {
     if (tbody) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="error-row">
+                <td colspan="10" class="error-row">
                     ❌ Failed to load shipping data. 
                     <button onclick="window.adminDashboard.loadShippingData()" class="btn btn-small">
                         Try Again
@@ -1086,15 +1121,28 @@ finishInlineEdit(input) {
     const field = cell.dataset.field;
     const row = cell.closest('tr');
     const productId = row.dataset.productId;
+    const zoneId = row.dataset.zoneId;
     
     if (newValue !== originalValue) {
-        // Save the change
-        this.saveProductField(productId, field, newValue);
+        // Save the change based on field type
+        if (field.startsWith('ground')) {
+            // Handle ground shipping rate changes
+            const zoneNumber = cell.dataset.zone;
+            this.saveGroundShippingRate(zoneId, field, newValue, zoneNumber);
+        } else if (productId) {
+            // Handle product field changes
+            this.saveProductField(productId, field, newValue);
+        } else if (zoneId) {
+            // Handle shipping zone field changes
+            this.saveShippingField(zoneId, field, newValue);
+        }
         
         // Update display
         let displayValue = newValue;
-        if (field === 'price' || field === 'msrp' || field === 'cost') {
+        if (field === 'price' || field === 'msrp' || field === 'cost' || field.startsWith('ground')) {
             displayValue = `$${newValue}`;
+        } else if (field === 'ltlPercentage') {
+            displayValue = `${newValue}%`;
         }
         
         cell.innerHTML = displayValue;
@@ -1105,8 +1153,14 @@ finishInlineEdit(input) {
             cell.classList.remove('field-updated');
         }, 2000);
     } else {
-        cell.innerHTML = field.includes('price') || field.includes('msrp') || field.includes('cost') 
-            ? `$${originalValue}` : originalValue;
+        const needsDollar = field.includes('price') || field.includes('msrp') || field.includes('cost') || field.startsWith('ground');
+        const needsPercent = field === 'ltlPercentage';
+        
+        let displayValue = originalValue;
+        if (needsDollar) displayValue = `$${originalValue}`;
+        else if (needsPercent) displayValue = `${originalValue}%`;
+        
+        cell.innerHTML = displayValue;
     }
     
     cell.classList.remove('editing');
@@ -1120,8 +1174,12 @@ cancelInlineEdit(input) {
     const originalValue = input.dataset.original;
     const field = cell.dataset.field;
     
-    const displayValue = field.includes('price') || field.includes('msrp') || field.includes('cost') 
-        ? `$${originalValue}` : originalValue;
+    const needsDollar = field.includes('price') || field.includes('msrp') || field.includes('cost') || field.startsWith('ground');
+    const needsPercent = field === 'ltlPercentage';
+    
+    let displayValue = originalValue;
+    if (needsDollar) displayValue = `$${originalValue}`;
+    else if (needsPercent) displayValue = `${originalValue}%`;
         
     cell.innerHTML = displayValue;
     cell.classList.remove('editing');
@@ -1149,6 +1207,112 @@ async saveProductField(productId, field, value) {
         } catch (error) {
             console.error('Error saving product field:', error);
             alert(`❌ Failed to save ${field} change`);
+        }
+    }
+    
+    /**
+     * Save shipping field change
+     */
+    async saveShippingField(zoneId, field, value) {
+        try {
+            console.log(`💾 Saving shipping ${field} = ${value} for zone ${zoneId}`);
+            
+            // Update the shipping data in memory
+            const zone = this.shippingData.find(z => z.id === zoneId);
+            if (zone) {
+                if (field === 'ltlPercentage') {
+                    zone.ltlPercentage = parseFloat(value);
+                } else {
+                    zone[field] = value;
+                }
+            }
+            
+            // Save to server (implement actual API call)
+            await this.saveShippingDataToServer();
+            
+            const notification = document.createElement('div');
+            notification.className = 'save-notification';
+            notification.innerHTML = `✅ ${field} updated for ${zoneId}`;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+            
+        } catch (error) {
+            console.error('Error saving shipping field:', error);
+            alert(`❌ Failed to save ${field} change`);
+        }
+    }
+    
+    /**
+     * Save ground shipping rate change
+     */
+    async saveGroundShippingRate(zoneId, field, value, zoneNumber) {
+        try {
+            console.log(`💾 Saving ground shipping ${field} = $${value} for zone ${zoneNumber}`);
+            
+            // Parse the field to get the range (e.g., 'ground1-3' -> '1-3')
+            const range = field.replace('ground', '').replace('-', '-');
+            const zoneKey = `zone${zoneNumber}`;
+            
+            // Update the full shipping data structure
+            if (this.fullShippingData && this.fullShippingData.displayBoxShipping) {
+                if (!this.fullShippingData.displayBoxShipping.ranges[range]) {
+                    this.fullShippingData.displayBoxShipping.ranges[range] = {};
+                }
+                this.fullShippingData.displayBoxShipping.ranges[range][zoneKey] = parseFloat(value);
+            }
+            
+            // Update the zone data in memory
+            const zone = this.shippingData.find(z => z.id === zoneId);
+            if (zone && zone.groundRates) {
+                zone.groundRates[range] = parseFloat(value);
+            }
+            
+            // Save to server (implement actual API call)
+            await this.saveShippingDataToServer();
+            
+            const notification = document.createElement('div');
+            notification.className = 'save-notification';
+            notification.innerHTML = `✅ Ground shipping rate updated for ${range} cases in ${zoneId}`;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+            
+        } catch (error) {
+            console.error('Error saving ground shipping rate:', error);
+            alert(`❌ Failed to save ground shipping rate`);
+        }
+    }
+    
+    /**
+     * Save shipping data to server
+     */
+    async saveShippingDataToServer() {
+        try {
+            const response = await fetch('/api/save-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    file: 'shipping.json',
+                    data: this.fullShippingData
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            console.log('✅ Shipping data saved to server');
+            
+        } catch (error) {
+            console.error('❌ Error saving shipping data to server:', error);
+            throw error;
         }
     }
     
@@ -1312,31 +1476,7 @@ async saveProductField(productId, field, value) {
         this.showProductEditModal(productId);
     }
     
-    /**
-     * Toggle product active status
-     */
-    async toggleProductStatus(productId) {
-        console.log(`🔄 Toggling status for product ${productId}`);
-        
-        const row = document.querySelector(`tr[data-product-id="${productId}"]`);
-        if (row) {
-            const statusCell = row.querySelector('.product-status');
-            const statusBadge = statusCell.querySelector('.status-badge');
-            const actionButton = row.querySelector('.btn-toggle');
-            
-            const isActive = statusBadge.classList.contains('status-active');
-            const newStatus = !isActive;
-            
-            // Update UI
-            statusBadge.className = `status-badge status-${newStatus ? 'active' : 'inactive'}`;
-            statusBadge.textContent = newStatus ? 'Active' : 'Inactive';
-            actionButton.innerHTML = newStatus ? '⏸️' : '▶️';
-            actionButton.title = newStatus ? 'Deactivate Product' : 'Activate Product';
-            
-            // Save change
-            await this.saveProductField(productId, 'active', newStatus);
-        }
-    }
+
     
     /**
      * Delete product
@@ -4002,43 +4142,7 @@ async saveProductField(productId, field, value) {
         this.showProductModal(productId);
     }
 
-    /**
-     * Toggle product status
-     */
-    async toggleProductStatus(productId) {
-        try {
-            console.log(`🔄 Toggling status for product: ${productId}`);
-            
-            // Load current products data
-            const response = await fetch('data/products.json');
-            if (!response.ok) throw new Error('Failed to load products data');
-            
-            const productsData = await response.json();
-            
-            if (productsData[productId]) {
-                // Toggle active status (assuming we add this field)
-                const currentStatus = productsData[productId].active !== false; // Default to true
-                productsData[productId].active = !currentStatus;
-                
-                // Save updated data
-                const saveResult = await this.saveDataToGit('products.json', productsData);
-                
-                if (saveResult.success) {
-                    const newStatus = productsData[productId].active ? 'activated' : 'deactivated';
-                    this.showNotification(`Product ${newStatus} successfully`, 'success');
-                    this.loadProductsData(); // Refresh table
-                    this.refreshFrontendData(); // Refresh frontend
-                } else {
-                    throw new Error(saveResult.message || 'Failed to save changes');
-                }
-            } else {
-                throw new Error(`Product ${productId} not found`);
-            }
-        } catch (error) {
-            console.error('Error toggling product status:', error);
-            this.showNotification(`Failed to toggle status: ${error.message}`, 'error');
-        }
-    }
+
 
     /**
      * Load product data into form for editing
@@ -4963,30 +5067,754 @@ async saveProductField(productId, field, value) {
             // If there's a product grid or tiles container, force refresh
             const productGrid = document.querySelector('.product-grid, .products-container, #product-tiles');
             if (productGrid) {
-                console.log('🔄 Refreshing product grid display...');
-                // Trigger a refresh by dispatching a custom event
-                productGrid.dispatchEvent(new CustomEvent('forceRefresh'));
-            }
-            
-            // Force refresh any product-related components
-            const productComponents = document.querySelectorAll('[data-component="products"]');
-            productComponents.forEach(component => {
-                if (component.refresh && typeof component.refresh === 'function') {
-                    component.refresh();
+                // Force refresh the product grid
+                if (window.loadProducts && typeof window.loadProducts === 'function') {
+                    window.loadProducts();
                 }
+            }
+        } catch (error) {
+            console.error('Error forcing UI refresh:', error);
+        }
+    }
+
+    // ==========================================
+    // SHIPPING MANAGEMENT METHODS
+    // ==========================================
+
+    /**
+     * Load shipping data from JSON file
+     */
+    async loadShippingData() {
+        if (this.loadingShipping) {
+            console.log('Shipping data already loading, skipping...');
+            return;
+        }
+
+        this.loadingShipping = true;
+        
+        try {
+            console.log('📦 Loading shipping data...');
+            const response = await fetch('data/shipping.json');
+            if (!response.ok) throw new Error('Failed to load shipping data');
+            
+            const shippingData = await response.json();
+            
+            // Convert zones object to array and add ground rates
+            const zonesArray = Object.entries(shippingData.zones || {}).map(([id, zone]) => {
+                const groundRates = this.extractGroundRates(shippingData, zone.zoneNumber);
+                return {
+                    id,
+                    zoneNumber: zone.zoneNumber,
+                    name: zone.name,
+                    ltlPercentage: zone.ltlPercentage,
+                    states: zone.states,
+                    color: zone.color,
+                    groundRates
+                };
             });
             
-            // Dispatch a global refresh event
-            window.dispatchEvent(new CustomEvent('adminProductsUpdated', {
-                detail: {
-                    action: 'refresh',
-                    timestamp: Date.now()
-                }
-            }));
+            this.shippingData = zonesArray;
+            this.originalShippingData = shippingData; // Keep original for saving
             
-            console.log('✅ Main UI force refresh completed with cache clearing');
+            console.log('✅ Shipping data loaded:', this.shippingData.length, 'zones');
+            this.renderShippingTable(this.shippingData);
+            
         } catch (error) {
-            console.error('❌ Error force refreshing main UI:', error);
+            console.error('❌ Error loading shipping data:', error);
+            this.renderShippingError(error.message);
+        } finally {
+            this.loadingShipping = false;
+        }
+    }
+
+    /**
+     * Extract ground shipping rates for a zone
+     */
+    extractGroundRates(shippingData, zoneNumber) {
+        if (!shippingData.displayBoxShipping || !shippingData.displayBoxShipping.ranges) {
+            return { '1-3': 0, '4-8': 0, '9-11': 0 };
+        }
+        
+        const ranges = shippingData.displayBoxShipping.ranges;
+        const zoneKey = `zone${zoneNumber}`;
+        
+        return {
+            '1-3': ranges['1-3'][zoneKey] || 0,
+            '4-8': ranges['4-8'][zoneKey] || 0,
+            '9-11': ranges['9-11'][zoneKey] || 0
+        };
+    }
+
+    /**
+     * Render shipping section with enhanced table structure
+     */
+    renderShippingSection() {
+        // Load shipping data and render table
+        this.loadShippingData();
+        
+        return `
+            <div class="card">
+                <div class="card-header">
+                    <h3>🚚 Shipping Zone Management</h3>
+                    <div class="action-bar">
+                        <button class="btn btn-primary" onclick="window.adminDashboard.addNewShippingZone()">
+                            ➕ Add New Zone
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.adminDashboard.exportShippingData()">
+                            📄 Export CSV
+                        </button>
+                        <button class="btn btn-secondary" onclick="window.adminDashboard.loadShippingData()">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table shipping-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">Zone ID</th>
+                                <th rowspan="2">Zone Name</th>
+                                <th rowspan="2">LTL Rate %</th>
+                                <th colspan="3" class="ground-shipping-header">Ground Shipping (per master case)</th>
+                                <th rowspan="2">States</th>
+                                <th rowspan="2">Color</th>
+                                <th rowspan="2">Actions</th>
+                            </tr>
+                            <tr>
+                                <th class="ground-header">1-3 Cases</th>
+                                <th class="ground-header">4-8 Cases</th>
+                                <th class="ground-header">9-11 Cases</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shipping-table-body">
+                            <tr><td colspan="9" class="loading-row">Loading shipping data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render shipping table with data
+     */
+    renderShippingTable(zones) {
+        const tbody = document.getElementById('shipping-table-body');
+        if (!tbody) return;
+        
+        tbody.innerHTML = zones.map(zone => {
+            const groundRates = zone.groundRates || { '1-3': 0, '4-8': 0, '9-11': 0 };
+            const statesDisplay = Array.isArray(zone.states) ? zone.states.join(', ') : zone.states;
+            const statesShort = statesDisplay.length > 50 ? statesDisplay.substring(0, 50) + '...' : statesDisplay;
+            
+            return `
+                <tr data-zone-id="${zone.id}">
+                    <td class="zone-id">${zone.id}</td>
+                    <td class="zone-name editable" data-field="name">${zone.name}</td>
+                    <td class="zone-ltl editable" data-field="ltlPercentage">${zone.ltlPercentage}%</td>
+                    <td class="ground-rate editable" data-field="ground1-3" data-zone="${zone.zoneNumber}">$${groundRates['1-3']}</td>
+                    <td class="ground-rate editable" data-field="ground4-8" data-zone="${zone.zoneNumber}">$${groundRates['4-8']}</td>
+                    <td class="ground-rate editable" data-field="ground9-11" data-zone="${zone.zoneNumber}">$${groundRates['9-11']}</td>
+                    <td class="zone-states" title="${statesDisplay}">${statesShort}</td>
+                    <td class="zone-color">
+                        <div class="color-indicator" style="background-color: ${zone.color}; width: 20px; height: 20px; border-radius: 3px; display: inline-block;"></div>
+                    </td>
+                    <td class="zone-actions">
+                        <button class="btn-small btn-edit" onclick="window.adminDashboard.editShippingZone('${zone.id}')" title="Edit Zone">
+                            ✏️ Edit
+                        </button>
+                        <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteShippingZone('${zone.id}')" title="Delete Zone">
+                            🗑️ Delete
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        
+        // Add click listeners for inline editing
+        this.setupInlineEditing();
+        
+        // Adjust modal height after table is rendered
+        setTimeout(() => this.adjustModalHeight(), 100);
+    }
+
+    /**
+     * Render shipping error state
+     */
+    renderShippingError(errorMessage) {
+        const tbody = document.getElementById('shipping-table-body');
+        if (!tbody) return;
+        
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="10" class="error-row">
+                    <div class="error-message">
+                        <span class="error-icon">⚠️</span>
+                        <span class="error-text">Error loading shipping data: ${errorMessage}</span>
+                        <button class="btn btn-small btn-primary" onclick="window.adminDashboard.loadShippingData()" style="margin-left: 10px;">
+                            🔄 Try Again
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    /**
+     * Save ground shipping rate
+     */
+    async saveGroundShippingRate(zoneId, field, newValue, zoneNumber) {
+        try {
+            console.log(`💾 Saving ground shipping rate: ${field} = ${newValue} for zone ${zoneId}`);
+            
+            // Parse the field to get the range
+            const range = field.replace('ground', '').replace('-', '-'); // ground1-3 -> 1-3
+            
+            // Update the original shipping data structure
+            if (!this.originalShippingData.displayBoxShipping) {
+                this.originalShippingData.displayBoxShipping = { ranges: {} };
+            }
+            if (!this.originalShippingData.displayBoxShipping.ranges) {
+                this.originalShippingData.displayBoxShipping.ranges = {};
+            }
+            if (!this.originalShippingData.displayBoxShipping.ranges[range]) {
+                this.originalShippingData.displayBoxShipping.ranges[range] = {};
+            }
+            
+            const zoneKey = `zone${zoneNumber}`;
+            this.originalShippingData.displayBoxShipping.ranges[range][zoneKey] = parseFloat(newValue) || 0;
+            
+            // Save to server
+            await this.saveShippingDataToServer();
+            
+            this.showNotification(`Ground shipping rate updated: ${range} cases = $${newValue}`, 'success');
+            
+        } catch (error) {
+            console.error('Error saving ground shipping rate:', error);
+            this.showNotification(`Failed to save ground shipping rate: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Save shipping field (LTL percentage, zone name, etc.)
+     */
+    async saveShippingField(zoneId, field, newValue) {
+        try {
+            console.log(`💾 Saving shipping field: ${field} = ${newValue} for zone ${zoneId}`);
+            
+            // Update the original shipping data structure
+            if (this.originalShippingData.zones && this.originalShippingData.zones[zoneId]) {
+                if (field === 'ltlPercentage') {
+                    this.originalShippingData.zones[zoneId][field] = parseFloat(newValue) || 0;
+                } else {
+                    this.originalShippingData.zones[zoneId][field] = newValue;
+                }
+            }
+            
+            // Save to server
+            await this.saveShippingDataToServer();
+            
+            this.showNotification(`Shipping ${field} updated successfully`, 'success');
+            
+        } catch (error) {
+            console.error('Error saving shipping field:', error);
+            this.showNotification(`Failed to save shipping field: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Save shipping data to server
+     */
+    async saveShippingDataToServer() {
+        try {
+            const response = await fetch('/api/save-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filename: 'shipping.json',
+                    data: this.originalShippingData
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to save shipping data to server');
+            }
+            
+            const result = await response.json();
+            console.log('✅ Shipping data saved to server:', result);
+            
+        } catch (error) {
+            console.error('❌ Error saving shipping data:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Enhanced finish inline edit method to handle ground shipping rates
+     */
+    finishInlineEdit(input) {
+        const cell = input.parentElement;
+        const newValue = input.value;
+        const originalValue = input.dataset.original;
+        const field = cell.dataset.field;
+        const row = cell.closest('tr');
+        const productId = row.dataset.productId;
+        const zoneId = row.dataset.zoneId;
+        
+        if (newValue !== originalValue) {
+            if (field.startsWith('ground')) {
+                const zoneNumber = cell.dataset.zone;
+                this.saveGroundShippingRate(zoneId, field, newValue, zoneNumber);
+            } else if (productId) {
+                this.saveProductField(productId, field, newValue);
+            } else if (zoneId) {
+                this.saveShippingField(zoneId, field, newValue);
+            }
+            
+            // Format display value
+            let displayValue = newValue;
+            if (field === 'price' || field === 'msrp' || field === 'cost' || field.startsWith('ground')) {
+                displayValue = `$${newValue}`;
+            } else if (field === 'ltlPercentage') {
+                displayValue = `${newValue}%`;
+            }
+            
+            cell.innerHTML = displayValue;
+            cell.classList.add('field-updated');
+            setTimeout(() => {
+                cell.classList.remove('field-updated');
+            }, 2000);
+        } else {
+            // Restore original formatting
+            const needsDollar = field.includes('price') || field.includes('msrp') || field.includes('cost') || field.startsWith('ground');
+            const needsPercent = field === 'ltlPercentage';
+            let displayValue = originalValue;
+            if (needsDollar) displayValue = `$${originalValue}`;
+            else if (needsPercent) displayValue = `${originalValue}%`;
+            cell.innerHTML = displayValue;
+        }
+        
+        cell.classList.remove('editing');
+    }
+
+    /**
+     * Enhanced cancel inline edit method
+     */
+    cancelInlineEdit(input) {
+        const cell = input.parentElement;
+        const originalValue = input.dataset.original;
+        const field = cell.dataset.field;
+        
+        // Restore original formatting
+        const needsDollar = field.includes('price') || field.includes('msrp') || field.includes('cost') || field.startsWith('ground');
+        const needsPercent = field === 'ltlPercentage';
+        let displayValue = originalValue;
+        if (needsDollar) displayValue = `$${originalValue}`;
+        else if (needsPercent) displayValue = `${originalValue}%`;
+        
+        cell.innerHTML = displayValue;
+        cell.classList.remove('editing');
+    }
+
+    /**
+     * Export shipping data to CSV
+     */
+    exportShippingData() {
+        if (!this.shippingData || this.shippingData.length === 0) {
+            this.showNotification('No shipping data to export', 'warning');
+            return;
+        }
+        
+        const headers = ['Zone ID', 'Zone Name', 'LTL Rate %', '1-3 Cases ($)', '4-8 Cases ($)', '9-11 Cases ($)', 'States', 'Color'];
+        const csvContent = [headers.join(',')];
+        
+        this.shippingData.forEach(zone => {
+            const row = [
+                zone.id,
+                `"${zone.name}"`,
+                zone.ltlPercentage,
+                zone.groundRates['1-3'],
+                zone.groundRates['4-8'],
+                zone.groundRates['9-11'],
+                `"${Array.isArray(zone.states) ? zone.states.join(', ') : zone.states}"`,
+                zone.color
+            ];
+            csvContent.push(row.join(','));
+        });
+        
+        const blob = new Blob([csvContent.join('\n')], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `kanva-shipping-zones-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        this.showNotification('Shipping data exported successfully', 'success');
+    }
+
+    // ==========================================
+    // SHIPPING ZONE CRUD OPERATIONS
+    // ==========================================
+
+    /**
+     * Add new shipping zone
+     */
+    addNewShippingZone() {
+        console.log('➕ Adding new shipping zone');
+        this.showShippingZoneModal();
+    }
+    
+    /**
+     * Edit existing shipping zone
+     */
+    editShippingZone(zoneId) {
+        console.log(`✏️ Editing shipping zone: ${zoneId}`);
+        this.showShippingZoneModal(zoneId);
+    }
+    
+
+    
+    /**
+     * Delete shipping zone
+     */
+    async deleteShippingZone(zoneId) {
+        if (!confirm(`Are you sure you want to delete shipping zone "${zoneId}"? This action cannot be undone.`)) {
+            return;
+        }
+        
+        try {
+            console.log(`🗑️ Deleting shipping zone: ${zoneId}`);
+            
+            // Remove from original data structure
+            if (this.originalShippingData.zones && this.originalShippingData.zones[zoneId]) {
+                delete this.originalShippingData.zones[zoneId];
+            }
+            
+            // Save to server
+            await this.saveShippingDataToServer();
+            
+            // Remove from local data array
+            this.shippingData = this.shippingData.filter(zone => zone.id !== zoneId);
+            
+            // Remove from UI with animation
+            const zoneRow = document.querySelector(`tr[data-zone-id="${zoneId}"]`);
+            if (zoneRow) {
+                zoneRow.style.transition = 'all 0.3s ease';
+                zoneRow.style.opacity = '0';
+                zoneRow.style.transform = 'translateX(-20px)';
+                setTimeout(() => {
+                    zoneRow.remove();
+                }, 300);
+            }
+            
+            this.showNotification('Shipping zone deleted successfully', 'success');
+            
+        } catch (error) {
+            console.error('Error deleting shipping zone:', error);
+            this.showNotification(`Failed to delete shipping zone: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Show shipping zone modal for add/edit
+     */
+    showShippingZoneModal(zoneId = null) {
+        const isEdit = zoneId !== null;
+        const zone = isEdit ? this.shippingData.find(z => z.id === zoneId) : null;
+        
+        // Remove existing modal if any
+        const existingModal = document.querySelector('.shipping-zone-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Create modal HTML
+        const modalHtml = `
+            <div class="modal-overlay shipping-zone-modal">
+                <div class="modern-modal">
+                    <div class="modal-header">
+                        <div class="modal-title-section">
+                            <div class="modal-icon">🚚</div>
+                            <div class="modal-title-text">
+                                <h2>${isEdit ? 'Edit Shipping Zone' : 'Add New Shipping Zone'}</h2>
+                                <p class="modal-subtitle">${isEdit ? 'Update shipping zone information and rates' : 'Create a new shipping zone with rates'}</p>
+                            </div>
+                        </div>
+                        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="shipping-zone-form" class="modern-form">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <span class="label-text">Zone ID</span>
+                                        <span class="required-indicator">*</span>
+                                    </label>
+                                    <input type="text" 
+                                           id="zone-id" 
+                                           class="form-input ${isEdit ? 'readonly' : ''}" 
+                                           value="${zone ? zone.id : ''}" 
+                                           ${isEdit ? 'readonly' : ''} 
+                                           placeholder="e.g., zone5" 
+                                           required>
+                                    <div class="form-help">Unique identifier for the shipping zone</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <span class="label-text">Zone Name</span>
+                                        <span class="required-indicator">*</span>
+                                    </label>
+                                    <input type="text" 
+                                           id="zone-name" 
+                                           class="form-input" 
+                                           value="${zone ? zone.name : ''}" 
+                                           placeholder="e.g., Zone 5" 
+                                           required>
+                                    <div class="form-help">Display name for the shipping zone</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <span class="label-text">Zone Number</span>
+                                        <span class="required-indicator">*</span>
+                                    </label>
+                                    <input type="number" 
+                                           id="zone-number" 
+                                           class="form-input" 
+                                           value="${zone ? zone.zoneNumber : ''}" 
+                                           placeholder="e.g., 5" 
+                                           min="1" 
+                                           required>
+                                    <div class="form-help">Numeric zone identifier for rate calculations</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <span class="label-text">LTL Rate %</span>
+                                        <span class="required-indicator">*</span>
+                                    </label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" 
+                                               id="ltl-percentage" 
+                                               class="form-input" 
+                                               value="${zone ? zone.ltlPercentage : ''}" 
+                                               placeholder="e.g., 15" 
+                                               step="0.1" 
+                                               min="0" 
+                                               required>
+                                        <span class="input-suffix">%</span>
+                                    </div>
+                                    <div class="form-help">LTL freight percentage for 12+ master cases</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <span class="label-text">Ground Rate: 1-3 Cases</span>
+                                        <span class="required-indicator">*</span>
+                                    </label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" 
+                                               id="ground-1-3" 
+                                               class="form-input" 
+                                               value="${zone && zone.groundRates ? zone.groundRates['1-3'] : ''}" 
+                                               placeholder="e.g., 10" 
+                                               step="0.01" 
+                                               min="0" 
+                                               required>
+                                        <span class="input-suffix">$</span>
+                                    </div>
+                                    <div class="form-help">Per master case rate for 1-3 cases</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <span class="label-text">Ground Rate: 4-8 Cases</span>
+                                        <span class="required-indicator">*</span>
+                                    </label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" 
+                                               id="ground-4-8" 
+                                               class="form-input" 
+                                               value="${zone && zone.groundRates ? zone.groundRates['4-8'] : ''}" 
+                                               placeholder="e.g., 15" 
+                                               step="0.01" 
+                                               min="0" 
+                                               required>
+                                        <span class="input-suffix">$</span>
+                                    </div>
+                                    <div class="form-help">Per master case rate for 4-8 cases</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <span class="label-text">Ground Rate: 9-11 Cases</span>
+                                        <span class="required-indicator">*</span>
+                                    </label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" 
+                                               id="ground-9-11" 
+                                               class="form-input" 
+                                               value="${zone && zone.groundRates ? zone.groundRates['9-11'] : ''}" 
+                                               placeholder="e.g., 20" 
+                                               step="0.01" 
+                                               min="0" 
+                                               required>
+                                        <span class="input-suffix">$</span>
+                                    </div>
+                                    <div class="form-help">Per master case rate for 9-11 cases</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <span class="label-text">Zone Color</span>
+                                        <span class="required-indicator">*</span>
+                                    </label>
+                                    <input type="color" 
+                                           id="zone-color" 
+                                           class="form-input color-input" 
+                                           value="${zone ? zone.color : '#FF6B35'}" 
+                                           required>
+                                    <div class="form-help">Color identifier for the shipping zone</div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group full-width">
+                                <label class="form-label">
+                                    <span class="label-text">States</span>
+                                    <span class="required-indicator">*</span>
+                                </label>
+                                <textarea id="zone-states" 
+                                          class="form-input" 
+                                          rows="3" 
+                                          placeholder="Enter states separated by commas (e.g., CA, NV, OR, WA, ID)" 
+                                          required>${zone && zone.states ? (Array.isArray(zone.states) ? zone.states.join(', ') : zone.states) : ''}</textarea>
+                                <div class="form-help">States covered by this shipping zone, separated by commas</div>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 6L6 18M6 6l12 12"></path>
+                            </svg>
+                            Cancel
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="window.adminDashboard.saveShippingZoneForm('${zoneId || ''}')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path>
+                                <polyline points="17,21 17,13 7,13 7,21"></polyline>
+                                <polyline points="7,3 7,8 15,8"></polyline>
+                            </svg>
+                            ${isEdit ? 'Update Zone' : 'Create Zone'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Focus first input
+        setTimeout(() => {
+            const firstInput = document.querySelector('.shipping-zone-modal .form-input:not(.readonly)');
+            if (firstInput) firstInput.focus();
+        }, 100);
+    }
+
+    /**
+     * Save shipping zone form
+     */
+    async saveShippingZoneForm(editZoneId = '') {
+        try {
+            const form = document.getElementById('shipping-zone-form');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+            
+            const formData = {
+                id: document.getElementById('zone-id').value.trim(),
+                name: document.getElementById('zone-name').value.trim(),
+                zoneNumber: parseInt(document.getElementById('zone-number').value),
+                ltlPercentage: parseFloat(document.getElementById('ltl-percentage').value),
+                groundRates: {
+                    '1-3': parseFloat(document.getElementById('ground-1-3').value),
+                    '4-8': parseFloat(document.getElementById('ground-4-8').value),
+                    '9-11': parseFloat(document.getElementById('ground-9-11').value)
+                },
+                color: document.getElementById('zone-color').value,
+                states: document.getElementById('zone-states').value.split(',').map(s => s.trim()).filter(s => s),
+                active: true
+            };
+            
+            const isEdit = editZoneId !== '';
+            
+            // Validate zone ID uniqueness for new zones
+            if (!isEdit && this.originalShippingData.zones && this.originalShippingData.zones[formData.id]) {
+                throw new Error(`Zone ID "${formData.id}" already exists. Please choose a different ID.`);
+            }
+            
+            // Update original data structure
+            if (!this.originalShippingData.zones) {
+                this.originalShippingData.zones = {};
+            }
+            
+            this.originalShippingData.zones[formData.id] = {
+                zoneNumber: formData.zoneNumber,
+                name: formData.name,
+                ltlPercentage: formData.ltlPercentage,
+                states: formData.states,
+                color: formData.color,
+                active: formData.active
+            };
+            
+            // Update ground shipping rates
+            if (!this.originalShippingData.displayBoxShipping) {
+                this.originalShippingData.displayBoxShipping = { ranges: {} };
+            }
+            if (!this.originalShippingData.displayBoxShipping.ranges) {
+                this.originalShippingData.displayBoxShipping.ranges = {};
+            }
+            
+            const zoneKey = `zone${formData.zoneNumber}`;
+            ['1-3', '4-8', '9-11'].forEach(range => {
+                if (!this.originalShippingData.displayBoxShipping.ranges[range]) {
+                    this.originalShippingData.displayBoxShipping.ranges[range] = {};
+                }
+                this.originalShippingData.displayBoxShipping.ranges[range][zoneKey] = formData.groundRates[range];
+            });
+            
+            // Save to server
+            await this.saveShippingDataToServer();
+            
+            // Update local data
+            if (isEdit) {
+                const zoneIndex = this.shippingData.findIndex(z => z.id === editZoneId);
+                if (zoneIndex !== -1) {
+                    this.shippingData[zoneIndex] = formData;
+                }
+            } else {
+                this.shippingData.push(formData);
+            }
+            
+            // Close modal
+            document.querySelector('.shipping-zone-modal').remove();
+            
+            // Refresh table
+            this.renderShippingTable(this.shippingData);
+            
+            this.showNotification(`Shipping zone ${isEdit ? 'updated' : 'created'} successfully`, 'success');
+            
+        } catch (error) {
+            console.error('Error saving shipping zone:', error);
+            this.showNotification(`Failed to save shipping zone: ${error.message}`, 'error');
         }
     }
 
