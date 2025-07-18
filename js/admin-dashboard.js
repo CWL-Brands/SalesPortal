@@ -3546,36 +3546,41 @@ async saveProductField(productId, field, value) {
      */
     async saveDataToGit(filename, data) {
         try {
-            console.log(`🔄 Saving ${filename} to Git...`);
-            
-            // Use AdminManager if available
+            // Use AdminManager if available (works in Copper environment)
             if (this.adminManager && typeof this.adminManager.saveData === 'function') {
                 const result = await this.adminManager.saveData(`data/${filename}`, JSON.stringify(data, null, 2));
                 return { success: true, result };
             }
             
-            // Fallback to direct API call
-            const response = await fetch('/api/save-data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    filename: `data/${filename}`,
-                    data: JSON.stringify(data, null, 2),
-                    message: `Update ${filename} via admin dashboard`
-                })
-            });
-            
-            if (response.ok) {
-                const result = await response.json();
-                return { success: true, result };
-            } else {
+            // Fallback for local development
+            if (window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1') {
+                const response = await fetch('/api/save-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: `data/${filename}`,
+                        data: JSON.stringify(data, null, 2),
+                        message: `Update ${filename} via admin dashboard`
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    return { success: true, result };
+                }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
+            
+            // If we get here, we're in an unsupported environment
+            throw new Error('Cannot save data in this environment. AdminManager is not available.');
+            
         } catch (error) {
-            console.error('Error saving to Git:', error);
-            return { success: false, message: error.message };
+            console.error('Error saving data:', error);
+            return { 
+                success: false, 
+                message: error.message || 'Failed to save data',
+                details: error.stack
+            };
         }
     }
 
