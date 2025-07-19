@@ -3579,6 +3579,18 @@ async saveProductField(productId, field, value) {
      */
     async saveDataToGit(filename, data) {
         try {
+            console.log('🐙 saveDataToGit called with:', { 
+                filename, 
+                dataType: typeof data,
+                isGitHubPages: window.location.hostname.includes('github.io'),
+                hasAdminManager: !!this.adminManager,
+                hasGitConnector: !!(this.gitConnector && this.gitConnector.token),
+                connectionData: this.connectionData ? {
+                    hasGithub: !!this.connectionData.github,
+                    githubConfigured: !!(this.connectionData.github && this.connectionData.github.token)
+                } : 'No connection data'
+            });
+            
             console.log(`🐙 Saving ${filename} to Git...`);
             
             // Check if we're on GitHub Pages (no server APIs available)
@@ -3588,7 +3600,7 @@ async saveProductField(productId, field, value) {
                 console.log('💾 GitHub Pages mode - using direct GitHub API...');
                 
                 // Check if we have GitHub token configured
-                const githubConnection = this.connectionData.github;
+                const githubConnection = this.connectionData?.github;
                 if (!githubConnection || !githubConnection.token) {
                     console.warn('⚠️ No GitHub token configured, saving to localStorage only');
                     return await this.saveToLocalStorageOnly(filename, data);
@@ -3598,7 +3610,8 @@ async saveProductField(productId, field, value) {
                 return await this.saveToGitHubAPI(filename, data, githubConnection);
             } else {
                 // Local development - use GitConnector if available
-                if (this.gitConnector && this.gitConnector.token) {
+                if (this.gitConnector?.token) {
+                    console.log('💻 Local development - using GitConnector');
                     const timestamp = new Date().toISOString();
                     const commitMessage = `Update ${filename} via Admin Dashboard - ${timestamp}`;
                     
@@ -3620,7 +3633,10 @@ async saveProductField(productId, field, value) {
                 }
             }
         } catch (error) {
-            console.error('❌ Error saving to Git:', error);
+            console.error('❌ Error in saveDataToGit:', {
+                error: error.message,
+                stack: error.stack
+            });
             
             // Fallback to localStorage for any environment
             console.log('🔄 Falling back to localStorage...');
@@ -3634,6 +3650,12 @@ async saveProductField(productId, field, value) {
      */
     async saveToGitHubAPI(filename, data, githubConnection) {
         try {
+            console.log('🌐 Attempting GitHub API save with connection:', {
+                owner: githubConnection.owner,
+                repo: githubConnection.repoName,
+                hasToken: !!githubConnection.token
+            });
+            
             const owner = githubConnection.owner || 'benatkanva';
             const repo = githubConnection.repoName || 'kanva-quotes';
             const token = githubConnection.token;
@@ -3648,6 +3670,7 @@ async saveProductField(productId, field, value) {
             let sha = null;
             
             try {
+                console.log('🔍 Checking for existing file at:', getUrl);
                 const getResponse = await fetch(getUrl, {
                     headers: {
                         'Authorization': `token ${token}`,
@@ -3658,9 +3681,15 @@ async saveProductField(productId, field, value) {
                 if (getResponse.ok) {
                     const fileInfo = await getResponse.json();
                     sha = fileInfo.sha;
+                    console.log('✅ Found existing file, will update');
+                } else if (getResponse.status === 404) {
+                    console.log('ℹ️ File does not exist, will create new');
+                } else {
+                    throw new Error(`Unexpected status: ${getResponse.status}`);
                 }
             } catch (error) {
-                // File doesn't exist, that's okay
+                console.error('⚠️ Error checking for existing file:', error);
+                throw error;
             }
             
             // Prepare commit
@@ -3676,6 +3705,8 @@ async saveProductField(productId, field, value) {
             
             // Make the commit
             const putUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/${filename}`;
+            console.log('🚀 Attempting to save to:', putUrl);
+            
             const commitResponse = await fetch(putUrl, {
                 method: 'PUT',
                 headers: {
@@ -3687,14 +3718,23 @@ async saveProductField(productId, field, value) {
             });
             
             if (!commitResponse.ok) {
-                const errorData = await commitResponse.json();
+                const errorData = await commitResponse.json().catch(() => ({}));
+                console.error('❌ GitHub API error:', {
+                    status: commitResponse.status,
+                    statusText: commitResponse.statusText,
+                    errorData
+                });
                 throw new Error(`GitHub API Error: ${errorData.message || commitResponse.statusText}`);
             }
             
             const result = await commitResponse.json();
+            console.log('✅ Successfully saved to GitHub:', {
+                commitSha: result.commit.sha,
+                commitUrl: result.commit.html_url
+            });
             
             // Also save to localStorage as backup
-            this.saveToLocalStorageOnly(filename, data);
+            await this.saveToLocalStorageOnly(filename, data);
             
             return {
                 success: true,
@@ -3703,7 +3743,10 @@ async saveProductField(productId, field, value) {
             };
             
         } catch (error) {
-            console.error('❌ GitHub API save failed:', error);
+            console.error('❌ GitHub API save failed:', {
+                error: error.message,
+                stack: error.stack
+            });
             throw error;
         }
     }
@@ -3716,6 +3759,12 @@ async saveProductField(productId, field, value) {
         try {
             const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
             const storageKey = `kanva-admin-${filename}`;
+            
+            console.log('💾 Saving to localStorage:', {
+                key: storageKey,
+                contentLength: content.length,
+                dataSample: content.substring(0, 100) + (content.length > 100 ? '...' : '')
+            });
             
             localStorage.setItem(storageKey, JSON.stringify({
                 filename: filename,
@@ -3733,6 +3782,7 @@ async saveProductField(productId, field, value) {
                 message: 'Data saved locally (manual GitHub sync may be required)'
             };
         } catch (error) {
+            console.error('❌ Failed to save to localStorage:', error);
             return {
                 success: false,
                 message: `Failed to save: ${error.message}`
