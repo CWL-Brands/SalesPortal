@@ -1,45 +1,13 @@
 /**
  * Enhanced Admin Dashboard for Kanva Quotes
  * Integrates admin functionality with modern UI and Kanva branding
- * 
- * CLEANED VERSION - Removed duplicates and orphaned code
  */
 
 class AdminDashboard {
     constructor(options = {}) {
         this.calculator = options.calculator || window.calculator;
         this.adminManager = options.adminManager || window.adminManager;
-        
-        // UI Elements
         this.container = null;
-        this.floatingButton = null;
-        this.loginModal = null;
-        this.adminModal = null;
-        
-        // State Management
-        this.isInitialized = false;
-        this.isLoggedIn = false;
-        this.currentSection = 'products';
-        this.currentTab = 'products';
-        this.connectionData = {};
-        
-        // Data Storage
-        this.productsData = [];
-        this.tiersData = [];
-        this.shippingData = [];
-        this.originalShippingData = {};
-        
-        // Loading States
-        this.loadingProducts = false;
-        this.loadingTiers = false;
-        this.loadingShipping = false;
-        
-        // GitConnector for data persistence
-        this.gitConnector = null;
-        
-        // Admin Authentication
-        this.adminEmails = [];
-        this.defaultPassword = 'K@nva2025';
         this.floatingButton = null;
         this.loginModal = null;
         this.adminModal = null;
@@ -3574,201 +3542,48 @@ async saveProductField(productId, field, value) {
     }
 
     /**
-     * Save data to Git repository (GitHub Pages compatible)
-     * UPDATED METHOD - Replace the existing saveDataToGit method with this
+     * Save data to Git repository
      */
     async saveDataToGit(filename, data) {
         try {
-            console.log(`🐙 Saving ${filename} to Git...`);
-            
-            // Check if we're on GitHub Pages (no server APIs available)
-            const isGitHubPages = window.location.hostname.includes('github.io');
-            
-            if (isGitHubPages) {
-                console.log('💾 GitHub Pages mode - using direct GitHub API...');
-                
-                // Check if we have GitHub token configured
-                const githubConnection = this.connectionData.github;
-                if (!githubConnection || !githubConnection.token) {
-                    console.warn('⚠️ No GitHub token configured, saving to localStorage only');
-                    return await this.saveToLocalStorageOnly(filename, data);
-                }
-                
-                // Use direct GitHub API
-                return await this.saveToGitHubAPI(filename, data, githubConnection);
-            } else {
-                // Local development - use GitConnector if available
-                if (this.gitConnector && this.gitConnector.token) {
-                    const timestamp = new Date().toISOString();
-                    const commitMessage = `Update ${filename} via Admin Dashboard - ${timestamp}`;
-                    
-                    const result = await this.gitConnector.saveFile(
-                        `data/${filename}`,
-                        data,
-                        commitMessage
-                    );
-                    
-                    return {
-                        success: true,
-                        message: 'Data saved to Git repository',
-                        sha: result.sha,
-                        url: result.url
-                    };
-                } else {
-                    console.warn('⚠️ GitConnector not available, falling back to localStorage');
-                    return await this.saveToLocalStorageOnly(filename, data);
-                }
+            // Use AdminManager if available (works in Copper environment)
+            if (this.adminManager && typeof this.adminManager.saveData === 'function') {
+                const result = await this.adminManager.saveData(`data/${filename}`, JSON.stringify(data, null, 2));
+                return { success: true, result };
             }
-        } catch (error) {
-            console.error('❌ Error saving to Git:', error);
             
-            // Fallback to localStorage for any environment
-            console.log('🔄 Falling back to localStorage...');
-            return await this.saveToLocalStorageOnly(filename, data);
-        }
-    }
-
-    /**
-     * Save directly to GitHub API (for GitHub Pages)
-     * ADD THIS NEW METHOD after the saveDataToGit method
-     */
-    async saveToGitHubAPI(filename, data, githubConnection) {
-        try {
-            const owner = githubConnection.owner || 'benatkanva';
-            const repo = githubConnection.repoName || 'kanva-quotes';
-            const token = githubConnection.token;
-            const branch = githubConnection.branch || 'main';
-            
-            // Prepare content
-            const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-            const contentEncoded = btoa(unescape(encodeURIComponent(content)));
-            
-            // Get current file SHA if it exists
-            const getUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/${filename}`;
-            let sha = null;
-            
-            try {
-                const getResponse = await fetch(getUrl, {
-                    headers: {
-                        'Authorization': `token ${token}`,
-                        'Accept': 'application/vnd.github.v3+json'
-                    }
+            // Fallback for local development
+            if (window.location.hostname.includes('localhost') || window.location.hostname === '127.0.0.1') {
+                const response = await fetch('/api/save-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: `data/${filename}`,
+                        data: JSON.stringify(data, null, 2),
+                        message: `Update ${filename} via admin dashboard`
+                    })
                 });
                 
-                if (getResponse.ok) {
-                    const fileInfo = await getResponse.json();
-                    sha = fileInfo.sha;
+                if (response.ok) {
+                    const result = await response.json();
+                    return { success: true, result };
                 }
-            } catch (error) {
-                // File doesn't exist, that's okay
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
-            // Prepare commit
-            const commitData = {
-                message: `Update ${filename} via Admin Dashboard - ${new Date().toISOString()}`,
-                content: contentEncoded,
-                branch: branch
-            };
-            
-            if (sha) {
-                commitData.sha = sha;
-            }
-            
-            // Make the commit
-            const putUrl = `https://api.github.com/repos/${owner}/${repo}/contents/data/${filename}`;
-            const commitResponse = await fetch(putUrl, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `token ${token}`,
-                    'Accept': 'application/vnd.github.v3+json',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(commitData)
-            });
-            
-            if (!commitResponse.ok) {
-                const errorData = await commitResponse.json();
-                throw new Error(`GitHub API Error: ${errorData.message || commitResponse.statusText}`);
-            }
-            
-            const result = await commitResponse.json();
-            
-            // Also save to localStorage as backup
-            this.saveToLocalStorageOnly(filename, data);
-            
-            return {
-                success: true,
-                message: 'Data saved to GitHub repository',
-                sha: result.commit.sha
-            };
+            // If we get here, we're in an unsupported environment
+            throw new Error('Cannot save data in this environment. AdminManager is not available.');
             
         } catch (error) {
-            console.error('❌ GitHub API save failed:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Save to localStorage only (fallback method)
-     * ADD THIS NEW METHOD after the saveToGitHubAPI method
-     */
-    async saveToLocalStorageOnly(filename, data) {
-        try {
-            const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-            const storageKey = `kanva-admin-${filename}`;
-            
-            localStorage.setItem(storageKey, JSON.stringify({
-                filename: filename,
-                content: content,
-                timestamp: new Date().toISOString()
-            }));
-            
-            console.log(`✅ ${filename} saved to localStorage`);
-            
-            // Show user instructions for manual GitHub sync
-            this.showManualSyncInstructions(filename, content);
-            
-            return {
-                success: true,
-                message: 'Data saved locally (manual GitHub sync may be required)'
-            };
-        } catch (error) {
-            return {
-                success: false,
-                message: `Failed to save: ${error.message}`
+            console.error('Error saving data:', error);
+            return { 
+                success: false, 
+                message: error.message || 'Failed to save data',
+                details: error.stack
             };
         }
     }
 
-    /**
- * Show manual sync instructions to user
- */
-showManualSyncInstructions(filename, content) {
-    // Only show if we're on GitHub Pages and don't have a token
-    const isGitHubPages = window.location.hostname.includes('github.io');
-    const hasToken = this.connectionData.github && this.connectionData.github.token;
-    
-    if (isGitHubPages && !hasToken) {
-        const instructions = `🔑 GitHub Token Required
-        
-To enable automatic Git saves, please:
-1. Go to Settings > GitHub Integration
-2. Add your GitHub Personal Access Token
-3. Configure repository details
-
-For now, your changes have been saved to localStorage.
-You can manually copy this data to your repository:`;
-
-        // Show notification with copy button
-        this.showNotification(instructions, 'warning', 10000, {
-            label: 'Copy Data',
-            onClick: () => {
-                navigator.clipboard.writeText(content);
-                this.showNotification('Data copied to clipboard!', 'success');
-            }
-        });
-    }
-}
     /**
      * Render tiers table
      */
