@@ -4694,7 +4694,7 @@ You can manually copy this data to your repository:`;
         }
 
         try {
-            console.log(`🗑️ Deleting product: ${productId}`);
+            console.log(` Deleting product: ${productId}`);
             
             // Load current products data
             const response = await fetch('data/products.json');
@@ -4703,36 +4703,39 @@ You can manually copy this data to your repository:`;
             const productsData = await response.json();
             
             if (productsData[productId]) {
+                // Immediately remove from admin table with animation
+                const productRow = document.querySelector(`tr[data-product-id="${productId}"]`);
+                if (productRow) {
+                    productRow.style.transition = 'all 0.3s ease';
+                    productRow.style.opacity = '0';
+                    productRow.style.transform = 'translateX(-20px)';
+                    
+                    // Wait for animation to complete before removing the row
+                    await new Promise(resolve => setTimeout(() => {
+                        productRow.remove();
+                        resolve();
+                    }, 300));
+                }
+                
                 // Remove product from data
                 delete productsData[productId];
                 
                 // Save updated data
+                console.log(` Saving updated products data after deleting ${productId}...`);
                 const saveResult = await this.saveDataToGit('products.json', productsData);
                 
                 if (saveResult.success) {
+                    console.log(` Product ${productId} deleted and saved successfully`);
                     this.showNotification('Product deleted successfully', 'success');
                     
-                    // Immediately remove from admin table
-                    const productRow = document.querySelector(`tr[data-product-id="${productId}"]`);
-                    if (productRow) {
-                        productRow.style.transition = 'all 0.3s ease';
-                        productRow.style.opacity = '0';
-                        productRow.style.transform = 'translateX(-20px)';
-                        setTimeout(() => {
-                            productRow.remove();
-                        }, 300);
-                    }
-                    
-                    // Refresh admin table data
-                    setTimeout(() => {
-                        this.loadProductsData();
-                    }, 400);
-                    
-                    // Immediately refresh frontend
-                    this.refreshFrontendData();
+                    // Only refresh frontend data after save is complete
+                    await this.refreshFrontendData();
                     
                     // Force refresh main UI product tiles
-                    this.forceRefreshMainUI();
+                    await this.forceRefreshMainUI();
+                    
+                    // No need to reload products data since we've already removed the row
+                    // and the data has been saved successfully
                 } else {
                     throw new Error(saveResult.message || 'Failed to save changes');
                 }
@@ -4742,6 +4745,9 @@ You can manually copy this data to your repository:`;
         } catch (error) {
             console.error('Error deleting product:', error);
             this.showNotification(`Failed to delete product: ${error.message}`, 'error');
+            
+            // Refresh the products table to ensure UI is in sync with actual data
+            this.loadProductsData();
         }
     }
 
