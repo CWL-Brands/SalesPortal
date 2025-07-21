@@ -1,0 +1,145 @@
+Kanva Botanicals Quote Calculator - AI Business Reference Guide
+Project Overview
+Mission: Transform Kanva Botanicals' sales process by building a quote calculator that lives inside Copper CRM, eliminating manual spreadsheet work and reducing quote generation time from 15+ minutes to under 2 minutes.
+About Kanva Botanicals
+Company: Premium botanical supplement manufacturer specializing in plant-based wellness products
+Business Model: B2B wholesale to retailers and distributors
+Brand Identity:
+•	Signature Green: #93D500 (bright, vibrant green)
+•	Professional Dark Green: #17351A
+•	Clean, modern aesthetic with botanical elements
+Product Portfolio
+Focus+Flow™
+•	Description: The #1 selling Kava + Kratom extract shot
+•	Benefits: Mental clarity, sustained energy, elevated mood
+•	MSRP: $9.99
+•	Target: Daily users seeking natural energy alternatives
+Release+Relax™
+•	Description: Kanna + Kava enhanced blend
+•	Benefits: Stress relief, mood support, relaxation without sedation
+•	MSRP: $9.99
+•	Unique: Legal in all states, including where Kratom is prohibited
+Raw+Releaf
+•	Description: Pure leaf powered blend for purists
+•	Benefits: Natural plant profile with full-spectrum benefits
+•	MSRP: $9.99
+•	Target: Customers preferring minimally processed options
+Why Copper CRM Integration is Critical
+The Power of Copper CRM
+Copper CRM is the backbone of Kanva's sales operations. This Google Workspace-integrated CRM manages:
+•	Customer relationships across 260,000+ accounts
+•	Sales pipeline tracking from prospect to purchase
+•	Activity history for every customer interaction
+•	Team coordination across regional sales representatives
+Why This MUST Be Built Inside Copper
+1. Seamless Workflow Integration
+•	Sales reps never leave their CRM workspace
+•	Quotes are generated while viewing customer records
+•	All activity is automatically logged and tracked
+2. Automatic Customer Context
+•	The calculator knows which customer you're viewing
+•	Customer information auto-populates (no manual entry)
+•	Historical data and preferences are instantly accessible
+3. Data Integrity
+•	Quotes automatically save to customer records
+•	Opportunities are created with accurate values
+•	No duplicate data entry or lost information
+4. Sales Team Adoption
+•	If it's not in Copper, sales teams won't use it
+•	External tools create friction and reduce adoption
+•	Embedded tools become part of natural workflow
+How It Works in Copper
+Activity Panel Mode
+•	Appears in the sidebar while viewing any customer
+•	Perfect for quick, single-product quotes
+•	One-click save to customer activity log
+Modal Mode
+•	Full-screen overlay for complex quotes
+•	Multiple products and detailed configurations
+•	Professional quote preview before sending
+Left Navigation Mode
+•	Always accessible from Copper's main menu
+•	Customer search functionality
+•	Universal access point for all users
+Customer Base
+Independent Retailers (145,287 accounts)
+•	Smoke and vape shops
+•	Convenience stores
+•	Specialty retailers
+•	Health and wellness stores
+Chain Accounts (117,613 accounts)
+•	Regional chains
+•	National distributors
+•	Wholesale operations
+•	Multi-location retailers
+Sales Process Transformation
+Before (Current State)
+•	Manual spreadsheet calculations
+•	15+ minutes per quote
+•	Inconsistent pricing and discounts
+•	No CRM integration
+•	Lost quotes and follow-ups
+•	Unprofessional presentation
+After (With Copper Integration)
+•	Automated calculations
+•	2-minute quote generation
+•	Consistent pricing rules
+•	Full CRM integration
+•	Automatic activity tracking
+•	Professional branded quotes
+Key Features for Sales Success
+Auto-Population from CRM
+•	Company name and contact details
+•	Customer segment and preferences
+•	Historical order data
+•	Preferred products and quantities
+Professional Quote Generation
+•	Branded quote documents
+•	Email templates ready to send
+•	Volume discount calculations
+•	Multi-product configurations
+CRM Activity Tracking
+•	Every quote logged automatically
+•	Follow-up reminders created
+•	Pipeline opportunities generated
+•	Performance metrics tracked
+Supporting Materials
+The project includes comprehensive supporting documentation:
+•	Regional sales planning templates
+•	Customer data files for all accounts
+•	Product information and pricing
+•	Integration specifications
+Market Opportunity
+Functional Beverage Market Growth
+•	Current market: $155.44B (North America)
+•	Projected 2030: $399.6B
+•	Kanva's trajectory: Outperforming competitors with lean, efficient growth
+Competitive Advantage
+Kanva has achieved 37.5% higher revenue than competitors in the same timeframe through:
+•	Superior product quality (extract-based formulations)
+•	Competitive pricing ($9.99 consistent MSRP)
+•	Strong retailer relationships
+•	Efficient operations without heavy marketing spend
+Success Metrics
+For Sales Team
+•	90%+ adoption within 30 days
+•	Quote time reduced to under 2 minutes
+•	Increased quote-to-order conversion
+•	Better customer relationship management
+For Business
+•	Accurate quote tracking
+•	Improved revenue forecasting
+•	Enhanced customer data quality
+•	Scalable sales operations
+Why This Project Matters
+This isn't just a calculator – it's a complete transformation of how Kanva Botanicals operates. By embedding directly into Copper CRM, we're creating a tool that:
+1.	Saves Time: From 15 minutes to 2 minutes per quote
+2.	Increases Accuracy: No more calculation errors
+3.	Improves Professionalism: Consistent, branded quotes
+4.	Enhances Data: Everything tracked in CRM
+5.	Drives Growth: More quotes = more sales
+The key to success is that this tool lives where sales reps work – inside Copper CRM. Any solution outside of Copper will fail because it adds friction to the sales process. This integration ensures the tool becomes an indispensable part of daily operations.
+Project Vision
+Create a quote calculator so seamlessly integrated with Copper CRM that sales reps can't imagine working without it. Every interaction should feel natural, every calculation should be instant, and every quote should strengthen customer relationships while driving revenue growth.
+The ultimate goal: Make Kanva Botanicals' sales team the most efficient and professional in the botanical supplement industry.
+

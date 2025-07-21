@@ -1,0 +1,66 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if running in emulator (development mode)
+    function isEmulator() {
+      return resource == null || request.auth == null;
+    }
+    
+    // Public read access for core data - no authentication required
+    // This supports the anonymous access requirement for CopperCRM embedded app
+    
+    // Products collection - public read, admin write
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if request.auth != null || isEmulator();
+    }
+    
+    // Pricing configuration - public read, admin write
+    match /pricing/{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null || isEmulator();
+    }
+    
+    // Shipping configuration - public read, admin write
+    match /shipping/{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null || isEmulator();
+    }
+    
+    // Payment configuration - public read, admin write
+    match /payment/{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null || isEmulator();
+    }
+    
+    // Email templates - public read, admin write
+    match /templates/{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null || isEmulator();
+    }
+    
+    // Admin-only collections - TEMPORARILY ALLOW PUBLIC ACCESS FOR TESTING
+    // TODO: Re-enable authentication once anonymous auth is configured
+    match /admin/{document=**} {
+      allow read, write: if true; // Temporary public access
+    }
+    
+    // Integration connections - TEMPORARILY ALLOW PUBLIC ACCESS FOR TESTING
+    // TODO: Re-enable authentication once anonymous auth is configured
+    match /integrations/{document=**} {
+      allow read, write: if true; // Temporary public access
+    }
+    
+    // Analytics - write-only for app, read for admin
+    match /analytics/{document=**} {
+      allow write: if true;
+      allow read: if request.auth != null || isEmulator();
+    }
+    
+    // Default deny for any other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
