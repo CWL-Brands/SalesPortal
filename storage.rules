@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow read access to all files (public read for product images)
+    match /{allPaths=**} {
+      allow read: if true;
+    }
+    
+    // TEMPORARILY ALLOW PUBLIC WRITE ACCESS FOR TESTING
+    // TODO: Restrict to authenticated users once auth is configured
+    match /product-images/{imageId} {
+      allow write, delete: if true; // Temporary public access
+    }
+  }
+}
