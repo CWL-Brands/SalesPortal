@@ -23,7 +23,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --watch",
     "build": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --minify",
-    "secure-connections": "node --experimental-modules --es-module-specifier-resolution=node scripts/secure-connections.js",
+    "secure-connections": "node scripts/secure-connections.cjs",
     "postinstall": "npm run secure-connections",
     "migrate-to-firebase": "node scripts/migrate-to-firebase.js",
     "test-firebase": "node scripts/test-firebase-data.js",
