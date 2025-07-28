@@ -24,7 +24,6 @@
     "dev": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --watch",
     "build": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --minify",
     "secure-connections": "node scripts/secure-connections.cjs",
-    "postinstall": "npm run secure-connections",
     "migrate-to-firebase": "node scripts/migrate-to-firebase.js",
     "test-firebase": "node scripts/test-firebase-data.js",
     "upload-images": "node scripts/upload-product-images.js",
