@@ -1494,8 +1494,8 @@ function launchQuoteModal() {
             // Launch modal
             appState.sdk.showModal({
                 url: modalUrl,
-                width: 900,
-                height: 700,
+                width: 1400,
+                height: 900,
                 title: 'Generate Quote - Kanva Botanicals'
             });
         })
@@ -1505,8 +1505,8 @@ function launchQuoteModal() {
             const baseUrl = window.location.origin + window.location.pathname;
             appState.sdk.showModal({
                 url: `${baseUrl}?location=modal`,
-                width: 900,
-                height: 700,
+                width: 1400,
+                height: 900,
                 title: 'Generate Quote - Kanva Botanicals'
             });
         });
