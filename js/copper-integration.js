@@ -7,6 +7,9 @@ const CopperIntegration = {
     // Initialize Copper SDK and detect environment
     initialize: async function() {
         console.log('🔗 Initializing Copper CRM integration...');
+        console.log('🔍 DEBUG: Current URL:', window.location.href);
+        console.log('🔍 DEBUG: User Agent:', navigator.userAgent);
+        console.log('🔍 DEBUG: Window object keys:', Object.keys(window).filter(key => key.toLowerCase().includes('copper')));
         
         try {
             // Load credentials from secure integration handler if available
@@ -18,32 +21,86 @@ const CopperIntegration = {
                         appState.copper.apiKey = copperConfig.apiKey || appState.copper.apiKey;
                         appState.copper.email = copperConfig.email || appState.copper.email;
                         appState.copper.environment = copperConfig.environment || 'production';
-                        console.log('✅ Copper credentials loaded from secure storage');
+                        console.log('✅ Copper credentials loaded from secure handler');
                     }
-                } catch (configError) {
-                    console.warn('⚠️ Could not load Copper credentials from secure storage:', configError);
+                } catch (error) {
+                    console.warn('⚠️ Could not load Copper credentials:', error.message);
                 }
             }
             
-            // Check if we're running in Copper environment
+            // Enhanced Copper SDK detection
+            console.log('🔍 DEBUG: Checking for Copper SDK...');
+            console.log('🔍 DEBUG: typeof window.Copper:', typeof window.Copper);
+            console.log('🔍 DEBUG: window.Copper exists:', !!window.Copper);
+            
             if (typeof window.Copper !== 'undefined') {
-                appState.sdk = window.Copper.init();
-                console.log('✅ Copper SDK initialized successfully');
+                console.log('✅ Copper SDK detected on window');
+                console.log('🔍 DEBUG: Available Copper methods:', Object.keys(window.Copper));
                 
-                // Configure SDK based on mode
-                this.configureSdk();
-                
-                // Initialize context bridge for cross-iframe communication
-                this.initializeContextBridge();
-                
-                // Get user context with enhanced detection
-                this.getUserContextEnhanced();
-                
-                return true;
+                try {
+                    appState.sdk = window.Copper.init();
+                    console.log('✅ Copper SDK initialized successfully');
+                    console.log('🔍 DEBUG: SDK object:', appState.sdk);
+                    if (appState.sdk) {
+                        console.log('🔍 DEBUG: SDK methods after init:', Object.keys(appState.sdk));
+                    }
+                    
+                    // Configure SDK based on mode
+                    this.configureSdk();
+                    
+                    // Initialize context bridge for cross-iframe communication
+                    this.initializeContextBridge();
+                    
+                    // Get user context with enhanced detection
+                    this.getUserContextEnhanced();
+                    
+                    // Mark as Copper environment
+                    appState.isCopperActive = true;
+                    appState.integrationMode = 'copper';
+                    
+                    return true;
+                } catch (sdkError) {
+                    console.error('❌ Error calling Copper.init():', sdkError);
+                    this.setupStandaloneMode();
+                    return false;
+                }
             } else {
-                console.log('⚠️  Running outside Copper environment - CRM features will be simulated');
-                this.setupStandaloneMode();
-                return false;
+                console.log('⚠️ Copper SDK not found on window object');
+                console.log('🔍 DEBUG: Will check for delayed SDK loading...');
+                
+                // Try to wait for SDK to load (sometimes it loads after our script)
+                let retryCount = 0;
+                const maxRetries = 5;
+                const retryDelay = 1000; // 1 second
+                
+                const checkForSDK = () => {
+                    return new Promise((resolve) => {
+                        const interval = setInterval(() => {
+                            retryCount++;
+                            console.log(`🔄 Retry ${retryCount}/${maxRetries}: Checking for Copper SDK...`);
+                             
+                            if (typeof window.Copper !== 'undefined') {
+                                clearInterval(interval);
+                                console.log('✅ Copper SDK found on retry!');
+                                resolve(true);
+                            } else if (retryCount >= maxRetries) {
+                                clearInterval(interval);
+                                console.log('⚠️ Copper SDK not found after retries');
+                                resolve(false);
+                            }
+                        }, retryDelay);
+                    });
+                };
+                
+                const sdkFound = await checkForSDK();
+                if (sdkFound) {
+                    // Recursively call initialize now that SDK is available
+                    return this.initialize();
+                } else {
+                    console.log('⚠️ Running outside Copper environment - CRM features will be simulated');
+                    this.setupStandaloneMode();
+                    return false;
+                }
             }
         } catch (error) {
             console.error('❌ Error initializing Copper SDK:', error);
@@ -1362,16 +1419,73 @@ Calculator Version: ${adminConfig.metadata.version}`;
      */
     enhancedOpenFullscreen: function() {
         console.log('🖥️ Enhanced fullscreen requested...');
+        console.log('🔍 DEBUG: Current app state:', {
+            hasSDK: !!appState.sdk,
+            integrationMode: appState.integrationMode,
+            hasEntityContext: appState.hasEntityContext,
+            contextData: appState.contextData,
+            copperContext: appState.copperContext
+        });
+        
+        // Enhanced debugging for SDK availability
+        if (typeof window.Copper !== 'undefined') {
+            console.log('✅ Copper SDK is available on window');
+            if (appState.sdk) {
+                console.log('✅ SDK initialized in appState');
+                console.log('🔧 Available SDK methods:', Object.keys(appState.sdk));
+                
+                if (typeof appState.sdk.publishMessage === 'function') {
+                    console.log('✅ publishMessage method available');
+                } else {
+                    console.log('❌ publishMessage method NOT available');
+                }
+                
+                if (typeof appState.sdk.showFullScreen === 'function') {
+                    console.log('✅ showFullScreen method available');
+                } else {
+                    console.log('❌ showFullScreen method NOT available');
+                }
+            } else {
+                console.log('❌ SDK not initialized in appState');
+            }
+        } else {
+            console.log('❌ Copper SDK not available on window');
+        }
+        
+        // Try to get current context for debugging
+        if (appState.sdk && typeof appState.sdk.getContext === 'function') {
+            console.log('🔍 Attempting to get current context...');
+            appState.sdk.getContext()
+                .then((context) => {
+                    console.log('📋 Current Copper context:', context);
+                    if (context && context.context && context.context.entity) {
+                        console.log('🎯 Entity found in context:', context.context.entity);
+                    } else {
+                        console.log('⚠️ No entity found in current context');
+                    }
+                })
+                .catch((error) => {
+                    console.error('❌ Error getting context:', error);
+                });
+        }
         
         if (appState.sdk && typeof appState.sdk.publishMessage === 'function') {
             // Use context bridge for enhanced experience
+            console.log('🌉 Using context bridge for fullscreen');
             this.openFullscreenWithContext();
         } else {
             // Fallback to regular fullscreen
             console.log('📱 Fallback to regular fullscreen mode');
             if (appState.sdk && typeof appState.sdk.showFullScreen === 'function') {
-                appState.sdk.showFullScreen();
+                console.log('🚀 Calling SDK showFullScreen...');
+                try {
+                    appState.sdk.showFullScreen();
+                    console.log('✅ showFullScreen called successfully');
+                } catch (error) {
+                    console.error('❌ Error calling showFullScreen:', error);
+                }
             } else {
+                console.log('🔄 Opening new window as final fallback');
                 window.open(window.location.href, '_blank');
             }
         }
