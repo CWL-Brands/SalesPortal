@@ -309,6 +309,62 @@ const ModalOverlayHandler = {
 // Initialize modal handler immediately
 ModalOverlayHandler.initialize();
 
+// CRITICAL: Always initialize Copper integration
+setTimeout(() => {
+    console.log('🔧 FORCE: Initializing Copper integration...');
+    CopperIntegration.initialize();
+}, 100);
+
+// EMERGENCY: Force Activity Panel detection if URL has location parameter
+setTimeout(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const location = urlParams.get('location');
+    
+    console.log('🆘 EMERGENCY: Checking URL location parameter:', location);
+    
+    if (location === 'activity_panel') {
+        console.log('🚨 EMERGENCY: Forcing Activity Panel mode!');
+        
+        // Force app state
+        if (typeof appState !== 'undefined') {
+            appState.integrationMode = 'activity_panel';
+            appState.isActivityPanel = true;
+            appState.isEmbedded = true;
+        }
+        
+        // Force show Launch Modal button
+        const launchBtn = document.getElementById('launchModalBtn');
+        if (launchBtn) {
+            launchBtn.style.display = 'inline-block';
+            console.log('✅ EMERGENCY: Launch Modal button forced visible!');
+        } else {
+            console.error('❌ EMERGENCY: Launch Modal button not found in DOM!');
+        }
+        
+        // Hide fullscreen button
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        if (fullscreenBtn) {
+            fullscreenBtn.style.display = 'none';
+            console.log('📱 EMERGENCY: Fullscreen button hidden');
+        }
+        
+        // Try to initialize SDK even without detection
+        if (typeof window.Copper !== 'undefined') {
+            console.log('✅ EMERGENCY: Copper SDK found, initializing...');
+            try {
+                if (typeof appState !== 'undefined') {
+                    appState.sdk = window.Copper.init();
+                    console.log('✅ EMERGENCY: SDK initialized successfully');
+                }
+            } catch (error) {
+                console.error('❌ EMERGENCY: SDK initialization failed:', error);
+            }
+        } else {
+            console.warn('⚠️ EMERGENCY: Copper SDK not available, but Activity Panel mode enabled');
+        }
+    }
+}, 500);
+
 const CopperIntegration = {
     searchInterfaceAdded: false, // FIXED: Prevent duplicate search interfaces
 
@@ -466,9 +522,27 @@ const CopperIntegration = {
     detectIntegrationMode: function() {
         console.log('🔍 Detecting Copper CRM integration mode...');
         
-        // Check if running inside Copper CRM
-        if (typeof window.Copper !== 'undefined') {
-            console.log('✅ Copper SDK detected');
+        // Multiple detection methods for reliability
+        const urlParams = new URLSearchParams(window.location.search);
+        const location = urlParams.get('location');
+        const isInIframe = window.self !== window.top;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        const hasCopperSDK = typeof window.Copper !== 'undefined';
+        
+        console.log('🔍 Detection data:', {
+            location,
+            isInIframe,
+            windowWidth,
+            windowHeight,
+            hasCopperSDK,
+            referrer: document.referrer,
+            hostname: window.location.hostname
+        });
+        
+        // AGGRESSIVE: If we have location parameter, assume we're embedded
+        if (location || isInIframe || hasCopperSDK) {
+            console.log('✅ Copper CRM context detected (aggressive detection)');
             appState.isEmbedded = true;
             
             // Multiple detection methods for reliability
