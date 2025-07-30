@@ -33,6 +33,9 @@ const CopperIntegration = {
                 // Configure SDK based on mode
                 this.configureSdk();
                 
+                // Initialize context bridge for cross-iframe communication
+                this.initializeContextBridge();
+                
                 // Get user context with enhanced detection
                 this.getUserContextEnhanced();
                 
@@ -946,6 +949,432 @@ Calculator Version: ${adminConfig.metadata.version}`;
         }
         
         return true;
+    },
+
+    // ==============================================
+    // CONTEXT BRIDGE IMPLEMENTATION
+    // Enables seamless context sharing between sidebar and fullscreen modes
+    // ==============================================
+
+    /**
+     * Initialize context bridge messaging system
+     * Sets up listeners for cross-iframe communication
+     */
+    initializeContextBridge: function() {
+        if (!appState.sdk) {
+            console.warn('⚠️ SDK not available for context bridge');
+            return;
+        }
+
+        console.log('🌉 Initializing Copper SDK context bridge...');
+
+        // Listen for context updates from other app instances
+        appState.sdk.on('customerContext', (data) => {
+            console.log('📨 Received customer context via bridge:', data);
+            this.handleReceivedContext(data);
+        });
+
+        // Listen for quote updates from other instances
+        appState.sdk.on('quoteSaved', (data) => {
+            console.log('📊 Received quote saved notification:', data);
+            this.handleQuoteSaved(data);
+        });
+
+        // Listen for fullscreen requests with context
+        appState.sdk.on('openFullscreenWithContext', (data) => {
+            console.log('🖥️ Received fullscreen request with context:', data);
+            this.openFullscreenWithContext(data);
+        });
+
+        // Listen for context requests from other instances
+        appState.sdk.on('requestContext', (data) => {
+            console.log('📞 Received context request from:', data.source);
+            this.shareCurrentContext(data.source);
+        });
+
+        console.log('✅ Context bridge initialized successfully');
+    },
+
+    /**
+     * Open fullscreen mode with current context
+     * Publishes context data before opening fullscreen
+     */
+    openFullscreenWithContext: async function(customData = null) {
+        if (!appState.sdk) {
+            console.warn('⚠️ SDK not available for fullscreen context sharing');
+            // Fallback to regular fullscreen
+            if (appState.sdk && typeof appState.sdk.showFullScreen === 'function') {
+                appState.sdk.showFullScreen();
+            }
+            return;
+        }
+
+        try {
+            console.log('🚀 Opening fullscreen with context bridge...');
+
+            // Get current context if not provided
+            let contextData = customData;
+            if (!contextData) {
+                const copperContext = await appState.sdk.getContext();
+                contextData = this.extractContextData(copperContext);
+            }
+
+            // Add current form data to context
+            const currentFormData = this.getCurrentFormData();
+            contextData = { ...contextData, ...currentFormData };
+
+            console.log('📤 Publishing context to fullscreen:', contextData);
+
+            // Publish context to fullscreen instance
+            appState.sdk.publishMessage('customerContext', 'fullscreen', contextData);
+
+            // Small delay to ensure message is sent before opening fullscreen
+            setTimeout(() => {
+                appState.sdk.showFullScreen();
+                console.log('🖥️ Fullscreen opened with context');
+            }, 100);
+
+        } catch (error) {
+            console.error('❌ Error opening fullscreen with context:', error);
+            // Fallback to regular fullscreen
+            if (typeof appState.sdk.showFullScreen === 'function') {
+                appState.sdk.showFullScreen();
+            }
+        }
+    },
+
+    /**
+     * Extract relevant context data from Copper SDK context
+     */
+    extractContextData: function(copperContext) {
+        const contextData = {
+            timestamp: new Date().toISOString(),
+            source: 'sidebar',
+            location: copperContext?.location || 'unknown'
+        };
+
+        // Extract entity data if available
+        if (copperContext?.context?.entity) {
+            const entity = copperContext.context.entity;
+            contextData.entity = {
+                id: entity.id,
+                type: entity.type, // person, company, lead, etc.
+                name: entity.name,
+                email: entity.email,
+                phone: entity.phone,
+                company: entity.company_name || entity.name,
+                address: entity.address,
+                website: entity.website
+            };
+
+            console.log('📋 Extracted entity context:', contextData.entity);
+        }
+
+        // Extract user data
+        if (copperContext?.user) {
+            contextData.user = {
+                id: copperContext.user.id,
+                name: copperContext.user.name,
+                email: copperContext.user.email
+            };
+        }
+
+        return contextData;
+    },
+
+    /**
+     * Get current form data to preserve user input
+     */
+    getCurrentFormData: function() {
+        const formData = {};
+
+        try {
+            // Extract current form values
+            const quoteName = document.getElementById('quoteName')?.value;
+            const companyName = document.getElementById('companyName')?.value;
+            const email = document.getElementById('email')?.value;
+            const phone = document.getElementById('phone')?.value;
+            const customerSegment = document.getElementById('customerSegment')?.value;
+            const state = document.getElementById('state')?.value;
+
+            if (quoteName) formData.quoteName = quoteName;
+            if (companyName) formData.companyName = companyName;
+            if (email) formData.email = email;
+            if (phone) formData.phone = phone;
+            if (customerSegment) formData.customerSegment = customerSegment;
+            if (state) formData.state = state;
+
+            // Get selected products if any
+            const selectedProducts = this.getSelectedProducts();
+            if (selectedProducts.length > 0) {
+                formData.selectedProducts = selectedProducts;
+            }
+
+            console.log('📝 Current form data extracted:', formData);
+        } catch (error) {
+            console.warn('⚠️ Error extracting form data:', error);
+        }
+
+        return formData;
+    },
+
+    /**
+     * Get currently selected products from the form
+     */
+    getSelectedProducts: function() {
+        const selectedProducts = [];
+        
+        try {
+            // Look for selected product elements
+            const productElements = document.querySelectorAll('.product-card.selected, .product-item.selected');
+            productElements.forEach(element => {
+                const productData = {
+                    id: element.dataset.productId,
+                    name: element.dataset.productName,
+                    price: element.dataset.price,
+                    quantity: element.querySelector('.quantity-input')?.value || 1
+                };
+                selectedProducts.push(productData);
+            });
+        } catch (error) {
+            console.warn('⚠️ Error getting selected products:', error);
+        }
+
+        return selectedProducts;
+    },
+
+    /**
+     * Handle received context data from other app instances
+     */
+    handleReceivedContext: function(contextData) {
+        console.log('🎯 Processing received context data...');
+
+        try {
+            // Auto-populate form fields with received context
+            if (contextData.entity) {
+                this.populateFormFromContext(contextData.entity);
+            }
+
+            // Restore form data if provided
+            if (contextData.quoteName || contextData.companyName || contextData.email) {
+                this.restoreFormData(contextData);
+            }
+
+            // Restore selected products if provided
+            if (contextData.selectedProducts && contextData.selectedProducts.length > 0) {
+                this.restoreSelectedProducts(contextData.selectedProducts);
+            }
+
+            // Show success notification
+            if (window.showNotification) {
+                window.showNotification('Customer data auto-populated from CRM context', 'success');
+            }
+
+            // Update app state
+            appState.hasEntityContext = !!contextData.entity;
+            appState.contextData = contextData;
+
+        } catch (error) {
+            console.error('❌ Error handling received context:', error);
+            if (window.showNotification) {
+                window.showNotification('Error processing CRM context data', 'error');
+            }
+        }
+    },
+
+    /**
+     * Populate form fields from entity context
+     */
+    populateFormFromContext: function(entity) {
+        console.log('📝 Populating form from entity context:', entity);
+
+        // Populate basic fields
+        if (entity.name) {
+            const companyField = document.getElementById('companyName');
+            if (companyField) {
+                companyField.value = entity.company || entity.name;
+                companyField.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+
+        if (entity.email) {
+            const emailField = document.getElementById('email');
+            if (emailField) {
+                emailField.value = entity.email;
+                emailField.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+
+        if (entity.phone) {
+            const phoneField = document.getElementById('phone');
+            if (phoneField) {
+                phoneField.value = entity.phone;
+                phoneField.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+
+        // Set quote name based on entity
+        const quoteNameField = document.getElementById('quoteName');
+        if (quoteNameField && !quoteNameField.value) {
+            const quoteName = `Product Quote for ${entity.company || entity.name}`;
+            quoteNameField.value = quoteName;
+            quoteNameField.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        console.log('✅ Form populated from entity context');
+    },
+
+    /**
+     * Restore form data from context
+     */
+    restoreFormData: function(formData) {
+        console.log('🔄 Restoring form data from context...');
+
+        const fields = [
+            { id: 'quoteName', value: formData.quoteName },
+            { id: 'companyName', value: formData.companyName },
+            { id: 'email', value: formData.email },
+            { id: 'phone', value: formData.phone },
+            { id: 'customerSegment', value: formData.customerSegment },
+            { id: 'state', value: formData.state }
+        ];
+
+        fields.forEach(field => {
+            if (field.value) {
+                const element = document.getElementById(field.id);
+                if (element) {
+                    element.value = field.value;
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }
+        });
+
+        console.log('✅ Form data restored from context');
+    },
+
+    /**
+     * Restore selected products from context
+     */
+    restoreSelectedProducts: function(selectedProducts) {
+        console.log('🛍️ Restoring selected products from context:', selectedProducts);
+
+        try {
+            selectedProducts.forEach(product => {
+                // Find and select the product
+                const productElement = document.querySelector(`[data-product-id="${product.id}"]`);
+                if (productElement) {
+                    productElement.classList.add('selected');
+                    
+                    // Set quantity if available
+                    const quantityInput = productElement.querySelector('.quantity-input');
+                    if (quantityInput && product.quantity) {
+                        quantityInput.value = product.quantity;
+                    }
+                }
+            });
+
+            // Trigger calculation update if available
+            if (typeof window.updateCalculation === 'function') {
+                window.updateCalculation();
+            }
+
+            console.log('✅ Selected products restored');
+        } catch (error) {
+            console.warn('⚠️ Error restoring selected products:', error);
+        }
+    },
+
+    /**
+     * Share current context with requesting instance
+     */
+    shareCurrentContext: async function(targetLocation) {
+        console.log(`📤 Sharing current context with ${targetLocation}...`);
+
+        try {
+            const copperContext = await appState.sdk.getContext();
+            const contextData = this.extractContextData(copperContext);
+            const formData = this.getCurrentFormData();
+            const fullContext = { ...contextData, ...formData };
+
+            appState.sdk.publishMessage('customerContext', targetLocation, fullContext);
+            console.log('✅ Context shared successfully');
+        } catch (error) {
+            console.error('❌ Error sharing context:', error);
+        }
+    },
+
+    /**
+     * Handle quote saved notification from other instances
+     */
+    handleQuoteSaved: function(quoteData) {
+        console.log('💾 Quote saved notification received:', quoteData);
+
+        // Update UI to reflect saved quote
+        if (window.showNotification) {
+            window.showNotification(`Quote saved successfully: ${quoteData.quoteId || 'New Quote'}`, 'success');
+        }
+
+        // Refresh sidebar display if needed
+        if (appState.isLeftNav && typeof this.refreshSidebarDisplay === 'function') {
+            this.refreshSidebarDisplay(quoteData);
+        }
+    },
+
+    /**
+     * Publish quote saved notification to other instances
+     */
+    publishQuoteSaved: function(quoteData) {
+        if (!appState.sdk) return;
+
+        console.log('📢 Publishing quote saved notification...');
+        
+        const notificationData = {
+            quoteId: quoteData.id || quoteData.quoteId,
+            total: quoteData.total,
+            customer: quoteData.customer,
+            timestamp: new Date().toISOString(),
+            source: appState.integrationMode || 'unknown'
+        };
+
+        appState.sdk.publishMessage('quoteSaved', 'sidebar', notificationData);
+        appState.sdk.publishMessage('quoteSaved', 'activity_panel', notificationData);
+    },
+
+    /**
+     * Request context from other app instances
+     */
+    requestContextFromOtherInstances: function() {
+        if (!appState.sdk) return;
+
+        console.log('📞 Requesting context from other app instances...');
+        
+        const requestData = {
+            source: appState.integrationMode || 'unknown',
+            timestamp: new Date().toISOString()
+        };
+
+        appState.sdk.publishMessage('requestContext', 'sidebar', requestData);
+        appState.sdk.publishMessage('requestContext', 'activity_panel', requestData);
+    },
+
+    /**
+     * Enhanced fullscreen button handler with context bridge
+     */
+    enhancedOpenFullscreen: function() {
+        console.log('🖥️ Enhanced fullscreen requested...');
+        
+        if (appState.sdk && typeof appState.sdk.publishMessage === 'function') {
+            // Use context bridge for enhanced experience
+            this.openFullscreenWithContext();
+        } else {
+            // Fallback to regular fullscreen
+            console.log('📱 Fallback to regular fullscreen mode');
+            if (appState.sdk && typeof appState.sdk.showFullScreen === 'function') {
+                appState.sdk.showFullScreen();
+            } else {
+                window.open(window.location.href, '_blank');
+            }
+        }
     }
 };
 
@@ -959,7 +1388,12 @@ function openFullCalculatorModal() {
 }
 
 function saveQuoteToCRM() {
-    CopperIntegration.saveQuoteToCRM();
+    const result = CopperIntegration.saveQuoteToCRM();
+    
+    // Publish quote saved notification via context bridge
+    if (result && typeof CopperIntegration.publishQuoteSaved === 'function') {
+        CopperIntegration.publishQuoteSaved(result);
+    }
 }
 
 function createOpportunity() {
@@ -976,6 +1410,16 @@ function clearAutoPopulation() {
 
 function clearSelection() {
     CopperIntegration.clearSelection();
+}
+
+// Enhanced fullscreen with context bridge
+function openEnhancedFullscreen() {
+    CopperIntegration.enhancedOpenFullscreen();
+}
+
+// Request context from other app instances
+function requestContextFromSidebar() {
+    CopperIntegration.requestContextFromOtherInstances();
 }
 
 console.log('✅ Enhanced Copper integration module loaded successfully');
