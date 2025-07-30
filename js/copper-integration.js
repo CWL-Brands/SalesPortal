@@ -192,24 +192,12 @@ const ModalOverlayHandler = {
         
         if (this.isModalMode()) {
             console.log('✅ Modal mode detected!');
-            
-            // Extract and apply context
-            const context = this.extractModalContext();
-            if (context) {
-                // Wait for DOM to be ready, then populate
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', () => {
-                        setTimeout(() => this.populateFromModalContext(context), 500);
-                    });
-                } else {
-                    setTimeout(() => this.populateFromModalContext(context), 500);
-                }
-                
-                // Add modal-specific styling
-                this.applyModalStyling();
-            }
+            this.extractModalContext();
+            this.applyModalStyling();
+            this.setupModalBehavior();
+            this.optimizeModalDimensions();
         } else {
-            console.log('📋 Running in standard mode (not modal)');
+            console.log('🌐 Standard mode - no modal overlay needed');
         }
     },
     
