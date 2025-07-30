@@ -275,7 +275,12 @@ const ModalOverlayHandler = {
             this.setupModalBehavior();
             this.optimizeModalDimensions();
         } else {
-            console.log('🌐 Standard mode - no modal overlay needed');
+            console.log('🌐 Standard mode - checking for Activity Panel UI');
+            // Check if we're in Activity Panel mode for minimal UI
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('location') === 'activity_panel') {
+                this.setupActivityPanelUI();
+            }
         }
     },
     
@@ -345,9 +350,9 @@ const ModalOverlayHandler = {
             
             .modal-container {
                 position: relative;
-                width: 90vw;
-                height: 85vh;
-                max-width: 1200px;
+                width: 95vw;
+                height: 92vh;
+                max-width: none;
                 background: white;
                 border-radius: 12px;
                 box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -546,6 +551,169 @@ const ModalOverlayHandler = {
         // Close Copper modal if SDK available
         if (appState.sdk && typeof appState.sdk.closeModal === 'function') {
             appState.sdk.closeModal();
+        }
+    },
+    
+    // Setup Activity Panel specific UI with minimal header
+    setupActivityPanelUI: function() {
+        console.log('🎨 Setting up Activity Panel minimal UI...');
+        
+        // Hide the main app initially
+        const appContainer = document.getElementById('app');
+        if (appContainer) {
+            appContainer.style.display = 'none';
+        }
+        
+        // Create minimal Activity Panel interface
+        const activityPanelUI = document.createElement('div');
+        activityPanelUI.id = 'activityPanelUI';
+        activityPanelUI.innerHTML = `
+            <div class="activity-panel-container">
+                <div class="activity-panel-header">
+                    <div class="brand-section">
+                        <img src="assets/logo/kanva-logo.png" alt="Kanva Botanicals" class="brand-logo">
+                        <span class="brand-text">Kanva Botanicals</span>
+                    </div>
+                    <button id="activityPanelLaunchBtn" class="launch-quote-btn" onclick="ModalOverlayHandler.launchQuoteFromActivityPanel()">
+                        🚀 Launch Quote Modal
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Add Activity Panel specific styles
+        const activityPanelStyles = document.createElement('style');
+        activityPanelStyles.id = 'activityPanelStyles';
+        activityPanelStyles.textContent = `
+            #activityPanelUI {
+                width: 100%;
+                height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            }
+            
+            .activity-panel-container {
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+                padding: 24px;
+                text-align: center;
+                max-width: 400px;
+                width: 90%;
+            }
+            
+            .activity-panel-header {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+            }
+            
+            .brand-section {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .brand-logo {
+                height: 32px;
+                width: auto;
+            }
+            
+            .brand-text {
+                font-size: 18px;
+                font-weight: 600;
+                color: #1f2937;
+            }
+            
+            .launch-quote-btn {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            }
+            
+            .launch-quote-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            }
+            
+            .launch-quote-btn:active {
+                transform: translateY(0);
+            }
+        `;
+        
+        // Append styles and UI to document
+        document.head.appendChild(activityPanelStyles);
+        document.body.appendChild(activityPanelUI);
+        
+        console.log('✅ Activity Panel minimal UI created');
+    },
+    
+    // Launch quote modal from Activity Panel with current context
+    launchQuoteFromActivityPanel: function() {
+        console.log('🚀 Launching quote modal from Activity Panel...');
+        
+        // Get current Copper context before launching modal
+        if (typeof appState !== 'undefined' && appState.sdk) {
+            console.log('📊 Getting current context for modal launch...');
+            
+            appState.sdk.getContext()
+                .then(({ type, context }) => {
+                    console.log('📊 Context received for modal launch:', { type, context });
+                    
+                    if (context && context.entity) {
+                        const entity = context.entity;
+                        
+                        // Prepare modal parameters with current entity data
+                        const modalParams = {
+                            entity_type: type,
+                            entity_id: entity.id,
+                            entity_name: entity.name || entity.company_name || '',
+                            entity_email: entity.email || (entity.emails && entity.emails[0] ? entity.emails[0].email || entity.emails[0] : ''),
+                            entity_phone: entity.phone_number || (entity.phone_numbers && entity.phone_numbers[0] ? entity.phone_numbers[0].number || entity.phone_numbers[0] : ''),
+                            entity_state: entity.address?.state || '',
+                            company_name: type === 'company' ? entity.name : (entity.company?.name || entity.company_name || '')
+                        };
+                        
+                        console.log('📊 Modal parameters prepared:', modalParams);
+                        
+                        // Build modal URL with parameters
+                        const baseUrl = window.location.origin + window.location.pathname;
+                        const modalUrl = baseUrl + '?location=modal&' + new URLSearchParams(modalParams).toString();
+                        
+                        console.log('🚀 Launching modal with URL:', modalUrl);
+                        
+                        // Launch modal with Copper SDK
+                        if (typeof appState.sdk.showModal === 'function') {
+                            appState.sdk.showModal(modalParams);
+                        } else {
+                            console.warn('⚠️ showModal not available, opening in new window');
+                            window.open(modalUrl, '_blank', 'width=1200,height=800');
+                        }
+                    } else {
+                        console.warn('⚠️ No entity context available, launching empty modal');
+                        appState.sdk.showModal({ location: 'modal' });
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Error getting context for modal launch:', error);
+                    // Fallback: launch modal without context
+                    if (appState.sdk && typeof appState.sdk.showModal === 'function') {
+                        appState.sdk.showModal({ location: 'modal' });
+                    }
+                });
+        } else {
+            console.warn('⚠️ Copper SDK not available for modal launch');
         }
     }
 };
