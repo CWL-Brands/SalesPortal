@@ -278,8 +278,23 @@ const ModalOverlayHandler = {
             console.log('🌐 Standard mode - checking for Activity Panel UI');
             // Check if we're in Activity Panel mode for minimal UI
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('location') === 'activity_panel') {
+            const isInIframe = window.self !== window.top;
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            const copperReferrer = document.referrer.includes('copper.com') || document.referrer.includes('prosperworks.com');
+            const hasCopperSDK = typeof window.Copper !== 'undefined';
+            
+            // Multiple detection methods for Activity Panel
+            const isActivityPanel = urlParams.get('location') === 'activity_panel' || 
+                                  (isInIframe && (windowWidth < 800 || windowHeight < 600)) ||
+                                  copperReferrer ||
+                                  (hasCopperSDK && !isInIframe); // SDK present but not in large iframe
+            
+            if (isActivityPanel) {
+                console.log('🎯 Activity Panel mode detected - setting up minimal UI');
                 this.setupActivityPanelUI();
+            } else {
+                console.log('📱 Standard/Sidebar mode - keeping full interface');
             }
         }
     },
@@ -989,10 +1004,13 @@ const CopperIntegration = {
                 // Secondary detection: iframe context and dimensions
                 if (isInIframe) {
                     // Activity Panel is typically in an iframe with constrained dimensions
-                    if (windowWidth < 800 || windowHeight < 600) {
+                    // OR if we detect Copper CRM referrer patterns
+                    const copperReferrer = document.referrer.includes('copper.com') || document.referrer.includes('prosperworks.com');
+                    
+                    if ((windowWidth < 800 || windowHeight < 600) || copperReferrer) {
                         appState.integrationMode = 'activity_panel';
                         appState.isActivityPanel = true;
-                        console.log('📍 Activity panel mode detected (iframe + dimensions)');
+                        console.log('📍 Activity panel mode detected (iframe + dimensions/referrer)');
                         this.showLaunchModalButton();
                     } else {
                         // Larger iframe might be left nav fullscreen
@@ -1001,9 +1019,17 @@ const CopperIntegration = {
                         console.log('📍 Left navigation mode detected (large iframe)');
                     }
                 } else {
-                    // Not in iframe, assume embedded mode
-                    appState.integrationMode = 'embedded';
-                    console.log('📍 Generic embedded mode detected');
+                    // FALLBACK: If we have Copper SDK but no iframe, assume Activity Panel
+                    // This handles cases where Copper embeds without iframe detection
+                    if (hasCopperSDK) {
+                        appState.integrationMode = 'activity_panel';
+                        appState.isActivityPanel = true;
+                        console.log('📍 Activity panel mode detected (SDK fallback)');
+                        this.showLaunchModalButton();
+                    } else {
+                        appState.integrationMode = 'embedded';
+                        console.log('📍 Generic embedded mode detected');
+                    }
                 }
             }
         } else {
