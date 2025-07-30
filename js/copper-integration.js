@@ -300,7 +300,200 @@ const ModalOverlayHandler = {
     closeModal: function() {
         if (appState.sdk && typeof appState.sdk.closeModal === 'function') {
             appState.sdk.closeModal();
+        } else {
+            // For non-Copper environments, try to close the custom modal
+            const modalOverlay = document.getElementById('copperModalOverlay');
+            if (modalOverlay) {
+                modalOverlay.remove();
+                document.body.classList.remove('modal-open');
+            }
         }
+    },
+
+    /**
+     * Create and display a full-screen modal overlay
+     */
+    createFullScreenModal: function() {
+        console.log('🖥️ Creating full-screen modal overlay...');
+        
+        // Don't create duplicate modals
+        if (document.getElementById('copperModalOverlay')) {
+            return;
+        }
+        
+        // Create modal overlay
+        const modalOverlay = document.createElement('div');
+        modalOverlay.id = 'copperModalOverlay';
+        modalOverlay.className = 'copper-modal-overlay';
+        modalOverlay.innerHTML = `
+            <div class="modal-backdrop"></div>
+            <div class="modal-container" id="modalContainer">
+                <div class="modal-header" id="modalHeader" style="background-color: #93D500;">
+                    <div class="modal-title">
+                        <img src="assets/logo/kanva-logo.png" alt="Kanva" class="modal-logo">
+                        <span>Kanva Quote Generator</span>
+                    </div>
+                    <div class="modal-controls">
+                        <button class="modal-minimize" onclick="ModalOverlayHandler.minimizeModal()" title="Minimize">−</button>
+                        <button class="modal-maximize" onclick="ModalOverlayHandler.maximizeModal()" title="Maximize">□</button>
+                        <button class="modal-close" onclick="ModalOverlayHandler.closeModal()" title="Close">×</button>
+                    </div>
+                </div>
+                <div class="modal-content" id="modalContent">
+                    <!-- App content will be moved here -->
+                </div>
+            </div>
+        `;
+        
+        // Add to document
+        document.body.appendChild(modalOverlay);
+        document.body.classList.add('modal-open');
+        
+        // Move the app container into the modal content
+        const appContainer = document.getElementById('app-container');
+        const modalContent = document.getElementById('modalContent');
+        
+        if (appContainer && modalContent) {
+            // Store original parent for restoring later
+            appContainer._originalParent = appContainer.parentNode;
+            appContainer._originalNextSibling = appContainer.nextSibling;
+            
+            // Move into modal
+            modalContent.appendChild(appContainer);
+        }
+        
+        // Make the modal draggable
+        this.makeDraggable(document.getElementById('modalContainer'), document.getElementById('modalHeader'));
+        
+        return modalOverlay;
+    },
+    
+    /**
+     * Minimize the modal
+     */
+    minimizeModal: function() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.classList.toggle('minimized');
+        }
+    },
+    
+    /**
+     * Maximize the modal
+     */
+    maximizeModal: function() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.classList.toggle('maximized');
+        }
+    },
+    
+    /**
+     * Make an element draggable
+     */
+    makeDraggable: function(element, handle) {
+        if (!element) return;
+        
+        const dragHandle = handle || element;
+        let offsetX = 0, offsetY = 0;
+        
+        const onMouseDown = function(e) {
+            e.preventDefault();
+            
+            // Get the current position
+            offsetX = e.clientX - element.getBoundingClientRect().left;
+            offsetY = e.clientY - element.getBoundingClientRect().top;
+            
+            // Change cursor style
+            document.body.style.cursor = 'grabbing';
+            dragHandle.style.cursor = 'grabbing';
+            
+            // Add event listeners for movement and release
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            
+            // Disable text selection during drag
+            dragHandle.style.userSelect = 'none';
+        };
+        
+        const onMouseMove = function(e) {
+            e.preventDefault();
+            
+            // Calculate new position with boundary constraints
+            let newX = e.clientX - offsetX;
+            let newY = e.clientY - offsetY;
+            
+            // Apply boundary constraints
+            const maxX = window.innerWidth - element.offsetWidth;
+            const maxY = window.innerHeight - element.offsetHeight;
+            
+            newX = Math.max(0, Math.min(newX, maxX));
+            newY = Math.max(0, Math.min(newY, maxY));
+            
+            // Update position
+            element.style.left = newX + 'px';
+            element.style.top = newY + 'px';
+        };
+        
+        const onMouseUp = function() {
+            // Remove event listeners
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            
+            // Reset cursor style
+            document.body.style.cursor = 'auto';
+            dragHandle.style.cursor = 'grab';
+            dragHandle.style.userSelect = '';
+        };
+        
+        // Add mouse event listeners
+        dragHandle.addEventListener('mousedown', onMouseDown);
+        
+        // Add touch event listeners for mobile
+        dragHandle.addEventListener('touchstart', function(e) {
+            const touch = e.touches[0];
+            offsetX = touch.clientX - element.getBoundingClientRect().left;
+            offsetY = touch.clientY - element.getBoundingClientRect().top;
+            
+            document.addEventListener('touchmove', onTouchMove);
+            document.addEventListener('touchend', onTouchEnd);
+        });
+        
+        const onTouchMove = function(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            
+            let newX = touch.clientX - offsetX;
+            let newY = touch.clientY - offsetY;
+            
+            // Apply boundary constraints
+            const maxX = window.innerWidth - element.offsetWidth;
+            const maxY = window.innerHeight - element.offsetHeight;
+            
+            newX = Math.max(0, Math.min(newX, maxX));
+            newY = Math.max(0, Math.min(newY, maxY));
+            
+            element.style.left = newX + 'px';
+            element.style.top = newY + 'px';
+        };
+        
+        const onTouchEnd = function() {
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+        };
+        
+        // Reset position on window resize
+        window.addEventListener('resize', function() {
+            // Center the element
+            element.style.left = ((window.innerWidth - element.offsetWidth) / 2) + 'px';
+            element.style.top = ((window.innerHeight - element.offsetHeight) / 2) + 'px';
+        });
+        
+        // Initialize position
+        element.style.position = 'fixed';
+        element.style.left = ((window.innerWidth - element.offsetWidth) / 2) + 'px';
+        element.style.top = ((window.innerHeight - element.offsetHeight) / 2) + 'px';
+        dragHandle.style.cursor = 'grab';
     }
 };
 
@@ -1271,13 +1464,7 @@ function searchCustomers(query) {
     CopperIntegration.searchCustomers(query);
 }
 
-function openEnhancedFullscreen() {
-    if (appState.sdk && typeof appState.sdk.showFullScreen === 'function') {
-        appState.sdk.showFullScreen();
-    } else {
-        window.open(window.location.href, '_blank');
-    }
-}
+// Function removed - FULL SCREEN button functionality removed from UI
 
 function launchQuoteModal() {
     if (!appState.sdk) {
