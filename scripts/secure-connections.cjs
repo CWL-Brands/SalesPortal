@@ -8,13 +8,11 @@
  * 3. Provides methods to update connections while keeping sensitive data secure
  */
 
-import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+const dotenv = require('dotenv');
+const fs = require('fs');
+const path = require('path');
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// __dirname is already available in CommonJS
 
 dotenv.config();
 
@@ -221,14 +219,14 @@ function updateEnvFile(section, key, value) {
 }
 
 // Export functions for use in other modules
-export {
+module.exports = {
   secureConnections,
   createSanitizedConnections,
   updateConnections
 };
 
 // Run the script if this is the main module
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (require.main === module) {
   secureConnections();
   createSanitizedConnections();
 }
