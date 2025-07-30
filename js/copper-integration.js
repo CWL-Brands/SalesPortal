@@ -325,9 +325,9 @@ const ModalOverlayHandler = {
         
         console.log(`📏 Browser viewport size: ${viewportWidth}x${viewportHeight}`);
         
-        // Calculate optimal modal dimensions (80% of viewport for smaller screens, 90% for larger)
-        const modalWidth = viewportWidth > 1200 ? Math.min(1400, viewportWidth * 0.9) : viewportWidth * 0.8;
-        const modalHeight = viewportHeight * 0.9;
+        // Always use full screen dimensions (95% of viewport) for better visibility
+        const modalWidth = viewportWidth * 0.95; // Always 95% of viewport width
+        const modalHeight = viewportHeight * 0.95; // Always 95% of viewport height
         
         // Create modal overlay
         const modalOverlay = document.createElement('div');
@@ -361,8 +361,8 @@ const ModalOverlayHandler = {
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 100vw;
-                height: 100vh;
+                width: 2000px;
+                height: 2000px;
                 z-index: 10000;
                 display: flex;
                 align-items: center;
@@ -385,8 +385,8 @@ const ModalOverlayHandler = {
                 position: relative;
                 width: ${modalWidth}px; /* Dynamic width based on viewport */
                 height: ${modalHeight}px; /* Dynamic height based on viewport */
-                max-width: 95vw;
-                max-height: 95vh;
+                max-width: 2000px;
+                max-height: 2000px;
                 background: white;
                 border-radius: 12px;
                 box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
@@ -403,7 +403,7 @@ const ModalOverlayHandler = {
             }
             
             .modal-header {
-                background: linear-gradient(135deg, #f5793b 0%, #ff4e50 100%); /* Kanva orange gradient */
+                background: linear-gradient(135deg, #93D500 0%, #1f7a51 100%); /* Kanva Green gradient */
                 color: white;
                 padding: 12px 20px;
                 display: flex;
@@ -1252,12 +1252,13 @@ const CopperIntegration = {
     showLaunchModalButton: function() {
         console.log('🚀 Showing Launch Modal button for Activity Panel mode...');
         
-        const launchModalBtn = document.getElementById('launchModalBtn');
+        const launchModalBtn = document.getElementById('launchQuoteModalBtn');
         if (launchModalBtn) {
             launchModalBtn.style.display = 'inline-block';
-            console.log('✅ Launch Modal button is now visible');
+            console.log('✅ Launch Quote Modal button is now visible');
         } else {
-            console.warn('⚠️ Launch Modal button not found in DOM');
+            console.warn('⚠️ Launch Quote Modal button not found in DOM, will attempt to create');
+            this.createLaunchModalButton();
         }
         
         // Also hide fullscreen button in Activity Panel mode since modal is preferred
@@ -1266,6 +1267,38 @@ const CopperIntegration = {
             fullscreenBtn.style.display = 'none';
             console.log('📱 Fullscreen button hidden in Activity Panel mode');
         }
+    },
+    
+    /**
+     * Dynamically create the Launch Quote Modal button if it doesn't exist
+     * Placed in the header for better visibility
+     */
+    createLaunchModalButton: function() {
+        console.log('💻 Creating Launch Quote Modal button dynamically...');
+        
+        // Find header actions container
+        const headerActions = document.querySelector('.header-actions');
+        if (!headerActions) {
+            console.error('❌ Cannot create Launch Quote Modal button: header-actions not found');
+            return;
+        }
+        
+        // Create the button
+        const button = document.createElement('button');
+        button.id = 'launchQuoteModalBtn';
+        button.className = 'btn btn-success btn-sm';
+        button.innerHTML = '<i class="fas fa-external-link-alt"></i> Launch Quote Modal';
+        button.title = 'Open Quote in Modal';
+        button.onclick = () => ModalOverlayHandler.openFullScreenModal();
+        
+        // Insert at the beginning of header actions
+        if (headerActions.firstChild) {
+            headerActions.insertBefore(button, headerActions.firstChild);
+        } else {
+            headerActions.appendChild(button);
+        }
+        
+        console.log('✅ Launch Quote Modal button created and added to header');
     },
 
     // Enable customer search functionality for left nav mode
