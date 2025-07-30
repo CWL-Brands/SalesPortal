@@ -10,81 +10,159 @@ const ModalOverlayHandler = {
         return urlParams.get('location') === 'modal';
     },
     
-    // Extract context from modal launch parameters
+    /**
+     * Extract context from Copper SDK (not URL parameters)
+     */
     extractModalContext: function() {
+        console.log('🖥️ Modal mode detected - extracting context from Copper SDK...');
+        
+        // First check URL parameters for any passed data
         const urlParams = new URLSearchParams(window.location.search);
-        
-        if (!this.isModalMode()) {
-            return null;
-        }
-        
-        console.log('🖥️ Modal mode detected - extracting context...');
-        
-        const context = {
-            action: urlParams.get('action') || 'generateQuote',
-            entityId: urlParams.get('entityId'),
-            entityType: urlParams.get('entityType'),
-            entityName: urlParams.get('entityName'),
-            entityEmail: urlParams.get('entityEmail'),
-            entityPhone: urlParams.get('entityPhone'),
-            entityAddress: urlParams.get('entityAddress'),
-            entityState: urlParams.get('entityState'),
-            // Additional context data
-            companyName: urlParams.get('companyName'),
-            contactName: urlParams.get('contactName'),
-            isModal: true
+        const urlContext = {
+            entity_type: urlParams.get('entity_type'),
+            entity_id: urlParams.get('entity_id'),
+            entity_name: urlParams.get('entity_name'),
+            entity_email: urlParams.get('entity_email'),
+            entity_phone: urlParams.get('entity_phone'),
+            entity_state: urlParams.get('entity_state')
         };
         
-        console.log('🎯 Modal context extracted:', context);
-        return context;
+        console.log('🔗 URL parameters:', urlContext);
+        
+        // If we have URL parameters, use them (passed from modal launch)
+        if (urlContext.entity_id || urlContext.entity_name) {
+            const context = {
+                entityId: urlContext.entity_id,
+                entityType: urlContext.entity_type,
+                entityName: urlContext.entity_name,
+                companyName: urlContext.entity_name,
+                entityEmail: urlContext.entity_email,
+                entityPhone: urlContext.entity_phone,
+                entityState: urlContext.entity_state,
+                isModal: true
+            };
+            
+            console.log('🎯 Modal context from URL parameters:', context);
+            this.populateFromModalContext(context);
+            return context;
+        }
+        
+        // Fallback: Try to get context from Copper SDK directly
+        if (typeof window.Copper !== 'undefined') {
+            console.log('🔍 Attempting to get context from Copper SDK...');
+            
+            try {
+                const sdk = window.Copper.init();
+                sdk.getContext()
+                    .then(({ type, context }) => {
+                        console.log('📊 Copper SDK context response:', { type, context });
+                        
+                        if (context && context.entity) {
+                            const entity = context.entity;
+                            const extractedContext = {
+                                entityId: entity.id,
+                                entityType: type,
+                                entityName: entity.name || entity.company_name,
+                                companyName: entity.name || entity.company_name,
+                                entityEmail: entity.email,
+                                entityPhone: entity.phone_number,
+                                entityState: entity.address?.state,
+                                entityAddress: entity.address,
+                                isModal: true
+                            };
+                            
+                            console.log('🎯 Context extracted from SDK:', extractedContext);
+                            this.populateFromModalContext(extractedContext);
+                            return extractedContext;
+                        }
+                    })
+                    .catch(error => {
+                        console.warn('⚠️ Error getting context from SDK:', error);
+                    });
+            } catch (error) {
+                console.warn('⚠️ Error initializing SDK for context:', error);
+            }
+        }
+        
+        // Return empty context if nothing found
+        console.log('⚠️ No context data available');
+        return { isModal: true };
     },
     
     // Auto-populate form from modal context
     populateFromModalContext: function(context) {
-        if (!context) return;
+        if (!context || !context.isModal) {
+            return;
+        }
         
-        console.log('📋 Auto-populating form from modal context...');
+        console.log('🔄 Populating form from modal context:', context);
         
-        // Populate customer information
+        // Map of context fields to form field IDs
+        const fieldMappings = {
+            // Company/Entity name
+            companyName: ['companyName', 'company-name'],
+            entityName: ['companyName', 'company-name'],
+            
+            // Contact email
+            entityEmail: ['customerEmail', 'customer-email', 'contactEmail'],
+            
+            // Contact phone
+            entityPhone: ['customerPhone', 'customer-phone', 'contactPhone'],
+            
+            // Address/State
+            entityState: ['customerState', 'customer-state', 'state'],
+            
+            // Contact name (if separate from company)
+            contactName: ['contactName', 'contact-name', 'customerName']
+        };
+        
+        // Helper function to find and populate field
+        const populateField = (contextKey, contextValue) => {
+            if (!contextValue) return false;
+            
+            const possibleIds = fieldMappings[contextKey] || [contextKey];
+            
+            for (const fieldId of possibleIds) {
+                const field = document.getElementById(fieldId) || document.querySelector(`[name="${fieldId}"]`);
+                if (field) {
+                    field.value = contextValue;
+                    console.log(`✅ ${contextKey} populated in field '${fieldId}':`, contextValue);
+                    return true;
+                }
+            }
+            
+            console.warn(`⚠️ No field found for ${contextKey}:`, contextValue);
+            return false;
+        };
+        
+        // Populate all available context fields
+        let populatedCount = 0;
+        
+        // Company/Entity name (prioritize companyName over entityName)
         if (context.companyName || context.entityName) {
-            const companyField = document.getElementById('companyName');
-            if (companyField) {
-                companyField.value = context.companyName || context.entityName;
-                console.log('✅ Company name populated:', companyField.value);
+            if (populateField('companyName', context.companyName || context.entityName)) {
+                populatedCount++;
             }
         }
         
-        if (context.contactName) {
-            const quoteNameField = document.getElementById('quoteName');
-            if (quoteNameField) {
-                quoteNameField.value = `Quote for ${context.contactName}`;
-                console.log('✅ Quote name populated:', quoteNameField.value);
-            }
-        }
-        
+        // Contact email
         if (context.entityEmail) {
-            const emailField = document.getElementById('customerEmail');
-            if (emailField) {
-                emailField.value = context.entityEmail;
-                console.log('✅ Email populated:', emailField.value);
+            if (populateField('entityEmail', context.entityEmail)) {
+                populatedCount++;
             }
         }
         
+        // Contact phone
         if (context.entityPhone) {
-            const phoneField = document.getElementById('customerPhone');
-            if (phoneField) {
-                phoneField.value = context.entityPhone;
-                console.log('✅ Phone populated:', phoneField.value);
+            if (populateField('entityPhone', context.entityPhone)) {
+                populatedCount++;
             }
         }
         
+        // State
         if (context.entityState) {
-            const stateField = document.getElementById('customerState');
-            if (stateField) {
-                stateField.value = context.entityState;
-                console.log('✅ State populated:', stateField.value);
-                // Trigger change event to update shipping
-                stateField.dispatchEvent(new Event('change'));
+            if (populateField('entityState', context.entityState)) {
+                populatedCount++;
             }
         }
         
@@ -393,32 +471,52 @@ const CopperIntegration = {
             console.log('✅ Copper SDK detected');
             appState.isEmbedded = true;
             
-            // Detect specific embedding location
+            // Multiple detection methods for reliability
             const urlParams = new URLSearchParams(window.location.search);
             const location = urlParams.get('location');
+            const isInIframe = window.self !== window.top;
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
             
+            console.log('🔍 Detection data:', {
+                location,
+                isInIframe,
+                windowWidth,
+                windowHeight,
+                referrer: document.referrer
+            });
+            
+            // Primary detection: URL parameter
             if (location === 'left_nav') {
                 appState.integrationMode = 'left_nav';
                 appState.isLeftNav = true;
-                console.log('📍 Left navigation mode detected');
+                console.log('📍 Left navigation mode detected (URL param)');
             } else if (location === 'activity_panel') {
                 appState.integrationMode = 'activity_panel';
                 appState.isActivityPanel = true;
-                console.log('📍 Activity panel mode detected');
+                console.log('📍 Activity panel mode detected (URL param)');
                 this.showLaunchModalButton();
             } else if (location === 'action_bar') {
                 appState.integrationMode = 'action_bar';
                 appState.isActionBar = true;
-                console.log('📍 Action bar mode detected');
+                console.log('📍 Action bar mode detected (URL param)');
             } else {
-                // Try to detect based on iframe context or other indicators
-                // Check if we're in an iframe (likely Activity Panel)
-                if (window.self !== window.top) {
-                    appState.integrationMode = 'activity_panel';
-                    appState.isActivityPanel = true;
-                    console.log('📍 Activity panel mode detected (iframe)');
-                    this.showLaunchModalButton();
+                // Secondary detection: iframe context and dimensions
+                if (isInIframe) {
+                    // Activity Panel is typically in an iframe with constrained dimensions
+                    if (windowWidth < 800 || windowHeight < 600) {
+                        appState.integrationMode = 'activity_panel';
+                        appState.isActivityPanel = true;
+                        console.log('📍 Activity panel mode detected (iframe + dimensions)');
+                        this.showLaunchModalButton();
+                    } else {
+                        // Larger iframe might be left nav fullscreen
+                        appState.integrationMode = 'left_nav';
+                        appState.isLeftNav = true;
+                        console.log('📍 Left navigation mode detected (large iframe)');
+                    }
                 } else {
+                    // Not in iframe, assume embedded mode
                     appState.integrationMode = 'embedded';
                     console.log('📍 Generic embedded mode detected');
                 }
