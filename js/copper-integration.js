@@ -394,26 +394,76 @@ const CopperIntegration = {
             });
     },
 
-    // Detect what kind of integration mode we're in
-    detectIntegrationMode: function(context) {
-        appState.integrationMode = 'left_nav'; // Default
+    /**
+     * Detect integration mode and set up appropriate UI
+     */
+    detectIntegrationMode: function() {
+        console.log('🔍 Detecting Copper CRM integration mode...');
         
-        if (context && context.location) {
-            if (context.location.includes('activity_panel')) {
-                appState.integrationMode = 'activity_panel';
-                appState.isActivityPanel = true;
-                console.log('📍 Activity panel mode: Context-aware auto-population');
-            } else if (context.location.includes('left_nav')) {
+        // Check if running inside Copper CRM
+        if (typeof window.Copper !== 'undefined') {
+            console.log('✅ Copper SDK detected');
+            appState.isEmbedded = true;
+            
+            // Detect specific embedding location
+            const urlParams = new URLSearchParams(window.location.search);
+            const location = urlParams.get('location');
+            
+            if (location === 'left_nav') {
                 appState.integrationMode = 'left_nav';
                 appState.isLeftNav = true;
-                console.log('📍 Left navigation mode: Universal access with search');
+                console.log('📍 Left navigation mode detected');
+            } else if (location === 'activity_panel') {
+                appState.integrationMode = 'activity_panel';
+                appState.isActivityPanel = true;
+                console.log('📍 Activity panel mode detected');
+                this.showLaunchModalButton();
+            } else if (location === 'action_bar') {
+                appState.integrationMode = 'action_bar';
+                appState.isActionBar = true;
+                console.log('📍 Action bar mode detected');
+            } else {
+                // Try to detect based on iframe context or other indicators
+                // Check if we're in an iframe (likely Activity Panel)
+                if (window.self !== window.top) {
+                    appState.integrationMode = 'activity_panel';
+                    appState.isActivityPanel = true;
+                    console.log('📍 Activity panel mode detected (iframe)');
+                    this.showLaunchModalButton();
+                } else {
+                    appState.integrationMode = 'embedded';
+                    console.log('📍 Generic embedded mode detected');
+                }
             }
+        } else {
+            console.log('🌐 Standalone mode - no Copper SDK detected');
+            appState.isEmbedded = false;
+            appState.integrationMode = 'standalone';
         }
         
-        // Check for entity context regardless of location
-        if (context && context.context && context.context.entity) {
-            appState.contextEntity = context.context.entity;
-            console.log(`📍 Entity context: ${context.context.entity.type} - ${context.context.entity.name}`);
+        console.log(`🎯 Integration mode: ${appState.integrationMode}`);
+        return appState.integrationMode;
+    },
+
+    /**
+     * Show Launch Modal button for Activity Panel mode
+     */
+    showLaunchModalButton: function() {
+        console.log('🚀 Showing Launch Modal button for Activity Panel mode...');
+        
+        const launchModalBtn = document.getElementById('launchModalBtn');
+        if (launchModalBtn) {
+            launchModalBtn.style.display = 'inline-block';
+            console.log('✅ Launch Modal button is now visible');
+        } else {
+            console.warn('⚠️ Launch Modal button not found in DOM');
+        }
+        
+        // Also hide fullscreen button in Activity Panel mode since modal is preferred
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        if (fullscreenBtn) {
+            fullscreenBtn.style.display = 'none';
+            console.log('📱 Fullscreen button hidden in Activity Panel mode');
         }
     },
 
@@ -1843,6 +1893,72 @@ function getSelectedProducts() {
     }
     
     return products.length > 0 ? products : ['Selected Products'];
+}
+
+// Launch quote modal from Activity Panel
+function launchQuoteModal() {
+    console.log('🚀 Launching quote modal from Activity Panel...');
+    
+    if (!appState.sdk) {
+        console.error('❌ Copper SDK not available for modal launch');
+        alert('Copper SDK not available. Please refresh and try again.');
+        return;
+    }
+    
+    // Get current customer context
+    appState.sdk.getContext()
+        .then((context) => {
+            console.log('📋 Current context for modal:', context);
+            
+            // Extract customer data from context
+            let customerData = {};
+            if (context && context.context && context.context.entity) {
+                const entity = context.context.entity;
+                customerData = {
+                    customer_id: entity.id,
+                    company: entity.name || entity.company_name,
+                    email: entity.email,
+                    phone: entity.phone_number,
+                    address: entity.address ? `${entity.address.street}, ${entity.address.city}, ${entity.address.state}` : ''
+                };
+            }
+            
+            // Build modal URL with context
+            const baseUrl = window.location.origin + window.location.pathname;
+            const params = new URLSearchParams({
+                location: 'modal',
+                ...customerData
+            });
+            const modalUrl = `${baseUrl}?${params.toString()}`;
+            
+            console.log('🔗 Modal URL:', modalUrl);
+            
+            // Launch modal
+            appState.sdk.showModal({
+                url: modalUrl,
+                width: 900,
+                height: 700,
+                title: 'Generate Quote - Kanva Botanicals'
+            });
+            
+            console.log('✅ Modal launched successfully');
+        })
+        .catch((error) => {
+            console.error('❌ Error getting context for modal:', error);
+            
+            // Fallback: launch modal without context
+            const baseUrl = window.location.origin + window.location.pathname;
+            const modalUrl = `${baseUrl}?location=modal`;
+            
+            appState.sdk.showModal({
+                url: modalUrl,
+                width: 900,
+                height: 700,
+                title: 'Generate Quote - Kanva Botanicals'
+            });
+            
+            console.log('⚠️ Modal launched without context due to error');
+        });
 }
 
 console.log('✅ Enhanced Copper integration module loaded successfully');
