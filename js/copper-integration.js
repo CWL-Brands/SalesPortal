@@ -1,5 +1,247 @@
 // Enhanced Copper CRM integration with Auto-Population for Activity Panel
 // FIXED: Single customer lookup section only
+// MODAL OVERLAY SUPPORT: Seamless UX with context extraction
+
+// Modal Overlay Detection and Context Extraction
+const ModalOverlayHandler = {
+    // Check if running in modal mode
+    isModalMode: function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('location') === 'modal';
+    },
+    
+    // Extract context from modal launch parameters
+    extractModalContext: function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        if (!this.isModalMode()) {
+            return null;
+        }
+        
+        console.log('🖥️ Modal mode detected - extracting context...');
+        
+        const context = {
+            action: urlParams.get('action') || 'generateQuote',
+            entityId: urlParams.get('entityId'),
+            entityType: urlParams.get('entityType'),
+            entityName: urlParams.get('entityName'),
+            entityEmail: urlParams.get('entityEmail'),
+            entityPhone: urlParams.get('entityPhone'),
+            entityAddress: urlParams.get('entityAddress'),
+            entityState: urlParams.get('entityState'),
+            // Additional context data
+            companyName: urlParams.get('companyName'),
+            contactName: urlParams.get('contactName'),
+            isModal: true
+        };
+        
+        console.log('🎯 Modal context extracted:', context);
+        return context;
+    },
+    
+    // Auto-populate form from modal context
+    populateFromModalContext: function(context) {
+        if (!context) return;
+        
+        console.log('📋 Auto-populating form from modal context...');
+        
+        // Populate customer information
+        if (context.companyName || context.entityName) {
+            const companyField = document.getElementById('companyName');
+            if (companyField) {
+                companyField.value = context.companyName || context.entityName;
+                console.log('✅ Company name populated:', companyField.value);
+            }
+        }
+        
+        if (context.contactName) {
+            const quoteNameField = document.getElementById('quoteName');
+            if (quoteNameField) {
+                quoteNameField.value = `Quote for ${context.contactName}`;
+                console.log('✅ Quote name populated:', quoteNameField.value);
+            }
+        }
+        
+        if (context.entityEmail) {
+            const emailField = document.getElementById('customerEmail');
+            if (emailField) {
+                emailField.value = context.entityEmail;
+                console.log('✅ Email populated:', emailField.value);
+            }
+        }
+        
+        if (context.entityPhone) {
+            const phoneField = document.getElementById('customerPhone');
+            if (phoneField) {
+                phoneField.value = context.entityPhone;
+                console.log('✅ Phone populated:', phoneField.value);
+            }
+        }
+        
+        if (context.entityState) {
+            const stateField = document.getElementById('customerState');
+            if (stateField) {
+                stateField.value = context.entityState;
+                console.log('✅ State populated:', stateField.value);
+                // Trigger change event to update shipping
+                stateField.dispatchEvent(new Event('change'));
+            }
+        }
+        
+        // Set customer segment based on entity type
+        if (context.entityType) {
+            const segmentField = document.getElementById('customerSegment');
+            if (segmentField) {
+                // Map entity types to customer segments
+                const segmentMap = {
+                    'company': 'distributor',
+                    'person': 'retailer',
+                    'lead': 'direct'
+                };
+                const segment = segmentMap[context.entityType.toLowerCase()] || 'distributor';
+                segmentField.value = segment;
+                console.log('✅ Customer segment set:', segment);
+            }
+        }
+        
+        // Store context for later use (quote saving)
+        window.modalContext = context;
+        console.log('✅ Modal context stored for quote saving');
+    },
+    
+    // Save quote as Copper activity
+    saveQuoteAsActivity: function(quoteData) {
+        if (!this.isModalMode() || !window.modalContext) {
+            console.log('⚠️ Not in modal mode or no context - skipping activity save');
+            return;
+        }
+        
+        console.log('💾 Saving quote as Copper activity...');
+        
+        // Check if Copper SDK is available
+        if (typeof window.Copper === 'undefined') {
+            console.warn('⚠️ Copper SDK not available - cannot save activity');
+            return;
+        }
+        
+        try {
+            const sdk = window.Copper.init();
+            
+            // Format activity details
+            const activityDetails = `Quote Generated: ${quoteData.quoteName}\n` +
+                                  `Company: ${quoteData.companyName}\n` +
+                                  `Total: ${quoteData.totalAmount}\n` +
+                                  `Products: ${quoteData.products.join(', ')}\n` +
+                                  `Generated via Kanva Quote Tool`;
+            
+            // Save as activity (type 0 = note)
+            sdk.logActivity(0, activityDetails);
+            console.log('✅ Quote saved as Copper activity');
+            
+            // Show success notification
+            this.showModalNotification('Quote saved to CRM!', 'success');
+            
+            // Close modal after short delay
+            setTimeout(() => {
+                sdk.closeModal();
+                console.log('✅ Modal closed after quote save');
+            }, 2000);
+            
+        } catch (error) {
+            console.error('❌ Error saving quote as activity:', error);
+            this.showModalNotification('Error saving to CRM', 'error');
+        }
+    },
+    
+    // Show notification in modal
+    showModalNotification: function(message, type = 'info') {
+        // Create or update notification element
+        let notification = document.getElementById('modalNotification');
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.id = 'modalNotification';
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 6px;
+                color: white;
+                font-weight: bold;
+                z-index: 10000;
+                transition: opacity 0.3s ease;
+            `;
+            document.body.appendChild(notification);
+        }
+        
+        // Set message and style based on type
+        notification.textContent = message;
+        notification.style.backgroundColor = type === 'success' ? '#10B981' : 
+                                           type === 'error' ? '#EF4444' : '#3B82F6';
+        notification.style.opacity = '1';
+        
+        // Auto-hide after 3 seconds
+        setTimeout(() => {
+            notification.style.opacity = '0';
+        }, 3000);
+    },
+    
+    // Initialize modal overlay handler
+    initialize: function() {
+        console.log('🖥️ Initializing Modal Overlay Handler...');
+        
+        if (this.isModalMode()) {
+            console.log('✅ Modal mode detected!');
+            
+            // Extract and apply context
+            const context = this.extractModalContext();
+            if (context) {
+                // Wait for DOM to be ready, then populate
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => {
+                        setTimeout(() => this.populateFromModalContext(context), 500);
+                    });
+                } else {
+                    setTimeout(() => this.populateFromModalContext(context), 500);
+                }
+                
+                // Add modal-specific styling
+                this.applyModalStyling();
+            }
+        } else {
+            console.log('📋 Running in standard mode (not modal)');
+        }
+    },
+    
+    // Apply modal-specific styling
+    applyModalStyling: function() {
+        // Add modal-specific CSS class to body
+        document.body.classList.add('modal-mode');
+        
+        // Add modal-specific styles
+        const modalStyles = document.createElement('style');
+        modalStyles.textContent = `
+            .modal-mode {
+                background: #f8fafc;
+            }
+            .modal-mode .app-header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                text-align: center;
+                padding: 1rem;
+            }
+            .modal-mode .brand-logo {
+                filter: brightness(0) invert(1);
+            }
+        `;
+        document.head.appendChild(modalStyles);
+        
+        console.log('✅ Modal styling applied');
+    }
+};
+
+// Initialize modal handler immediately
+ModalOverlayHandler.initialize();
 
 const CopperIntegration = {
     searchInterfaceAdded: false, // FIXED: Prevent duplicate search interfaces
@@ -1536,4 +1778,72 @@ function requestContextFromSidebar() {
     CopperIntegration.requestContextFromOtherInstances();
 }
 
+// Modal overlay quote saving integration
+function saveQuoteToModal(quoteData) {
+    if (ModalOverlayHandler.isModalMode()) {
+        console.log('💾 Modal mode detected - saving quote as activity...');
+        ModalOverlayHandler.saveQuoteAsActivity(quoteData);
+        return true;
+    }
+    return false;
+}
+
+// Enhanced quote generation with modal support
+function generateQuoteWithModalSupport() {
+    console.log('📄 Generating quote with modal support...');
+    
+    // Get quote data from form
+    const quoteData = {
+        quoteName: document.getElementById('quoteName')?.value || 'Kanva Quote',
+        companyName: document.getElementById('companyName')?.value || 'Customer',
+        customerEmail: document.getElementById('customerEmail')?.value || '',
+        totalAmount: document.getElementById('totalAmount')?.textContent || '$0.00',
+        products: getSelectedProducts() || ['Products'],
+        timestamp: new Date().toISOString()
+    };
+    
+    console.log('📊 Quote data collected:', quoteData);
+    
+    // If in modal mode, save to CRM
+    if (ModalOverlayHandler.isModalMode()) {
+        ModalOverlayHandler.saveQuoteAsActivity(quoteData);
+    } else {
+        console.log('📋 Standard mode - quote generation without CRM save');
+        // Standard quote generation logic here
+        if (typeof generateQuote === 'function') {
+            generateQuote();
+        }
+    }
+}
+
+// Helper function to get selected products
+function getSelectedProducts() {
+    const products = [];
+    
+    // Check for product lines in the form
+    const productLines = document.querySelectorAll('.product-line');
+    productLines.forEach(line => {
+        const productSelect = line.querySelector('select[id^="product"]');
+        const quantityInput = line.querySelector('input[id^="quantity"]');
+        
+        if (productSelect && productSelect.value && quantityInput && quantityInput.value > 0) {
+            products.push(`${productSelect.options[productSelect.selectedIndex].text} (${quantityInput.value})`);
+        }
+    });
+    
+    // Fallback: check product catalog selections
+    if (products.length === 0) {
+        const selectedTiles = document.querySelectorAll('.product-tile.selected');
+        selectedTiles.forEach(tile => {
+            const productName = tile.querySelector('.product-name')?.textContent;
+            if (productName) {
+                products.push(productName);
+            }
+        });
+    }
+    
+    return products.length > 0 ? products : ['Selected Products'];
+}
+
 console.log('✅ Enhanced Copper integration module loaded successfully');
+console.log('🖥️ Modal overlay support enabled');
