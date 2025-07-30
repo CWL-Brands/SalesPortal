@@ -8,31 +8,48 @@ const App = {
         
         try {
             // Step 1: Initialize configuration
+            console.log('🔍 STEP 1: Initializing configuration...');
             this.initializeConfiguration();
+            console.log('✅ STEP 1: Configuration initialized');
             
             // Step 2: Check environment and set up mode
+            console.log('🔍 STEP 2: Detecting environment...');
             this.detectEnvironment();
+            console.log('✅ STEP 2: Environment detected');
             
             // Step 3: Initialize Copper CRM integration
+            console.log('🔍 STEP 3: Starting Copper CRM integration...');
             this.initializeCopperIntegration();
+            console.log('✅ STEP 3: Copper CRM integration completed');
             
             // Step 4: Initialize core modules
+            console.log('🔍 STEP 4: Initializing core modules...');
             this.initializeModules();
+            console.log('✅ STEP 4: Core modules initialized');
             
             // Step 5: Set up UI and render interface
+            console.log('🔍 STEP 5: Setting up UI...');
             this.initializeUI();
+            console.log('✅ STEP 5: UI initialized');
             
             // Step 6: Bind event listeners
+            console.log('🔍 STEP 6: Binding event listeners...');
             this.bindEventListeners();
+            console.log('✅ STEP 6: Event listeners bound');
             
             // Step 7: Perform initial calculations
+            console.log('🔍 STEP 7: Performing initial calculations...');
             this.performInitialCalculations();
+            console.log('✅ STEP 7: Initial calculations completed');
             
             // Step 8: Final setup and ready state
+            console.log('🔍 STEP 8: Finalizing initialization...');
             this.finalizeInitialization();
+            console.log('✅ STEP 8: Initialization finalized');
             
         } catch (error) {
             console.error('❌ Critical error during initialization:', error);
+            console.error('❌ Error stack:', error.stack);
             this.handleInitializationError(error);
         }
     },
