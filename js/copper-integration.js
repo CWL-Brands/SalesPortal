@@ -284,17 +284,17 @@ const ModalOverlayHandler = {
             const copperReferrer = document.referrer.includes('copper.com') || document.referrer.includes('prosperworks.com');
             const hasCopperSDK = typeof window.Copper !== 'undefined';
             
-            // Multiple detection methods for Activity Panel
+            // STRICT Activity Panel detection - only when explicitly specified or very small iframe
             const isActivityPanel = urlParams.get('location') === 'activity_panel' || 
-                                  (isInIframe && (windowWidth < 800 || windowHeight < 600)) ||
-                                  copperReferrer ||
-                                  (hasCopperSDK && !isInIframe); // SDK present but not in large iframe
+                                  (isInIframe && windowWidth < 400 && windowHeight < 400);
             
             if (isActivityPanel) {
                 console.log('🎯 Activity Panel mode detected - setting up minimal UI');
                 this.setupActivityPanelUI();
             } else {
-                console.log('📱 Standard/Sidebar mode - keeping full interface');
+                console.log('📱 Sidebar/Standard mode - keeping full interface (NO MODAL)');
+                // Ensure no modal behavior in sidebar/standard mode
+                document.body.classList.remove('modal-mode');
             }
         }
     },
@@ -708,9 +708,11 @@ const ModalOverlayHandler = {
                         
                         console.log('🚀 Launching modal with URL:', modalUrl);
                         
-                        // Launch modal with Copper SDK
+                        // Launch modal with Copper SDK using the full-screen modal overlay
                         if (typeof appState.sdk.showModal === 'function') {
-                            appState.sdk.showModal(modalParams);
+                            // Use our custom modal overlay instead of Copper's small modal
+                            console.log('🚀 Launching custom full-screen modal overlay...');
+                            ModalOverlayHandler.launchModal(modalParams);
                         } else {
                             console.warn('⚠️ showModal not available, opening in new window');
                             window.open(modalUrl, '_blank', 'width=1200,height=800');
@@ -730,6 +732,36 @@ const ModalOverlayHandler = {
         } else {
             console.warn('⚠️ Copper SDK not available for modal launch');
         }
+    },
+    
+    // Launch modal with context data (called from Activity Panel)
+    launchModal: function(contextData) {
+        console.log('🚀 Launching full-screen modal with context:', contextData);
+        
+        // Create modal context from provided data
+        const modalContext = {
+            entityId: contextData.entity_id,
+            entityType: contextData.entity_type,
+            entityName: contextData.entity_name,
+            companyName: contextData.company_name || contextData.entity_name,
+            entityEmail: contextData.entity_email,
+            entityPhone: contextData.entity_phone,
+            entityState: contextData.entity_state,
+            isModal: true
+        };
+        
+        // Apply modal styling and behavior
+        this.applyModalStyling();
+        this.setupModalBehavior();
+        this.optimizeModalDimensions();
+        
+        // Populate form with context data
+        this.populateFromModalContext(modalContext);
+        
+        // Store context for later use
+        window.modalContext = modalContext;
+        
+        console.log('✅ Full-screen modal launched with context');
     }
 };
 
@@ -1004,32 +1036,22 @@ const CopperIntegration = {
                 // Secondary detection: iframe context and dimensions
                 if (isInIframe) {
                     // Activity Panel is typically in an iframe with constrained dimensions
-                    // OR if we detect Copper CRM referrer patterns
-                    const copperReferrer = document.referrer.includes('copper.com') || document.referrer.includes('prosperworks.com');
-                    
-                    if ((windowWidth < 800 || windowHeight < 600) || copperReferrer) {
+                    // STRICT Activity Panel detection - only very small iframes
+                    if (windowWidth < 400 && windowHeight < 400) {
                         appState.integrationMode = 'activity_panel';
                         appState.isActivityPanel = true;
-                        console.log('📍 Activity panel mode detected (iframe + dimensions/referrer)');
+                        console.log('📍 Activity panel mode detected (very small iframe)');
                         this.showLaunchModalButton();
                     } else {
-                        // Larger iframe might be left nav fullscreen
+                        // All other iframes are left nav (sidebar) - NO MODAL
                         appState.integrationMode = 'left_nav';
                         appState.isLeftNav = true;
-                        console.log('📍 Left navigation mode detected (large iframe)');
+                        console.log('📍 Left navigation mode detected (sidebar iframe - NO MODAL)');
                     }
                 } else {
-                    // FALLBACK: If we have Copper SDK but no iframe, assume Activity Panel
-                    // This handles cases where Copper embeds without iframe detection
-                    if (hasCopperSDK) {
-                        appState.integrationMode = 'activity_panel';
-                        appState.isActivityPanel = true;
-                        console.log('📍 Activity panel mode detected (SDK fallback)');
-                        this.showLaunchModalButton();
-                    } else {
-                        appState.integrationMode = 'embedded';
-                        console.log('📍 Generic embedded mode detected');
-                    }
+                    // NOT in iframe - assume standalone or embedded mode (NO MODAL)
+                    appState.integrationMode = 'standalone';
+                    console.log('📍 Standalone mode detected (NO MODAL)');
                 }
             }
         } else {
