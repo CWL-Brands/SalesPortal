@@ -279,30 +279,274 @@ const ModalOverlayHandler = {
         }
     },
     
-    // Apply modal-specific styling
+    // Apply modal-specific styling with full-screen draggable modal
     applyModalStyling: function() {
         // Add modal-specific CSS class to body
         document.body.classList.add('modal-mode');
         
-        // Add modal-specific styles
+        // Create full-screen modal overlay
+        this.createFullScreenModal();
+        
+        console.log('✅ Full-screen draggable modal applied');
+    },
+    
+    // Create full-screen modal with blur background
+    createFullScreenModal: function() {
+        // Create modal overlay
+        const modalOverlay = document.createElement('div');
+        modalOverlay.id = 'copperModalOverlay';
+        modalOverlay.innerHTML = `
+            <div class="modal-backdrop"></div>
+            <div class="modal-container" id="modalContainer">
+                <div class="modal-header" id="modalHeader">
+                    <div class="modal-title">
+                        <img src="assets/logo/kanva-logo.png" alt="Kanva" class="modal-logo">
+                        <span>Kanva Quote Generator</span>
+                    </div>
+                    <div class="modal-controls">
+                        <button class="modal-minimize" onclick="ModalOverlayHandler.minimizeModal()" title="Minimize">−</button>
+                        <button class="modal-maximize" onclick="ModalOverlayHandler.maximizeModal()" title="Maximize">□</button>
+                        <button class="modal-close" onclick="ModalOverlayHandler.closeModal()" title="Close">×</button>
+                    </div>
+                </div>
+                <div class="modal-content" id="modalContent">
+                    <!-- App content will be moved here -->
+                </div>
+            </div>
+        `;
+        
+        // Add comprehensive modal styles
         const modalStyles = document.createElement('style');
+        modalStyles.id = 'copperModalStyles';
         modalStyles.textContent = `
-            .modal-mode {
-                background: #f8fafc;
+            #copperModalOverlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                z-index: 10000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             }
-            .modal-mode .app-header {
+            
+            .modal-backdrop {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+            }
+            
+            .modal-container {
+                position: relative;
+                width: 90vw;
+                height: 85vh;
+                max-width: 1200px;
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                cursor: move;
+                transition: all 0.3s ease;
+            }
+            
+            .modal-container:hover {
+                box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+            }
+            
+            .modal-header {
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
-                text-align: center;
-                padding: 1rem;
+                padding: 12px 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: move;
+                user-select: none;
+                border-radius: 12px 12px 0 0;
             }
-            .modal-mode .brand-logo {
+            
+            .modal-title {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-weight: 600;
+                font-size: 16px;
+            }
+            
+            .modal-logo {
+                height: 24px;
+                width: auto;
                 filter: brightness(0) invert(1);
             }
+            
+            .modal-controls {
+                display: flex;
+                gap: 8px;
+            }
+            
+            .modal-controls button {
+                width: 28px;
+                height: 28px;
+                border: none;
+                border-radius: 6px;
+                background: rgba(255, 255, 255, 0.2);
+                color: white;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 14px;
+                font-weight: bold;
+                transition: background 0.2s;
+            }
+            
+            .modal-controls button:hover {
+                background: rgba(255, 255, 255, 0.3);
+            }
+            
+            .modal-close:hover {
+                background: #ff4757 !important;
+            }
+            
+            .modal-content {
+                flex: 1;
+                overflow-y: auto;
+                padding: 0;
+                background: #f8fafc;
+            }
+            
+            .modal-content .calculator-container {
+                height: 100%;
+                background: transparent;
+                padding: 20px;
+                margin: 0;
+                max-width: none;
+            }
+            
+            .modal-content .app-header {
+                display: none;
+            }
+            
+            .modal-minimized {
+                width: 300px !important;
+                height: 60px !important;
+                bottom: 20px;
+                right: 20px;
+                top: auto !important;
+                left: auto !important;
+            }
+            
+            .modal-minimized .modal-content {
+                display: none;
+            }
+            
+            .modal-maximized {
+                width: 95vw !important;
+                height: 90vh !important;
+            }
+            
+            @media (max-width: 768px) {
+                .modal-container {
+                    width: 95vw;
+                    height: 90vh;
+                }
+            }
         `;
-        document.head.appendChild(modalStyles);
         
-        console.log('✅ Modal styling applied');
+        // Append styles and overlay to document
+        document.head.appendChild(modalStyles);
+        document.body.appendChild(modalOverlay);
+        
+        // Move app content into modal
+        const appContainer = document.getElementById('app');
+        const modalContent = document.getElementById('modalContent');
+        if (appContainer && modalContent) {
+            modalContent.appendChild(appContainer);
+            appContainer.style.display = 'block';
+        }
+        
+        // Make modal draggable
+        this.makeDraggable();
+        
+        console.log('✅ Full-screen modal created with draggable functionality');
+    },
+    
+    // Make modal draggable
+    makeDraggable: function() {
+        const modalContainer = document.getElementById('modalContainer');
+        const modalHeader = document.getElementById('modalHeader');
+        
+        if (!modalContainer || !modalHeader) return;
+        
+        let isDragging = false;
+        let currentX = 0;
+        let currentY = 0;
+        let initialX = 0;
+        let initialY = 0;
+        
+        modalHeader.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.modal-controls')) return;
+            
+            isDragging = true;
+            initialX = e.clientX - currentX;
+            initialY = e.clientY - currentY;
+            modalContainer.style.cursor = 'grabbing';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            e.preventDefault();
+            currentX = e.clientX - initialX;
+            currentY = e.clientY - initialY;
+            
+            modalContainer.style.transform = `translate(${currentX}px, ${currentY}px)`;
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                modalContainer.style.cursor = 'move';
+            }
+        });
+        
+        console.log('✅ Modal draggable functionality enabled');
+    },
+    
+    // Modal control functions
+    minimizeModal: function() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.classList.toggle('modal-minimized');
+        }
+    },
+    
+    maximizeModal: function() {
+        const modalContainer = document.getElementById('modalContainer');
+        if (modalContainer) {
+            modalContainer.classList.toggle('modal-maximized');
+        }
+    },
+    
+    closeModal: function() {
+        const modalOverlay = document.getElementById('copperModalOverlay');
+        if (modalOverlay) {
+            modalOverlay.remove();
+        }
+        
+        // Close Copper modal if SDK available
+        if (appState.sdk && typeof appState.sdk.closeModal === 'function') {
+            appState.sdk.closeModal();
+        }
     }
 };
 
@@ -482,28 +726,27 @@ const CopperIntegration = {
                 console.log('👤 Copper context received:', data);
                 appState.copperContext = data;
                 
-                // Set user information
-                if (data.user) {
-                    AuthManager.setUser(data.user);
-                }
-                
-                // Detect integration mode
-                this.detectIntegrationMode(data);
-                
-                // Auto-populate if context available and in activity panel
-                if (data.context && data.context.entity && appState.isActivityPanel) {
-                    console.log('🎯 Activity panel context detected - enabling auto-population');
-                    this.autoPopulateFromEntity(data.context.entity);
+                if (data && data.context) {
                     appState.hasEntityContext = true;
-                } else if (appState.isLeftNav && !this.searchInterfaceAdded) {
-                    console.log('🔍 Left nav mode - enabling customer search');
-                    this.enableCustomerSearch();
-                    appState.hasEntityContext = false;
-                }
-                
-                // Trigger UI update
-                if (typeof UIManager !== 'undefined') {
-                    UIManager.onContextReceived(data);
+                    appState.contextData = data.context;
+                    appState.copperContext = data;
+                    
+                    console.log('✅ Context data stored in appState');
+                    
+                    // Auto-populate if we have entity data
+                    if (data.context.entity) {
+                        console.log('🔄 Auto-populating from entity data...');
+                        this.autoPopulateFromEntity(data.context.entity, data.type);
+                    } else {
+                        console.warn('⚠️ No entity data found in context');
+                    }
+                    
+                    // Update UI based on context
+                    if (typeof UIManager !== 'undefined' && UIManager.onContextReceived) {
+                        UIManager.onContextReceived(data);
+                    }
+                } else {
+                    console.warn('⚠️ No context data received from Copper SDK');
                 }
             })
             .catch((error) => {
@@ -898,45 +1141,100 @@ const CopperIntegration = {
     },
 
     // Auto-populate fields from Copper entity context
-    autoPopulateFromEntity: function(entity) {
-        console.log('🔄 Auto-populating from entity:', entity);
+    autoPopulateFromEntity: function(entity, entityType) {
+        console.log('🔄 Auto-populating from Copper entity:', entity);
+        console.log('🔍 Entity type:', entityType);
+        console.log('🔍 Entity structure:', JSON.stringify(entity, null, 2));
         
         try {
             // Wait for DOM to be ready
             setTimeout(() => {
-                // Generate Quote Name: "${product} Quote for ${company}"
-                const productSelect = document.getElementById('primaryProduct') || document.getElementById('quickProduct');
-                const productName = productSelect?.selectedOptions[0]?.text?.split(' (')[0] || 'Product';
-                const companyName = entity.company_name || (entity.type === 'company' ? entity.name : '');
+                let populatedFields = 0;
                 
-                if (companyName) {
-                    const quoteName = `${productName} Quote for ${companyName}`;
+                // Extract company name based on entity type
+                let companyName = '';
+                let contactName = '';
+                let email = '';
+                let phone = '';
+                
+                if (entityType === 'company') {
+                    // For company entities
+                    companyName = entity.name || entity.company_name || '';
+                } else if (entityType === 'person') {
+                    // For person entities
+                    contactName = entity.name || '';
+                    companyName = entity.company?.name || entity.company_name || '';
+                    
+                    // Extract email from person
+                    if (entity.emails && entity.emails.length > 0) {
+                        email = entity.emails[0].email || entity.emails[0];
+                    } else if (entity.email) {
+                        email = entity.email;
+                    }
+                    
+                    // Extract phone from person
+                    if (entity.phone_numbers && entity.phone_numbers.length > 0) {
+                        phone = entity.phone_numbers[0].number || entity.phone_numbers[0];
+                    } else if (entity.phone_number) {
+                        phone = entity.phone_number;
+                    }
+                }
+                
+                console.log('🔍 Extracted data:', { companyName, contactName, email, phone });
+                
+                // Populate Quote Name
+                if (companyName || contactName) {
+                    const displayName = companyName || contactName;
+                    const quoteName = `Quote for ${displayName}`;
                     const quoteNameInput = document.getElementById('quoteName');
                     if (quoteNameInput) {
                         quoteNameInput.value = quoteName;
                         quoteNameInput.classList.add('auto-populated');
-                        console.log('📝 Auto-filled quote name:', quoteName);
+                        console.log('✅ Auto-filled quote name:', quoteName);
+                        populatedFields++;
                     }
                 }
                 
-                // Company name
+                // Populate Company Name
                 if (companyName) {
                     const companyInput = document.getElementById('companyName');
                     if (companyInput) {
                         companyInput.value = companyName;
                         companyInput.classList.add('auto-populated');
-                        console.log('📝 Auto-filled company name:', companyName);
+                        console.log('✅ Auto-filled company name:', companyName);
+                        populatedFields++;
                     }
                 }
                 
-                // Segment (from custom fields or tags)
+                // Populate Customer Email
+                if (email) {
+                    const emailInput = document.getElementById('customerEmail');
+                    if (emailInput) {
+                        emailInput.value = email;
+                        emailInput.classList.add('auto-populated');
+                        console.log('✅ Auto-filled email:', email);
+                        populatedFields++;
+                    }
+                }
+                
+                // Populate Customer Phone
+                if (phone) {
+                    const phoneInput = document.getElementById('customerPhone');
+                    if (phoneInput) {
+                        phoneInput.value = phone;
+                        phoneInput.classList.add('auto-populated');
+                        console.log('✅ Auto-filled phone:', phone);
+                        populatedFields++;
+                    }
+                }
+                
+                // Populate Customer Segment based on entity data
                 this.autoPopulateSegment(entity);
                 
-                // Email domain from company website
-                this.autoPopulateEmailDomain(entity);
-                
-                // Phone number (Contact first, then Account)
-                this.autoPopulatePhone(entity);
+                // Show success indicator
+                if (populatedFields > 0) {
+                    this.showAutoPopulationSuccess(populatedFields, entityType, companyName || contactName);
+                }
                 
                 // Show context indicator
                 this.showContextIndicator(entity);
@@ -951,6 +1249,64 @@ const CopperIntegration = {
         } catch (error) {
             console.error('❌ Error auto-populating from entity:', error);
         }
+    },
+    
+    // Show auto-population success indicator
+    showAutoPopulationSuccess: function(fieldCount, entityType, entityName) {
+        const message = `✅ Auto-populated ${fieldCount} field${fieldCount > 1 ? 's' : ''} from ${entityType}: ${entityName}`;
+        console.log(message);
+        
+        // Show visual notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 10001;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideIn 0.3s ease;
+        `;
+        notification.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span>✅</span>
+                <span>Auto-populated from ${entityType.charAt(0).toUpperCase() + entityType.slice(1)}: <strong>${entityName}</strong></span>
+            </div>
+        `;
+        
+        // Add animation styles
+        if (!document.getElementById('autoPopulateStyles')) {
+            const styles = document.createElement('style');
+            styles.id = 'autoPopulateStyles';
+            styles.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                .auto-populated {
+                    background-color: #ecfdf5 !important;
+                    border-color: #10b981 !important;
+                    box-shadow: 0 0 0 1px #10b981 !important;
+                }
+            `;
+            document.head.appendChild(styles);
+        }
+        
+        document.body.appendChild(notification);
+        
+        // Remove after 4 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => {
+                    notification.parentNode.removeChild(notification);
+                }, 300);
+            }
+        }, 4000);
     },
 
     // Auto-populate segment from entity data
