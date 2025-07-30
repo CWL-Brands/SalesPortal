@@ -310,11 +310,29 @@ const ModalOverlayHandler = {
         console.log('✅ Full-screen draggable modal applied');
     },
     
-    // Create full-screen modal with blur background
+    // Create full-screen modal with blur background and improved draggability
     createFullScreenModal: function() {
+        // Remove any existing modal to prevent duplicates
+        const existingOverlay = document.getElementById('copperModalOverlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+            console.log('🧹 Removed existing modal overlay');
+        }
+        
+        // Get browser dimensions for proper sizing
+        const viewportWidth = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+        const viewportHeight = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+        
+        console.log(`📏 Browser viewport size: ${viewportWidth}x${viewportHeight}`);
+        
+        // Calculate optimal modal dimensions (80% of viewport for smaller screens, 90% for larger)
+        const modalWidth = viewportWidth > 1200 ? Math.min(1400, viewportWidth * 0.9) : viewportWidth * 0.8;
+        const modalHeight = viewportHeight * 0.9;
+        
         // Create modal overlay
         const modalOverlay = document.createElement('div');
         modalOverlay.id = 'copperModalOverlay';
+        modalOverlay.className = 'copper-modal-overlay';
         modalOverlay.innerHTML = `
             <div class="modal-backdrop"></div>
             <div class="modal-container" id="modalContainer">
@@ -335,7 +353,7 @@ const ModalOverlayHandler = {
             </div>
         `;
         
-        // Add comprehensive modal styles
+        // Add comprehensive modal styles with dynamic sizing
         const modalStyles = document.createElement('style');
         modalStyles.id = 'copperModalStyles';
         modalStyles.textContent = `
@@ -358,38 +376,39 @@ const ModalOverlayHandler = {
                 left: 0;
                 width: 100%;
                 height: 100%;
-                background: rgba(0, 0, 0, 0.5);
-                backdrop-filter: blur(8px);
-                -webkit-backdrop-filter: blur(8px);
+                background: rgba(0, 0, 0, 0.6); /* Darker backdrop for better contrast */
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
             }
             
             .modal-container {
                 position: relative;
-                width: 95vw;
-                height: 92vh;
-                max-width: none;
+                width: ${modalWidth}px; /* Dynamic width based on viewport */
+                height: ${modalHeight}px; /* Dynamic height based on viewport */
+                max-width: 95vw;
+                max-height: 95vh;
                 background: white;
                 border-radius: 12px;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
                 display: flex;
                 flex-direction: column;
                 overflow: hidden;
-                cursor: move;
-                transition: all 0.3s ease;
+                cursor: grab; /* Indicate draggability */
+                transition: all 0.2s ease;
+                transform-origin: center center;
             }
             
-            .modal-container:hover {
-                box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+            .modal-container:active {
+                cursor: grabbing; /* Change cursor on active drag */
             }
             
             .modal-header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: linear-gradient(135deg, #f5793b 0%, #ff4e50 100%); /* Kanva orange gradient */
                 color: white;
                 padding: 12px 20px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                cursor: move;
                 user-select: none;
                 border-radius: 12px 12px 0 0;
             }
@@ -403,7 +422,7 @@ const ModalOverlayHandler = {
             }
             
             .modal-logo {
-                height: 24px;
+                height: 28px; /* Slightly larger logo */
                 width: auto;
                 filter: brightness(0) invert(1);
             }
@@ -414,8 +433,8 @@ const ModalOverlayHandler = {
             }
             
             .modal-controls button {
-                width: 28px;
-                height: 28px;
+                width: 32px; /* Slightly larger buttons for better touch targets */
+                height: 32px;
                 border: none;
                 border-radius: 6px;
                 background: rgba(255, 255, 255, 0.2);
@@ -424,7 +443,7 @@ const ModalOverlayHandler = {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 14px;
+                font-size: 16px;
                 font-weight: bold;
                 transition: background 0.2s;
             }
@@ -453,9 +472,10 @@ const ModalOverlayHandler = {
             }
             
             .modal-content .app-header {
-                display: none;
+                display: none; /* Hide app header in modal */
             }
             
+            /* State-based styles */
             .modal-minimized {
                 width: 300px !important;
                 height: 60px !important;
@@ -463,6 +483,7 @@ const ModalOverlayHandler = {
                 right: 20px;
                 top: auto !important;
                 left: auto !important;
+                transition: all 0.3s ease-out;
             }
             
             .modal-minimized .modal-content {
@@ -471,9 +492,21 @@ const ModalOverlayHandler = {
             
             .modal-maximized {
                 width: 95vw !important;
-                height: 90vh !important;
+                height: 95vh !important;
+                transition: all 0.3s ease-out;
             }
             
+            /* Animation for modal appearance */
+            @keyframes modalFadeIn {
+                from { opacity: 0; transform: scale(0.95); }
+                to { opacity: 1; transform: scale(1); }
+            }
+            
+            #copperModalOverlay {
+                animation: modalFadeIn 0.2s ease-out forwards;
+            }
+            
+            /* Responsive adjustments */
             @media (max-width: 768px) {
                 .modal-container {
                     width: 95vw;
@@ -494,18 +527,32 @@ const ModalOverlayHandler = {
             appContainer.style.display = 'block';
         }
         
-        // Make modal draggable
+        // Make entire modal container draggable (not just header)
         this.makeDraggable();
         
-        console.log('✅ Full-screen modal created with draggable functionality');
+        // Add click handler for backdrop to close modal when clicking outside
+        const backdrop = modalOverlay.querySelector('.modal-backdrop');
+        if (backdrop) {
+            backdrop.addEventListener('click', (e) => {
+                if (e.target === backdrop) {
+                    this.closeModal();
+                }
+            });
+        }
+        
+        console.log(`✅ Full-screen modal created with enhanced draggability (${modalWidth.toFixed(0)}x${modalHeight.toFixed(0)}px)`);
     },
     
-    // Make modal draggable
+    // Make entire modal draggable (not just header)
     makeDraggable: function() {
         const modalContainer = document.getElementById('modalContainer');
         const modalHeader = document.getElementById('modalHeader');
+        const modalContent = document.getElementById('modalContent');
         
-        if (!modalContainer || !modalHeader) return;
+        if (!modalContainer) {
+            console.warn('⚠️ Modal container not found for draggable functionality');
+            return;
+        }
         
         let isDragging = false;
         let currentX = 0;
@@ -513,33 +560,131 @@ const ModalOverlayHandler = {
         let initialX = 0;
         let initialY = 0;
         
-        modalHeader.addEventListener('mousedown', (e) => {
-            if (e.target.closest('.modal-controls')) return;
+        // Function to handle mouse down events
+        const handleMouseDown = (e) => {
+            // Don't initiate drag on controls or inside modal content area
+            if (e.target.closest('.modal-controls') || 
+                (e.target.closest('#modalContent') && e.target !== modalContent)) {
+                return;
+            }
             
+            e.preventDefault();
             isDragging = true;
             initialX = e.clientX - currentX;
             initialY = e.clientY - currentY;
+            
+            // Change cursor to grabbing during drag
             modalContainer.style.cursor = 'grabbing';
-        });
+            document.body.style.userSelect = 'none'; // Prevent text selection during drag
+        };
         
-        document.addEventListener('mousemove', (e) => {
+        // Function to handle touch start events (for mobile)
+        const handleTouchStart = (e) => {
+            // Don't initiate drag on controls or inside modal content area
+            if (e.target.closest('.modal-controls') || 
+                (e.target.closest('#modalContent') && e.target !== modalContent)) {
+                return;
+            }
+            
+            const touch = e.touches[0];
+            initialX = touch.clientX - currentX;
+            initialY = touch.clientY - currentY;
+            isDragging = true;
+            
+            // Change cursor during drag
+            modalContainer.style.cursor = 'grabbing';
+            document.body.style.userSelect = 'none'; // Prevent text selection during drag
+        };
+        
+        // Make header always draggable
+        if (modalHeader) {
+            modalHeader.addEventListener('mousedown', handleMouseDown);
+            modalHeader.addEventListener('touchstart', handleTouchStart);
+        }
+        
+        // Make entire container draggable
+        modalContainer.addEventListener('mousedown', handleMouseDown);
+        modalContainer.addEventListener('touchstart', handleTouchStart);
+        
+        // Mouse move handler (for desktop)
+        const handleMouseMove = (e) => {
             if (!isDragging) return;
             
             e.preventDefault();
             currentX = e.clientX - initialX;
             currentY = e.clientY - initialY;
             
+            // Constrain modal position to stay within viewport
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const modalRect = modalContainer.getBoundingClientRect();
+            
+            // Ensure at least 100px of modal remains visible
+            const minVisible = 100;
+            
+            // Calculate bounds
+            const maxX = viewportWidth - minVisible;
+            const minX = minVisible - modalRect.width;
+            const maxY = viewportHeight - minVisible;
+            const minY = minVisible - modalRect.height;
+            
+            // Apply bounds
+            currentX = Math.min(Math.max(currentX, minX), maxX);
+            currentY = Math.min(Math.max(currentY, minY), maxY);
+            
+            // Apply transformation
             modalContainer.style.transform = `translate(${currentX}px, ${currentY}px)`;
-        });
+        };
         
-        document.addEventListener('mouseup', () => {
+        // Touch move handler (for mobile)
+        const handleTouchMove = (e) => {
+            if (!isDragging) return;
+            
+            e.preventDefault();
+            const touch = e.touches[0];
+            currentX = touch.clientX - initialX;
+            currentY = touch.clientY - initialY;
+            
+            // Apply the same bounds as mouse move
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const modalRect = modalContainer.getBoundingClientRect();
+            
+            const minVisible = 100;
+            const maxX = viewportWidth - minVisible;
+            const minX = minVisible - modalRect.width;
+            const maxY = viewportHeight - minVisible;
+            const minY = minVisible - modalRect.height;
+            
+            currentX = Math.min(Math.max(currentX, minX), maxX);
+            currentY = Math.min(Math.max(currentY, minY), maxY);
+            
+            modalContainer.style.transform = `translate(${currentX}px, ${currentY}px)`;
+        };
+        
+        // End drag handlers
+        const endDrag = () => {
             if (isDragging) {
                 isDragging = false;
-                modalContainer.style.cursor = 'move';
+                modalContainer.style.cursor = 'grab';
+                document.body.style.userSelect = ''; // Restore text selection
             }
+        };
+        
+        // Add event listeners
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+        document.addEventListener('mouseup', endDrag);
+        document.addEventListener('touchend', endDrag);
+        
+        // Reset position on window resize to prevent modal from getting stuck off-screen
+        window.addEventListener('resize', () => {
+            currentX = 0;
+            currentY = 0;
+            modalContainer.style.transform = 'translate(0px, 0px)';
         });
         
-        console.log('✅ Modal draggable functionality enabled');
+        console.log('✅ Enhanced modal draggable functionality enabled (entire container draggable)');
     },
     
     // Modal control functions
@@ -998,70 +1143,107 @@ const CopperIntegration = {
             hostname: window.location.hostname
         });
         
+        // Reset all modal-related state to prevent incorrect modal display
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        if (fullscreenBtn) {
+            fullscreenBtn.style.display = 'block'; // Always show fullscreen button by default
+        }
+        
+        // IMPORTANT: Remove any existing modal overlays to prevent duplicates
+        const existingOverlay = document.getElementById('copperModalOverlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+            console.log('🧹 Removed existing modal overlay');
+        }
+        
         // AGGRESSIVE: If we have location parameter, assume we're embedded
         if (location || isInIframe || hasCopperSDK) {
             console.log('✅ Copper CRM context detected (aggressive detection)');
             appState.isEmbedded = true;
             
-            // Multiple detection methods for reliability
-            const urlParams = new URLSearchParams(window.location.search);
-            const location = urlParams.get('location');
-            const isInIframe = window.self !== window.top;
-            const windowWidth = window.innerWidth;
-            const windowHeight = window.innerHeight;
-            
-            console.log('🔍 Detection data:', {
-                location,
-                isInIframe,
-                windowWidth,
-                windowHeight,
-                referrer: document.referrer
-            });
-            
             // Primary detection: URL parameter
             if (location === 'left_nav') {
                 appState.integrationMode = 'left_nav';
                 appState.isLeftNav = true;
-                console.log('📍 Left navigation mode detected (URL param)');
+                appState.isActivityPanel = false; // Explicitly mark as not activity panel
+                console.log('📍 Left navigation mode detected (URL param) - NO MODAL');
+                
+                // Never show modal in left_nav mode
+                this.hideModalElements();
+                
             } else if (location === 'activity_panel') {
                 appState.integrationMode = 'activity_panel';
                 appState.isActivityPanel = true;
-                console.log('📍 Activity panel mode detected (URL param)');
+                appState.isLeftNav = false;
+                console.log('📍 Activity panel mode detected (URL param) - SHOW MODAL BUTTON');
                 this.showLaunchModalButton();
+                
             } else if (location === 'action_bar') {
                 appState.integrationMode = 'action_bar';
                 appState.isActionBar = true;
-                console.log('📍 Action bar mode detected (URL param)');
+                appState.isActivityPanel = false;
+                appState.isLeftNav = false;
+                console.log('📍 Action bar mode detected (URL param) - NO MODAL');
+                
+                // Never show modal in action_bar mode
+                this.hideModalElements();
+                
             } else {
                 // Secondary detection: iframe context and dimensions
                 if (isInIframe) {
                     // Activity Panel is typically in an iframe with constrained dimensions
-                    // STRICT Activity Panel detection - only very small iframes
-                    if (windowWidth < 400 && windowHeight < 400) {
+                    if (windowWidth < 500 && windowHeight < 500) {
                         appState.integrationMode = 'activity_panel';
                         appState.isActivityPanel = true;
-                        console.log('📍 Activity panel mode detected (very small iframe)');
+                        appState.isLeftNav = false;
+                        console.log('📍 Activity panel mode detected (small iframe) - SHOW MODAL BUTTON');
                         this.showLaunchModalButton();
                     } else {
                         // All other iframes are left nav (sidebar) - NO MODAL
                         appState.integrationMode = 'left_nav';
                         appState.isLeftNav = true;
-                        console.log('📍 Left navigation mode detected (sidebar iframe - NO MODAL)');
+                        appState.isActivityPanel = false;
+                        console.log('📍 Left navigation mode detected (sidebar iframe) - NO MODAL');
+                        
+                        // Never show modal in left_nav mode
+                        this.hideModalElements();
                     }
                 } else {
-                    // NOT in iframe - assume standalone or embedded mode (NO MODAL)
+                    // NOT in iframe - assume standalone mode (NO MODAL)
                     appState.integrationMode = 'standalone';
-                    console.log('📍 Standalone mode detected (NO MODAL)');
+                    appState.isLeftNav = false;
+                    appState.isActivityPanel = false;
+                    console.log('📍 Standalone mode detected - NO MODAL');
+                    
+                    // Never show modal in standalone mode
+                    this.hideModalElements();
                 }
             }
         } else {
             console.log('🌐 Standalone mode - no Copper SDK detected');
             appState.isEmbedded = false;
             appState.integrationMode = 'standalone';
+            appState.isLeftNav = false;
+            appState.isActivityPanel = false;
+            
+            // Never show modal in standalone mode
+            this.hideModalElements();
         }
         
         console.log(`🎯 Integration mode: ${appState.integrationMode}`);
         return appState.integrationMode;
+    },
+    
+    /**
+     * Hide modal-related elements when not in Activity Panel
+     */
+    hideModalElements: function() {
+        // Hide the modal button when not in activity panel
+        const launchBtn = document.getElementById('launchQuoteModalBtn');
+        if (launchBtn) {
+            launchBtn.style.display = 'none';
+            console.log('🚫 Hiding modal launch button (not in Activity Panel)');
+        }
     },
 
     /**
