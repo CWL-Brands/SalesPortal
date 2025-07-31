@@ -571,17 +571,41 @@ const CopperIntegration = {
      * Load credentials from secure storage
      */
     async _loadCredentials() {
-        if (window.secureIntegrationHandler) {
-            try {
-                const copperConfig = await window.secureIntegrationHandler.getIntegration('copper');
-                if (copperConfig) {
-                    if (!appState.copper) appState.copper = {};
-                    Object.assign(appState.copper, copperConfig);
-                    console.log('✅ Copper credentials loaded');
+        try {
+            // Try loading from secureIntegrationHandler first
+            if (window.secureIntegrationHandler) {
+                try {
+                    const copperConfig = await window.secureIntegrationHandler.getIntegration('copper');
+                    if (copperConfig) {
+                        if (!appState.copper) appState.copper = {};
+                        Object.assign(appState.copper, copperConfig);
+                        console.log('✅ Copper credentials loaded from secure integration handler');
+                        return;
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Could not load Copper credentials from secure handler:', error.message);
+                    // Continue to fallback methods
                 }
-            } catch (error) {
-                console.warn('⚠️ Could not load Copper credentials:', error.message);
             }
+            
+            // Fallback to localStorage directly if secure handler failed
+            try {
+                const storedConfig = localStorage.getItem('copper_credentials');
+                if (storedConfig) {
+                    const config = JSON.parse(storedConfig);
+                    if (!appState.copper) appState.copper = {};
+                    Object.assign(appState.copper, config);
+                    console.log('✅ Copper credentials loaded from localStorage');
+                    return;
+                }
+            } catch (lsError) {
+                console.warn('⚠️ Could not load Copper credentials from localStorage:', lsError.message);
+            }
+            
+            // If we reach here, we couldn't load credentials
+            console.info('🔍 No Copper credentials found - proceeding with defaults');
+        } catch (error) {
+            console.warn('⚠️ Error in credential loading process:', error.message);
         }
     },
     
@@ -793,21 +817,37 @@ const CopperIntegration = {
         console.log('👤 Copper context received:', data);
         console.log('📋 DEBUG: COPPER CONTEXT STRUCTURE', JSON.stringify(data, null, 2));
         
+        // Fix: Parse the JSON string if context is a string
+        let parsedContext = data.context;
+        if (data.context && typeof data.context === 'string') {
+            try {
+                parsedContext = JSON.parse(data.context);
+                console.log('✅ Successfully parsed context JSON string to object');
+            } catch (e) {
+                console.error('❌ Error parsing context JSON string:', e);
+                // Keep the original context if parsing fails
+            }
+        }
+        
         appState.copperContext = data;
-        appState.hasEntityContext = !!(data && data.context);
-        appState.contextData = data.context;
+        appState.hasEntityContext = !!(parsedContext && (parsedContext.id || parsedContext.entity));
+        appState.contextData = {
+            entity: parsedContext, // Store the entity data directly
+            type: data.type       // Keep the type from the outer object
+        };
         
         // Log context availability status
         console.log(`🔍 Copper context availability: ${appState.hasEntityContext ? 'AVAILABLE' : 'NOT AVAILABLE'}`);
-        if (appState.contextData) {
-            console.log('🔢 Context entity type:', appState.contextData.type);
-            console.log('📊 Context entity state:', appState.contextData.state);
-            console.log('📌 Context entity ID:', appState.contextData.entity_id);
+        if (parsedContext) {
+            console.log('🔢 Context entity type:', data.type);
+            console.log('📊 Context entity state:', parsedContext.address?.state);
+            console.log('📌 Context entity ID:', parsedContext.id);
+            console.log('📝 Entity name:', parsedContext.name || parsedContext.company_name || 'Unknown');
         }
         
         // Auto-populate if we have entity data
-        if (data.context && data.context.entity) {
-            this._autoPopulateFromEntity(data.context.entity, data.type);
+        if (parsedContext && parsedContext.id) {
+            this._autoPopulateFromEntity(parsedContext, data.type);
         } else {
             console.warn('⚠️ No entity data available for auto-population');
         }
@@ -1690,9 +1730,20 @@ function launchQuoteModal() {
             console.log('📋 Received context from SDK:', context);
             let customerData = {};
             
-            // Properly extract entity data using the correct parameter names
-            if (context && context.context && context.context.entity) {
-                const entity = context.context.entity;
+            // Parse JSON string if context is a string
+            let parsedContext = context.context;
+            if (context && context.context && typeof context.context === 'string') {
+                try {
+                    parsedContext = JSON.parse(context.context);
+                    console.log('✅ Successfully parsed context JSON string:', parsedContext);
+                } catch (e) {
+                    console.error('❌ Error parsing context JSON string:', e);
+                }
+            }
+            
+            // Properly extract entity data from parsed context
+            if (parsedContext && parsedContext.id) {
+                const entity = parsedContext; // Entity data is directly in parsed context
                 const entityType = context.type || '';
                 
                 console.log(`🔍 Entity type: ${entityType}, Entity ID: ${entity.id}`);
