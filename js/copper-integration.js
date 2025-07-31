@@ -1472,24 +1472,39 @@ function launchQuoteModal() {
         return;
     }
     
+    console.log('🚀 Launching quote modal with Copper SDK...');
+    
     // Get context and launch modal
     appState.sdk.getContext()
         .then((context) => {
+            console.log('📋 Received context from SDK:', context);
             let customerData = {};
+            
+            // Properly extract entity data using the correct parameter names
             if (context && context.context && context.context.entity) {
                 const entity = context.context.entity;
+                const entityType = context.type || '';
+                
+                console.log(`🔍 Entity type: ${entityType}, Entity ID: ${entity.id}`);
+                
                 customerData = {
-                    customer_id: entity.id,
-                    company: entity.name || entity.company_name,
-                    email: entity.email,
-                    phone: entity.phone_number
+                    entity_id: entity.id,
+                    entity_type: entityType,
+                    entity_name: entity.name || entity.company_name || '',
+                    entity_email: entity.email || '',
+                    entity_phone: entity.phone_number || '',
+                    entity_state: entity.address?.state || ''
                 };
+                
+                console.log('✅ Extracted entity data:', customerData);
             }
             
             // Build modal URL
             const baseUrl = window.location.origin + window.location.pathname;
             const params = new URLSearchParams({ location: 'modal', ...customerData });
             const modalUrl = `${baseUrl}?${params.toString()}`;
+            
+            console.log('🔗 Modal URL:', modalUrl);
             
             // Launch modal
             appState.sdk.showModal({
