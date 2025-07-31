@@ -134,6 +134,9 @@ const ModalOverlayHandler = {
     populateFromModalContext: function(context) {
         if (!context || !context.isModal) return;
         
+        console.log('🔍 MODAL DEBUG: Auto-populating form from context:', JSON.stringify(context, null, 2));
+        console.log('📋 MODAL DEBUG: Available form fields:', this._listAvailableFormFields());
+        
         const fieldMappings = {
             companyName: ['companyName', 'company-name'],
             entityEmail: ['customerEmail', 'customer-email', 'contactEmail'],
@@ -141,13 +144,19 @@ const ModalOverlayHandler = {
             entityState: ['customerState', 'customer-state', 'state']
         };
         
+        console.log('🗺️ MODAL DEBUG: Field mappings:', fieldMappings);
+        
         let populatedCount = 0;
         
         // Populate all available context fields
         Object.entries(fieldMappings).forEach(([contextKey, fieldIds]) => {
             const value = context[contextKey] || context.entityName;
+            console.log(`🔄 MODAL DEBUG: Mapping ${contextKey} = "${value}" to fields:`, fieldIds);
             if (value && this._populateField(fieldIds, value)) {
                 populatedCount++;
+                console.log(`✅ MODAL DEBUG: Successfully populated ${contextKey} field`);
+            } else {
+                console.warn(`⚠️ MODAL DEBUG: Failed to populate ${contextKey} field. No matching form field found.`);
             }
         });
         
@@ -159,6 +168,8 @@ const ModalOverlayHandler = {
         
         if (populatedCount > 0) {
             this.showModalNotification(`Auto-populated ${populatedCount} fields from CRM`, 'success');
+        } else {
+            console.error('❌ MODAL DEBUG: No fields were populated! Form field IDs may be incorrect.');
         }
     },
     
@@ -167,14 +178,33 @@ const ModalOverlayHandler = {
      */
     _populateField: function(fieldIds, value) {
         for (const fieldId of fieldIds) {
+            console.log(`🔍 MODAL DEBUG: Looking for field with ID or name "${fieldId}"`);
             const field = document.getElementById(fieldId) || document.querySelector(`[name="${fieldId}"]`);
             if (field) {
+                console.log(`✅ MODAL DEBUG: Found field ${fieldId}, setting value to "${value}"`);
                 field.value = value;
                 field.classList.add('auto-populated');
                 return true;
+            } else {
+                console.warn(`⚠️ MODAL DEBUG: Field ${fieldId} not found in document`);
             }
         }
+        console.error(`❌ MODAL DEBUG: None of these fields found:`, fieldIds);
         return false;
+    },
+    
+    /**
+     * Helper to list all available form fields for debugging
+     */
+    _listAvailableFormFields: function() {
+        const inputFields = Array.from(document.querySelectorAll('input[type="text"], input:not([type]), textarea, select'))
+            .map(field => ({
+                id: field.id,
+                name: field.name,
+                type: field.type || field.tagName.toLowerCase(),
+                value: field.value
+            }));
+        return inputFields;
     },
     
     /**
@@ -761,14 +791,25 @@ const CopperIntegration = {
      */
     _processContext(data) {
         console.log('👤 Copper context received:', data);
+        console.log('📋 DEBUG: COPPER CONTEXT STRUCTURE', JSON.stringify(data, null, 2));
         
         appState.copperContext = data;
         appState.hasEntityContext = !!(data && data.context);
         appState.contextData = data.context;
         
+        // Log context availability status
+        console.log(`🔍 Copper context availability: ${appState.hasEntityContext ? 'AVAILABLE' : 'NOT AVAILABLE'}`);
+        if (appState.contextData) {
+            console.log('🔢 Context entity type:', appState.contextData.type);
+            console.log('📊 Context entity state:', appState.contextData.state);
+            console.log('📌 Context entity ID:', appState.contextData.entity_id);
+        }
+        
         // Auto-populate if we have entity data
         if (data.context && data.context.entity) {
             this._autoPopulateFromEntity(data.context.entity, data.type);
+        } else {
+            console.warn('⚠️ No entity data available for auto-population');
         }
         
         // Update UI based on context
@@ -781,19 +822,28 @@ const CopperIntegration = {
      * Auto-populate form fields from entity data
      */
     _autoPopulateFromEntity(entity, entityType) {
+        console.log('🧩 Auto-populating from entity type:', entityType);
+        console.log('📝 Entity data received:', entity);
+        
         // Extract data based on entity type
         const extractedData = this._extractEntityData(entity, entityType);
         
+        console.log('🔄 Extracted data for form mapping:', extractedData);
+        
         // Populate form fields
         const populatedCount = this._populateFormFields(extractedData);
+        console.log(`✅ Populated ${populatedCount} form fields from entity data`);
         
         if (populatedCount > 0) {
             this._showAutoPopulationSuccess(populatedCount, entityType, extractedData.displayName);
+        } else {
+            console.warn('⚠️ No fields were populated from entity data');
         }
         
         // Trigger calculation update
         if (typeof App !== 'undefined' && App.triggerCalculation) {
             App.triggerCalculation();
+            console.log('🔄 Triggered calculation update');
         }
     },
     
@@ -801,70 +851,176 @@ const CopperIntegration = {
      * Extract relevant data from entity
      */
     _extractEntityData(entity, entityType) {
-        let companyName = '';
-        let contactName = '';
-        let email = '';
-        let phone = '';
+        console.log('🧪 EXTRACTING ENTITY DATA', { entity, entityType });
         
-        if (entityType === 'company') {
-            companyName = entity.name || entity.company_name || '';
-        } else if (entityType === 'person') {
-            contactName = entity.name || '';
-            companyName = entity.company?.name || entity.company_name || '';
-            email = this._extractEmail(entity);
-            phone = this._extractPhone(entity);
+        let data = {
+            displayName: '',
+            companyName: '',
+            customerName: '',
+            email: '',
+            phone: '',
+            address: '',
+            entityId: entity.id || '',
+            entityType: entityType || ''
+        };
+        
+        console.log('⚙️ Raw Copper entity fields:', Object.keys(entity));
+        console.log('📊 DEBUG: ENTITY STRUCTURE', JSON.stringify(entity, null, 2));
+        
+        // Different extraction based on entity type
+        if (entityType === 'person') {
+            data.displayName = entity.name || '';
+            data.customerName = entity.name || '';
+            data.email = this._extractEmail(entity);
+            data.phone = this._extractPhone(entity);
+            // Check for related company
+            if (entity.company_name) {
+                data.companyName = entity.company_name;
+            }
+            
+            console.log('👤 Extracted PERSON data:', {
+                name: entity.name,
+                email: data.email,
+                phone: data.phone,
+                company: data.companyName,
+                source: 'entity.name, entity.email_addresses, entity.phone_numbers, entity.company_name'
+            });
+            
+        } else if (entityType === 'company') {
+            data.displayName = entity.name || '';
+            data.companyName = entity.name || '';
+            data.email = this._extractEmail(entity);
+            data.phone = this._extractPhone(entity);
+            
+            console.log('🏢 Extracted COMPANY data:', {
+                name: entity.name,
+                email: data.email,
+                phone: data.phone,
+                source: 'entity.name, entity.email_addresses, entity.phone_numbers'
+            });
+        } else {
+            console.warn('⚠️ Unknown entity type for extraction:', entityType);
         }
         
-        return {
-            companyName,
-            contactName,
-            email,
-            phone,
-            displayName: companyName || contactName
-        };
+        console.log('🔄 Final extracted data:', data);
+        return data;
     },
     
     /**
      * Extract email from entity
      */
     _extractEmail(entity) {
-        if (entity.emails && entity.emails.length > 0) {
-            return entity.emails[0].email || entity.emails[0];
+        if (!entity) return '';
+        
+        let result = '';
+        let source = 'none';
+        
+        if (entity.email) {
+            result = entity.email;
+            source = 'entity.email';
+        } else if (entity.emails && entity.emails.length > 0) {
+            result = entity.emails[0].email || entity.emails[0];
+            source = 'entity.emails[0].email';
         }
-        return entity.email || '';
+        
+        console.log(`📧 Extracted email: "${result}" from source: ${source}`);
+        return result;
     },
     
     /**
      * Extract phone from entity
      */
     _extractPhone(entity) {
-        if (entity.phone_numbers && entity.phone_numbers.length > 0) {
-            return entity.phone_numbers[0].number || entity.phone_numbers[0];
+        if (!entity) return '';
+        
+        let result = '';
+        let source = 'none';
+        
+        if (entity.phone) {
+            result = entity.phone;
+            source = 'entity.phone';
+        } else if (entity.phone_numbers && entity.phone_numbers.length) {
+            result = entity.phone_numbers[0].number || '';
+            source = 'entity.phone_numbers[0].number';
         }
-        return entity.phone_number || '';
+        
+        console.log(`☎️ Extracted phone: "${result}" from source: ${source}`);
+        return result;
     },
     
     /**
      * Populate form fields with extracted data
      */
     _populateFormFields(data) {
-        let populatedCount = 0;
+        if (!data) {
+            console.warn('⚠️ No data provided for form population');
+            return 0;
+        }
         
-        const fieldMappings = [
-            { value: data.displayName, ids: ['quoteName'], transform: (v) => `Quote for ${v}` },
-            { value: data.companyName, ids: ['companyName'] },
-            { value: data.email, ids: ['customerEmail'] },
-            { value: data.phone, ids: ['customerPhone'] }
-        ];
-        
-        fieldMappings.forEach(({ value, ids, transform }) => {
-            if (value) {
-                const finalValue = transform ? transform(value) : value;
-                if (this._setFieldValue(ids, finalValue)) {
-                    populatedCount++;
-                }
-            }
+        console.log('📝 MAPPING COPPER FIELDS TO FORM FIELDS');
+        console.table({
+            'Company Name': { 'Copper Field': 'entity.name (company) or entity.company_name (person)', 'Form Fields': 'companyName, company_name', 'Value': data.companyName },
+            'Customer Name': { 'Copper Field': 'entity.name (person)', 'Form Fields': 'customerName, customer_name', 'Value': data.customerName },
+            'Email': { 'Copper Field': 'entity.email or entity.email_addresses[0].email', 'Form Fields': 'customerEmail, email', 'Value': data.email },
+            'Phone': { 'Copper Field': 'entity.phone or entity.phone_numbers[0].number', 'Form Fields': 'customerPhone, phone', 'Value': data.phone },
+            'Entity ID': { 'Copper Field': 'entity.id', 'Form Fields': 'copper-entity-id (data-attribute)', 'Value': data.entityId },
+            'Entity Type': { 'Copper Field': 'entityType', 'Form Fields': 'copper-entity-type (data-attribute)', 'Value': data.entityType }
         });
+        
+        let populatedCount = 0;
+        let mappingResults = {};
+        
+        // Map extracted data to form fields
+        if (data.companyName) {
+            const success = this._setFieldValue(['companyName', 'company_name'], data.companyName);
+            mappingResults['Company Name'] = { success, value: data.companyName };
+            if (success) populatedCount++;
+        }
+        
+        if (data.customerName) {
+            const success = this._setFieldValue(['customerName', 'customer_name'], data.customerName);
+            mappingResults['Customer Name'] = { success, value: data.customerName };
+            if (success) populatedCount++;
+        }
+        
+        if (data.email) {
+            const success = this._setFieldValue(['customerEmail', 'email'], data.email);
+            mappingResults['Email'] = { success, value: data.email };
+            if (success) populatedCount++;
+        }
+        
+        if (data.phone) {
+            const success = this._setFieldValue(['customerPhone', 'phone'], data.phone);
+            mappingResults['Phone'] = { success, value: data.phone };
+            if (success) populatedCount++;
+        }
+        
+        // Set entity reference for later use
+        const entityIdEl = document.getElementById('copper-entity-id');
+        const entityTypeEl = document.getElementById('copper-entity-type');
+        
+        if (entityIdEl) {
+            entityIdEl.setAttribute('data-entity-id', data.entityId || '');
+            mappingResults['Entity ID'] = { success: true, value: data.entityId };
+        } else {
+            console.warn('⚠️ Element with ID "copper-entity-id" not found');
+            mappingResults['Entity ID'] = { success: false, value: data.entityId };
+        }
+        
+        if (entityTypeEl) {
+            entityTypeEl.setAttribute('data-entity-type', data.entityType || '');
+            mappingResults['Entity Type'] = { success: true, value: data.entityType };
+        } else {
+            console.warn('⚠️ Element with ID "copper-entity-type" not found');
+            mappingResults['Entity Type'] = { success: false, value: data.entityType };
+        }
+        
+        console.log('📊 Field mapping results:');
+        console.table(Object.entries(mappingResults).map(([field, result]) => ({
+            'Field': field,
+            'Value': result.value,
+            'Populated': result.success ? '✅ Yes' : '❌ No'
+        })));
         
         return populatedCount;
     },
@@ -873,15 +1029,30 @@ const CopperIntegration = {
      * Set field value by trying multiple IDs
      */
     _setFieldValue(fieldIds, value) {
+        if (!fieldIds || !value) return false;
+        
+        let populated = false;
+        let foundElement = null;
+        
+        // Try each field ID
         for (const fieldId of fieldIds) {
             const field = document.getElementById(fieldId);
             if (field) {
                 field.value = value;
-                field.classList.add('auto-populated');
-                return true;
+                populated = true;
+                foundElement = fieldId;
+                // No need to try other IDs if one worked
+                break;
             }
         }
-        return false;
+        
+        if (populated) {
+            console.log(`✅ Set field value: "${foundElement}" = "${value}"`);
+        } else {
+            console.warn(`❌ Failed to find any matching form fields for: ${fieldIds.join(', ')}`);
+        }
+        
+        return populated;
     },
     
     /**
