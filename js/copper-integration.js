@@ -696,6 +696,10 @@ const CopperIntegration = {
     _setupActivityPanel() {
         this._showLaunchModalButton();
         this._hideFullscreenButton();
+        
+        // Automatically fetch entity context data when app loads in activity panel
+        console.log('🔄 Activity panel mode detected - auto-fetching entity data...');
+        this._getUserContext();
     },
     
     /**
@@ -1474,7 +1478,42 @@ function launchQuoteModal() {
     
     console.log('🚀 Launching quote modal with Copper SDK...');
     
-    // Get context and launch modal
+    // Use existing context data if already loaded in activity panel
+    if (appState.hasEntityContext && appState.contextData && appState.contextData.entity) {
+        console.log('💾 Using pre-loaded context data for modal');
+        const entity = appState.contextData.entity;
+        const entityType = appState.copperContext?.type || '';
+        
+        const customerData = {
+            entity_id: entity.id,
+            entity_type: entityType,
+            entity_name: entity.name || entity.company_name || '',
+            entity_email: entity.email || '',
+            entity_phone: entity.phone_number || '',
+            entity_state: entity.address?.state || ''
+        };
+        
+        console.log('✅ Using cached entity data:', customerData);
+        
+        // Build modal URL with existing context
+        const baseUrl = window.location.origin + window.location.pathname;
+        const params = new URLSearchParams({ location: 'modal', ...customerData });
+        const modalUrl = `${baseUrl}?${params.toString()}`;
+        
+        console.log('🔗 Modal URL:', modalUrl);
+        
+        // Launch modal
+        appState.sdk.showModal({
+            url: modalUrl,
+            width: 1400,
+            height: 900,
+            title: 'Generate Quote - Kanva Botanicals'
+        });
+        return;
+    }
+    
+    // Fallback: Get context from SDK if not already loaded
+    console.log('🔎 No pre-loaded context found, fetching from SDK...');
     appState.sdk.getContext()
         .then((context) => {
             console.log('📋 Received context from SDK:', context);
