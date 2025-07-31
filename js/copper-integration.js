@@ -917,35 +917,52 @@ const CopperIntegration = {
             console.log('🗺️ Extracted state:', data.state);
         }
         
-        // Extract customer segment from custom fields or tags
-        if (entity.tags && entity.tags.length > 0) {
-            // Look for tags that might indicate customer segment
+        // Extract customer segment from various possible sources
+        // Enhanced logic to better handle company objects and mappings
+        
+        // 1. First try to extract segment from customer_type field if exists
+        if (entity.customer_type) {
+            data.customerSegment = this._mapCustomerTypeToSegment(entity.customer_type);
+            console.log('🏷️ Extracted customer segment from customer_type:', data.customerSegment);
+        }
+        
+        // 2. Check company_type for companies
+        else if (entity.company_type) {
+            data.customerSegment = this._mapCustomerTypeToSegment(entity.company_type);
+            console.log('🏷️ Extracted customer segment from company_type:', data.customerSegment);
+        }
+        
+        // 3. Check for tags that indicate customer segment
+        else if (entity.tags && entity.tags.length > 0) {
+            // Look for specific segment indicator tags
             const segmentTags = entity.tags.filter(tag => 
                 tag.toLowerCase().includes('retail') || 
                 tag.toLowerCase().includes('wholesale') || 
-                tag.toLowerCase().includes('distribution'));
+                tag.toLowerCase().includes('distributor') ||
+                tag.toLowerCase().includes('direct'));
                 
             if (segmentTags.length > 0) {
-                data.customerSegment = segmentTags[0];
+                data.customerSegment = this._mapCustomerTypeToSegment(segmentTags[0]);
                 console.log('🏷️ Extracted customer segment from tags:', data.customerSegment);
             }
         }
         
-        // Try to extract from custom fields if available
-        if (entity.custom_fields) {
+        // 4. Try to extract from custom fields if available
+        if (!data.customerSegment && entity.custom_fields) {
             // Look for custom fields that might contain segment information
-            // This assumes there might be a "Customer Type" or "Segment" custom field
             Object.entries(entity.custom_fields).forEach(([fieldId, value]) => {
-                if ((typeof fieldId === 'string' && 
+                if (!data.customerSegment && (
+                    (typeof fieldId === 'string' && 
                     (fieldId.toLowerCase().includes('segment') || 
                      fieldId.toLowerCase().includes('type') || 
                      fieldId.toLowerCase().includes('category'))) || 
                     (typeof value === 'string' && 
                     (value.toLowerCase().includes('retail') || 
                      value.toLowerCase().includes('wholesale') || 
-                     value.toLowerCase().includes('distribution')))) {
+                     value.toLowerCase().includes('distributor') ||
+                     value.toLowerCase().includes('direct'))))) {
                     
-                    data.customerSegment = value;
+                    data.customerSegment = this._mapCustomerTypeToSegment(value);
                     console.log('🏷️ Extracted customer segment from custom field:', data.customerSegment);
                 }
             });
@@ -1183,6 +1200,7 @@ const CopperIntegration = {
             // Try to populate dropdown first
             const emailDropdown = document.getElementById('customerEmail_dropdown') || 
                                  document.getElementById('email_dropdown');
+            const emailInput = document.getElementById('customerEmail');
                                  
             if (emailDropdown && emailDropdown.tagName === 'SELECT') {
                 // Populate the dropdown with options
@@ -1193,11 +1211,17 @@ const CopperIntegration = {
                 );
                 mappingResults['Email Dropdown'] = { success, value: data.email, options: data.emailOptions.length };
                 if (success) populatedCount++;
-            } else {
-                // Fallback to text field if dropdown not found
-                const success = this._setFieldValue(['customerEmail', 'email'], data.email);
-                mappingResults['Email'] = { success, value: data.email };
-                if (success) populatedCount++;
+            }
+            
+            // Always set the text field value
+            const success = this._setFieldValue(['customerEmail', 'email'], data.email);
+            mappingResults['Email'] = { success, value: data.email };
+            if (success) populatedCount++;
+            
+            // Store options as data attribute for the dropdown handler
+            if (emailInput && data.emailOptions.length > 1) {
+                emailInput.dataset.options = JSON.stringify(data.emailOptions);
+                emailInput.classList.add('has-options');
             }
         } else if (data.email) {
             // Just set the single email value
@@ -1211,6 +1235,7 @@ const CopperIntegration = {
             // Try to populate dropdown first
             const phoneDropdown = document.getElementById('customerPhone_dropdown') || 
                                  document.getElementById('phone_dropdown');
+            const phoneInput = document.getElementById('customerPhone');
                                  
             if (phoneDropdown && phoneDropdown.tagName === 'SELECT') {
                 // Populate the dropdown with options
@@ -1221,11 +1246,17 @@ const CopperIntegration = {
                 );
                 mappingResults['Phone Dropdown'] = { success, value: data.phone, options: data.phoneOptions.length };
                 if (success) populatedCount++;
-            } else {
-                // Fallback to text field if dropdown not found
-                const success = this._setFieldValue(['customerPhone', 'phone'], data.phone);
-                mappingResults['Phone'] = { success, value: data.phone };
-                if (success) populatedCount++;
+            }
+            
+            // Always set the text field value
+            const success = this._setFieldValue(['customerPhone', 'phone'], data.phone);
+            mappingResults['Phone'] = { success, value: data.phone };
+            if (success) populatedCount++;
+            
+            // Store options as data attribute for the dropdown handler
+            if (phoneInput && data.phoneOptions.length > 1) {
+                phoneInput.dataset.options = JSON.stringify(data.phoneOptions);
+                phoneInput.classList.add('has-options');
             }
         } else if (data.phone) {
             // Just set the single phone value
@@ -1279,7 +1310,10 @@ const CopperIntegration = {
             mappingResults['Entity Metadata'] = { success: true, value: `ID: ${data.entityId}, Type: ${data.entityType}` };
         }
         
+        // IMPORTANT: Quote Name field (id=quoteName) should always remain user input only
+        // This field should never be auto-populated from Copper data
         console.log('📊 Field mapping results:');
+        console.log('ℹ️ Note: Quote Name field is intentionally left for user input only');
         console.table(Object.entries(mappingResults).map(([field, result]) => ({
             'Field': field,
             'Value': result.value,
@@ -1463,6 +1497,29 @@ const CopperIntegration = {
     },
     
     /**
+     * Map customer type to standard segment value
+     * @param {string} typeValue - The raw customer type or segment value
+     * @return {string} Standardized segment value
+     */
+    _mapCustomerTypeToSegment(typeValue) {
+        if (!typeValue) return '';
+        
+        const normalized = String(typeValue).toLowerCase();
+        
+        // Map to standard segment values
+        if (normalized.includes('retail')) {
+            return 'retailer';
+        } else if (normalized.includes('wholesale') || normalized.includes('distribution') || normalized.includes('distributor')) {
+            return 'distributor';
+        } else if (normalized.includes('direct') || normalized.includes('consumer')) {
+            return 'direct';
+        }
+        
+        // Return original value if no mapping found
+        return typeValue;
+    },
+    
+    /**
      * Populate customer segment field dropdown
      */
     _populateCustomerSegmentField(fieldId, segmentValue) {
@@ -1470,9 +1527,9 @@ const CopperIntegration = {
         
         const segmentOptions = [
             { value: '', label: 'Select Customer Type...' },
-            { value: 'retail', label: 'Retail' },
-            { value: 'wholesale', label: 'Wholesale' },
-            { value: 'distribution', label: 'Distribution' },
+            { value: 'retailer', label: 'Retailer' },
+            { value: 'distributor', label: 'Distributor' },
+            { value: 'direct', label: 'Direct Consumer' },
             { value: 'other', label: 'Other' }
         ];
         
