@@ -898,8 +898,12 @@ const CopperIntegration = {
             companyName: '',
             customerName: '',
             email: '',
+            emailOptions: [],
             phone: '',
+            phoneOptions: [],
             address: '',
+            state: '',
+            customerSegment: '',
             entityId: entity.id || '',
             entityType: entityType || ''
         };
@@ -907,12 +911,61 @@ const CopperIntegration = {
         console.log('⚙️ Raw Copper entity fields:', Object.keys(entity));
         console.log('📊 DEBUG: ENTITY STRUCTURE', JSON.stringify(entity, null, 2));
         
+        // Extract state from address if available
+        if (entity.address && entity.address.state) {
+            data.state = entity.address.state;
+            console.log('🗺️ Extracted state:', data.state);
+        }
+        
+        // Extract customer segment from custom fields or tags
+        if (entity.tags && entity.tags.length > 0) {
+            // Look for tags that might indicate customer segment
+            const segmentTags = entity.tags.filter(tag => 
+                tag.toLowerCase().includes('retail') || 
+                tag.toLowerCase().includes('wholesale') || 
+                tag.toLowerCase().includes('distribution'));
+                
+            if (segmentTags.length > 0) {
+                data.customerSegment = segmentTags[0];
+                console.log('🏷️ Extracted customer segment from tags:', data.customerSegment);
+            }
+        }
+        
+        // Try to extract from custom fields if available
+        if (entity.custom_fields) {
+            // Look for custom fields that might contain segment information
+            // This assumes there might be a "Customer Type" or "Segment" custom field
+            Object.entries(entity.custom_fields).forEach(([fieldId, value]) => {
+                if ((typeof fieldId === 'string' && 
+                    (fieldId.toLowerCase().includes('segment') || 
+                     fieldId.toLowerCase().includes('type') || 
+                     fieldId.toLowerCase().includes('category'))) || 
+                    (typeof value === 'string' && 
+                    (value.toLowerCase().includes('retail') || 
+                     value.toLowerCase().includes('wholesale') || 
+                     value.toLowerCase().includes('distribution')))) {
+                    
+                    data.customerSegment = value;
+                    console.log('🏷️ Extracted customer segment from custom field:', data.customerSegment);
+                }
+            });
+        }
+        
         // Different extraction based on entity type
         if (entityType === 'person') {
             data.displayName = entity.name || '';
             data.customerName = entity.name || '';
-            data.email = this._extractEmail(entity);
-            data.phone = this._extractPhone(entity);
+            
+            // Extract email with options
+            const emailResult = this._extractEmail(entity);
+            data.email = emailResult.primary;
+            data.emailOptions = emailResult.options;
+            
+            // Extract phone with options
+            const phoneResult = this._extractPhone(entity);
+            data.phone = phoneResult.primary;
+            data.phoneOptions = phoneResult.options;
+            
             // Check for related company
             if (entity.company_name) {
                 data.companyName = entity.company_name;
@@ -921,22 +974,38 @@ const CopperIntegration = {
             console.log('👤 Extracted PERSON data:', {
                 name: entity.name,
                 email: data.email,
+                emailOptions: data.emailOptions,
                 phone: data.phone,
+                phoneOptions: data.phoneOptions,
                 company: data.companyName,
-                source: 'entity.name, entity.email_addresses, entity.phone_numbers, entity.company_name'
+                state: data.state,
+                customerSegment: data.customerSegment,
+                source: 'entity.name, entity.email_addresses, entity.phone_numbers, entity.company_name, entity.address'
             });
             
         } else if (entityType === 'company') {
             data.displayName = entity.name || '';
             data.companyName = entity.name || '';
-            data.email = this._extractEmail(entity);
-            data.phone = this._extractPhone(entity);
+            
+            // Extract email with options
+            const emailResult = this._extractEmail(entity);
+            data.email = emailResult.primary;
+            data.emailOptions = emailResult.options;
+            
+            // Extract phone with options
+            const phoneResult = this._extractPhone(entity);
+            data.phone = phoneResult.primary;
+            data.phoneOptions = phoneResult.options;
             
             console.log('🏢 Extracted COMPANY data:', {
                 name: entity.name,
                 email: data.email,
+                emailOptions: data.emailOptions,
                 phone: data.phone,
-                source: 'entity.name, entity.email_addresses, entity.phone_numbers'
+                phoneOptions: data.phoneOptions,
+                state: data.state,
+                customerSegment: data.customerSegment,
+                source: 'entity.name, entity.email_addresses, entity.phone_numbers, entity.address'
             });
         } else {
             console.warn('⚠️ Unknown entity type for extraction:', entityType);
@@ -948,69 +1017,155 @@ const CopperIntegration = {
     
     /**
      * Extract email from entity
+     * @returns {Object} {primary: string, options: Array}
      */
     _extractEmail(entity) {
-        if (!entity) return '';
+        if (!entity) return { primary: '', options: [] };
         
-        let result = '';
+        let primary = '';
+        let options = [];
         let source = 'none';
         
-        if (entity.email) {
-            result = entity.email;
-            source = 'entity.email';
-        } else if (entity.emails && entity.emails.length > 0) {
-            result = entity.emails[0].email || entity.emails[0];
-            source = 'entity.emails[0].email';
+        try {
+            // Case 1: Array of email_addresses objects (most common in person entities)
+            if (entity.email_addresses && Array.isArray(entity.email_addresses) && entity.email_addresses.length > 0) {
+                // Convert to consistent format
+                const emailObjs = entity.email_addresses.map(item => {
+                    if (typeof item === 'string') return { email: item, category: 'other' };
+                    return item;
+                });
+                
+                // Filter out empty emails
+                const validEmails = emailObjs.filter(e => e.email && e.email.trim() !== '');
+                
+                if (validEmails.length > 0) {
+                    // Primary email is the first one marked as work, or first in array
+                    const workEmail = validEmails.find(e => e.category === 'work');
+                    primary = workEmail ? workEmail.email : validEmails[0].email;
+                    
+                    // Build dropdown options
+                    options = validEmails.map(e => ({
+                        value: e.email,
+                        label: `${e.email} (${e.category || 'other'})`,
+                        type: e.category || 'other'
+                    }));
+                    
+                    console.log(`📧 Extracted ${options.length} email options from entity:`, options);
+                }
+                source = 'entity.email_addresses';
+            } else if (entity.email) {
+                // Entity has a single email field
+                primary = entity.email;
+                options = [{ value: entity.email, label: entity.email, type: 'primary' }];
+                source = 'entity.email';
+            }
+        } catch (error) {
+            console.error('⚠️ Error extracting email addresses:', error);
         }
         
-        console.log(`📧 Extracted email: "${result}" from source: ${source}`);
-        return result;
+        // Return the primary email and options array
+        return {
+            primary,
+            options,
+            source
+        };
     },
     
     /**
      * Extract phone from entity
+     * @returns {Object} {primary: string, options: Array}
      */
     _extractPhone(entity) {
-        if (!entity) return '';
-        
-        let result = '';
+        // Extract phone numbers from either contact object or direct field
+        let primary = '';
+        let options = [];
         let source = 'none';
         
-        if (entity.phone) {
-            result = entity.phone;
-            source = 'entity.phone';
-        } else if (entity.phone_numbers && entity.phone_numbers.length) {
-            result = entity.phone_numbers[0].number || '';
-            source = 'entity.phone_numbers[0].number';
+        try {
+            // Case 1: Direct phone_number field
+            if (entity.phone_number) {
+                primary = entity.phone_number;
+                options.push({ value: entity.phone_number, label: entity.phone_number, type: 'primary' });
+                source = 'entity.phone_number';
+            }
+            
+            // Case 2: Array of phone_numbers (common in person entities)
+            if (entity.phone_numbers && Array.isArray(entity.phone_numbers) && entity.phone_numbers.length > 0) {
+                entity.phone_numbers.forEach((item, index) => {
+                    const phoneObj = typeof item === 'string' ? { number: item } : item;
+                    const phoneValue = phoneObj.number || '';
+                    const phoneCategory = phoneObj.category || (index === 0 ? 'primary' : 'other');
+                    
+                    if (phoneValue) {
+                        // Use first phone as primary if not already set
+                        if (!primary && index === 0) {
+                            primary = phoneValue;
+                        }
+                        
+                        options.push({
+                            value: phoneValue,
+                            label: `${phoneValue} (${phoneCategory})`,
+                            type: phoneCategory
+                        });
+                    }
+                });
+                source = 'entity.phone_numbers';
+            }
+            
+            // Case 3: Simple phones array (less common but checking for consistency)
+            if (entity.phones && Array.isArray(entity.phones) && entity.phones.length > 0) {
+                entity.phones.forEach((phone, index) => {
+                    const phoneValue = phone.number || (typeof phone === 'string' ? phone : '');
+                    
+                    if (phoneValue) {
+                        // Use first phone as primary if not already set
+                        if (!primary && index === 0) {
+                            primary = phoneValue;
+                        }
+                        
+                        options.push({
+                            value: phoneValue,
+                            label: `Phone ${index + 1}`,
+                            type: index === 0 ? 'primary' : 'secondary'
+                        });
+                    }
+                });
+                source = 'entity.phones';
+            }
+            
+            // De-duplicate options
+            options = options.filter((item, index, self) => 
+                index === self.findIndex(t => t.value === item.value)
+            );
+            
+            console.log(`☎️ Extracted phones:`, {
+                primary,
+                count: options.length,
+                options,
+                source
+            });
+        } catch (error) {
+            console.error('⚠️ Error extracting phone numbers:', error);
         }
         
-        console.log(`☎️ Extracted phone: "${result}" from source: ${source}`);
-        return result;
+        return { primary, options };
     },
     
     /**
-     * Populate form fields with extracted data
+     * Populate form fields with extracted entity data
      */
     _populateFormFields(data) {
         if (!data) {
-            console.warn('⚠️ No data provided for form population');
+            console.warn('⚠️ No data to populate form fields with');
             return 0;
         }
-        
-        console.log('📝 MAPPING COPPER FIELDS TO FORM FIELDS');
-        console.table({
-            'Company Name': { 'Copper Field': 'entity.name (company) or entity.company_name (person)', 'Form Fields': 'companyName, company_name', 'Value': data.companyName },
-            'Customer Name': { 'Copper Field': 'entity.name (person)', 'Form Fields': 'customerName, customer_name', 'Value': data.customerName },
-            'Email': { 'Copper Field': 'entity.email or entity.email_addresses[0].email', 'Form Fields': 'customerEmail, email', 'Value': data.email },
-            'Phone': { 'Copper Field': 'entity.phone or entity.phone_numbers[0].number', 'Form Fields': 'customerPhone, phone', 'Value': data.phone },
-            'Entity ID': { 'Copper Field': 'entity.id', 'Form Fields': 'copper-entity-id (data-attribute)', 'Value': data.entityId },
-            'Entity Type': { 'Copper Field': 'entityType', 'Form Fields': 'copper-entity-type (data-attribute)', 'Value': data.entityType }
-        });
         
         let populatedCount = 0;
         let mappingResults = {};
         
-        // Map extracted data to form fields
+        console.log('📝 POPULATING FORM FIELDS WITH DATA:', data);
+        
+        // Map fields to form inputs
         if (data.companyName) {
             const success = this._setFieldValue(['companyName', 'company_name'], data.companyName);
             mappingResults['Company Name'] = { success, value: data.companyName };
@@ -1023,36 +1178,105 @@ const CopperIntegration = {
             if (success) populatedCount++;
         }
         
-        if (data.email) {
+        // ENHANCEMENT: Email - Either use dropdown or fallback to text field
+        if (data.email && data.emailOptions && data.emailOptions.length > 0) {
+            // Try to populate dropdown first
+            const emailDropdown = document.getElementById('customerEmail_dropdown') || 
+                                 document.getElementById('email_dropdown');
+                                 
+            if (emailDropdown && emailDropdown.tagName === 'SELECT') {
+                // Populate the dropdown with options
+                const success = this._populateDropdownField(
+                    ['customerEmail_dropdown', 'email_dropdown'], 
+                    data.emailOptions, 
+                    data.email
+                );
+                mappingResults['Email Dropdown'] = { success, value: data.email, options: data.emailOptions.length };
+                if (success) populatedCount++;
+            } else {
+                // Fallback to text field if dropdown not found
+                const success = this._setFieldValue(['customerEmail', 'email'], data.email);
+                mappingResults['Email'] = { success, value: data.email };
+                if (success) populatedCount++;
+            }
+        } else if (data.email) {
+            // Just set the single email value
             const success = this._setFieldValue(['customerEmail', 'email'], data.email);
             mappingResults['Email'] = { success, value: data.email };
             if (success) populatedCount++;
         }
         
-        if (data.phone) {
+        // ENHANCEMENT: Phone - Either use dropdown or fallback to text field
+        if (data.phone && data.phoneOptions && data.phoneOptions.length > 0) {
+            // Try to populate dropdown first
+            const phoneDropdown = document.getElementById('customerPhone_dropdown') || 
+                                 document.getElementById('phone_dropdown');
+                                 
+            if (phoneDropdown && phoneDropdown.tagName === 'SELECT') {
+                // Populate the dropdown with options
+                const success = this._populateDropdownField(
+                    ['customerPhone_dropdown', 'phone_dropdown'], 
+                    data.phoneOptions, 
+                    data.phone
+                );
+                mappingResults['Phone Dropdown'] = { success, value: data.phone, options: data.phoneOptions.length };
+                if (success) populatedCount++;
+            } else {
+                // Fallback to text field if dropdown not found
+                const success = this._setFieldValue(['customerPhone', 'phone'], data.phone);
+                mappingResults['Phone'] = { success, value: data.phone };
+                if (success) populatedCount++;
+            }
+        } else if (data.phone) {
+            // Just set the single phone value
             const success = this._setFieldValue(['customerPhone', 'phone'], data.phone);
             mappingResults['Phone'] = { success, value: data.phone };
             if (success) populatedCount++;
         }
         
-        // Set entity reference for later use
-        const entityIdEl = document.getElementById('copper-entity-id');
-        const entityTypeEl = document.getElementById('copper-entity-type');
-        
-        if (entityIdEl) {
-            entityIdEl.setAttribute('data-entity-id', data.entityId || '');
-            mappingResults['Entity ID'] = { success: true, value: data.entityId };
-        } else {
-            console.warn('⚠️ Element with ID "copper-entity-id" not found');
-            mappingResults['Entity ID'] = { success: false, value: data.entityId };
+        // ENHANCEMENT: State dropdown
+        if (data.state) {
+            const stateField = document.getElementById('customerState') || 
+                             document.getElementById('state');
+                             
+            if (stateField && stateField.tagName === 'SELECT') {
+                // Populate state dropdown with proper options and selection
+                const success = this._populateStateField(['customerState', 'state'], data.state);
+                mappingResults['State Dropdown'] = { success, value: data.state };
+                if (success) populatedCount++;
+            } else if (stateField) {
+                // Fallback to text field
+                const success = this._setFieldValue(['customerState', 'state'], data.state);
+                mappingResults['State'] = { success, value: data.state };
+                if (success) populatedCount++;
+            }
         }
         
-        if (entityTypeEl) {
-            entityTypeEl.setAttribute('data-entity-type', data.entityType || '');
-            mappingResults['Entity Type'] = { success: true, value: data.entityType };
-        } else {
-            console.warn('⚠️ Element with ID "copper-entity-type" not found');
-            mappingResults['Entity Type'] = { success: false, value: data.entityType };
+        // ENHANCEMENT: Customer segment dropdown
+        if (data.customerSegment) {
+            const segmentField = document.getElementById('customerSegment') || 
+                               document.getElementById('customer_segment') || 
+                               document.getElementById('customer_type');
+                               
+            if (segmentField && segmentField.tagName === 'SELECT') {
+                // Populate segment dropdown
+                const success = this._populateCustomerSegmentField(segmentField.id, data.customerSegment);
+                mappingResults['Customer Segment'] = { success, value: data.customerSegment };
+                if (success) populatedCount++;
+            } else if (segmentField) {
+                // Fallback to text field
+                const success = this._setFieldValue([segmentField.id], data.customerSegment);
+                mappingResults['Customer Segment'] = { success, value: data.customerSegment };
+                if (success) populatedCount++;
+            }
+        }
+        
+        // Set entity ID and type as data attributes on the form for further processing
+        const quoteForm = document.getElementById('quote-form');
+        if (quoteForm) {
+            quoteForm.dataset.entityId = data.entityId || '';
+            quoteForm.dataset.entityType = data.entityType || '';
+            mappingResults['Entity Metadata'] = { success: true, value: `ID: ${data.entityId}, Type: ${data.entityType}` };
         }
         
         console.log('📊 Field mapping results:');
@@ -1061,6 +1285,10 @@ const CopperIntegration = {
             'Value': result.value,
             'Populated': result.success ? '✅ Yes' : '❌ No'
         })));
+        
+        if (populatedCount > 0) {
+            this._showAutoPopulationSuccess(populatedCount, data.entityType, data.displayName);
+        }
         
         return populatedCount;
     },
@@ -1093,6 +1321,179 @@ const CopperIntegration = {
         }
         
         return populated;
+    },
+    
+    /**
+     * Populate dropdown field with options
+     */
+    _populateDropdownField(fieldIds, options, selectedValue) {
+        if (!fieldIds || !options || !options.length) return false;
+        
+        let populated = false;
+        let foundElement = null;
+        
+        // Try each field ID
+        for (const fieldId of fieldIds) {
+            const select = document.getElementById(fieldId);
+            if (select && select.tagName === 'SELECT') {
+                // Clear existing options
+                while (select.options.length > 0) {
+                    select.remove(0);
+                }
+                
+                // Add options from provided list
+                options.forEach(option => {
+                    const opt = document.createElement('option');
+                    opt.value = option.value;
+                    opt.textContent = option.label || option.value;
+                    opt.dataset.type = option.type || '';
+                    
+                    // Select the option that matches the selected value
+                    if (option.value === selectedValue) {
+                        opt.selected = true;
+                    }
+                    
+                    select.appendChild(opt);
+                });
+                
+                populated = true;
+                foundElement = fieldId;
+                
+                // Also trigger change event to notify form handlers
+                const event = new Event('change');
+                select.dispatchEvent(event);
+                
+                // No need to try other IDs if one worked
+                break;
+            } else if (select) {
+                // If element exists but isn't a dropdown, fallback to normal value setting
+                select.value = selectedValue;
+                populated = true;
+                foundElement = fieldId;
+                console.log(`⚠️ Element ${fieldId} is not a SELECT dropdown, using fallback value setting`);
+                break;
+            }
+        }
+        
+        if (populated) {
+            console.log(`✅ Populated dropdown: "${foundElement}" with ${options.length} options, selected "${selectedValue}"`);
+        } else {
+            console.warn(`❌ Failed to find any matching dropdown for: ${fieldIds.join(', ')}`);
+        }
+        
+        return populated;
+    },
+    
+    /**
+     * Populate state field dropdown
+     */
+    _populateStateField(fieldIds, stateValue) {
+        if (!fieldIds || !stateValue) return false;
+        
+        const stateOptions = [
+            { value: '', label: 'Select State...' },
+            { value: 'AL', label: 'Alabama' },
+            { value: 'AK', label: 'Alaska' },
+            { value: 'AZ', label: 'Arizona' },
+            { value: 'AR', label: 'Arkansas' },
+            { value: 'CA', label: 'California' },
+            { value: 'CO', label: 'Colorado' },
+            { value: 'CT', label: 'Connecticut' },
+            { value: 'DE', label: 'Delaware' },
+            { value: 'DC', label: 'District of Columbia' },
+            { value: 'FL', label: 'Florida' },
+            { value: 'GA', label: 'Georgia' },
+            { value: 'HI', label: 'Hawaii' },
+            { value: 'ID', label: 'Idaho' },
+            { value: 'IL', label: 'Illinois' },
+            { value: 'IN', label: 'Indiana' },
+            { value: 'IA', label: 'Iowa' },
+            { value: 'KS', label: 'Kansas' },
+            { value: 'KY', label: 'Kentucky' },
+            { value: 'LA', label: 'Louisiana' },
+            { value: 'ME', label: 'Maine' },
+            { value: 'MD', label: 'Maryland' },
+            { value: 'MA', label: 'Massachusetts' },
+            { value: 'MI', label: 'Michigan' },
+            { value: 'MN', label: 'Minnesota' },
+            { value: 'MS', label: 'Mississippi' },
+            { value: 'MO', label: 'Missouri' },
+            { value: 'MT', label: 'Montana' },
+            { value: 'NE', label: 'Nebraska' },
+            { value: 'NV', label: 'Nevada' },
+            { value: 'NH', label: 'New Hampshire' },
+            { value: 'NJ', label: 'New Jersey' },
+            { value: 'NM', label: 'New Mexico' },
+            { value: 'NY', label: 'New York' },
+            { value: 'NC', label: 'North Carolina' },
+            { value: 'ND', label: 'North Dakota' },
+            { value: 'OH', label: 'Ohio' },
+            { value: 'OK', label: 'Oklahoma' },
+            { value: 'OR', label: 'Oregon' },
+            { value: 'PA', label: 'Pennsylvania' },
+            { value: 'RI', label: 'Rhode Island' },
+            { value: 'SC', label: 'South Carolina' },
+            { value: 'SD', label: 'South Dakota' },
+            { value: 'TN', label: 'Tennessee' },
+            { value: 'TX', label: 'Texas' },
+            { value: 'UT', label: 'Utah' },
+            { value: 'VT', label: 'Vermont' },
+            { value: 'VA', label: 'Virginia' },
+            { value: 'WA', label: 'Washington' },
+            { value: 'WV', label: 'West Virginia' },
+            { value: 'WI', label: 'Wisconsin' },
+            { value: 'WY', label: 'Wyoming' }
+        ];
+        
+        // Convert 2-letter code to full state name if needed
+        const stateCode = stateValue.length === 2 ? stateValue.toUpperCase() : stateValue;
+        const stateName = stateValue.length > 2 ? stateValue : null;
+        
+        let valueToSelect = stateCode;
+        
+        // If we have a state name, find its code
+        if (stateName) {
+            const matchingState = stateOptions.find(s => s.label.toLowerCase() === stateName.toLowerCase());
+            if (matchingState) {
+                valueToSelect = matchingState.value;
+            }
+        }
+        
+        return this._populateDropdownField(fieldIds, stateOptions, valueToSelect);
+    },
+    
+    /**
+     * Populate customer segment field dropdown
+     */
+    _populateCustomerSegmentField(fieldId, segmentValue) {
+        if (!fieldId) return false;
+        
+        const segmentOptions = [
+            { value: '', label: 'Select Customer Type...' },
+            { value: 'retail', label: 'Retail' },
+            { value: 'wholesale', label: 'Wholesale' },
+            { value: 'distribution', label: 'Distribution' },
+            { value: 'other', label: 'Other' }
+        ];
+        
+        // Try to match the segment value with our options
+        let valueToSelect = '';
+        
+        if (segmentValue) {
+            const lowerSegment = segmentValue.toLowerCase();
+            
+            if (lowerSegment.includes('retail')) {
+                valueToSelect = 'retail';
+            } else if (lowerSegment.includes('wholesale')) {
+                valueToSelect = 'wholesale';
+            } else if (lowerSegment.includes('distribution') || lowerSegment.includes('dist')) {
+                valueToSelect = 'distribution';
+            } else {
+                valueToSelect = 'other';
+            }
+        }
+        
+        return this._populateDropdownField([fieldId], segmentOptions, valueToSelect);
     },
     
     /**
