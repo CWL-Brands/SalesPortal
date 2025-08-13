@@ -34,8 +34,12 @@ class SecureIntegrationHandler {
         this.connections = await window.firebaseDataService.fetchData(this.connectionsPath);
         this.isLoaded = true;
         
-        // Update cache in Firebase storage
-        await window.firebaseDataService.setLocalStorage('connections', this.connections);
+        // Update cache locally (guard in case helper is unavailable)
+        if (typeof window.firebaseDataService.setLocalStorage === 'function') {
+            await window.firebaseDataService.setLocalStorage('connections', this.connections);
+        } else {
+            try { localStorage.setItem('connections', JSON.stringify(this.connections)); } catch (e) {}
+        }
         console.log('✅ Loaded connections from Firebase:', this.connections ? 'SUCCESS' : 'NO DATA');
         
         return this.connections;
@@ -91,7 +95,7 @@ class SecureIntegrationHandler {
         // Update cache
         localStorage.setItem('connections', JSON.stringify(this.connections));
         
-        // Send to server
+        // Persist to Firestore via FirebaseDataService
         return this.saveConnections();
     }
     
@@ -101,27 +105,21 @@ class SecureIntegrationHandler {
      */
     async saveConnections() {
         try {
-            // Create a simple API endpoint for saving connections
-            const response = await fetch('api/save-connections.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(this.connections)
-            });
-            
-            if (!response.ok) {
-                // If the API endpoint doesn't exist or fails, fall back to direct file update
-                console.warn('⚠️ API endpoint failed, falling back to direct update');
-                return this.fallbackSaveConnections();
+            if (!window.firebaseDataService) {
+                throw new Error('Firebase Data Service not available');
             }
-            
-            const result = await response.json();
-            console.log('✅ Saved connections via API:', result);
+            const success = await window.firebaseDataService.saveData(this.connectionsPath, this.connections);
+            if (!success) throw new Error('Failed to save to Firestore');
+            console.log('✅ Saved connections to Firestore');
             return true;
         } catch (error) {
-            console.warn('⚠️ Error saving via API, falling back to direct update:', error);
-            return this.fallbackSaveConnections();
+            console.error('❌ Error saving connections to Firestore:', error);
+            // As a last resort, cache locally so UI persists this session
+            try { localStorage.setItem('connections', JSON.stringify(this.connections)); } catch (e) {}
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('Failed to save integration settings to cloud. Cached locally.', 'warning');
+            }
+            return false;
         }
     }
     
@@ -131,36 +129,9 @@ class SecureIntegrationHandler {
      * @returns {Promise} Promise that resolves when save is complete
      */
     async fallbackSaveConnections() {
-        try {
-            // For security, we'll use a server-side script to handle the actual file update
-            // This script will ensure sensitive data is handled properly
-            const response = await fetch('scripts/update-connections.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(this.connections)
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Failed to save connections: ${response.status}`);
-            }
-            
-            const result = await response.json();
-            console.log('✅ Saved connections via fallback:', result);
-            return true;
-        } catch (error) {
-            console.error('❌ Error saving connections:', error);
-            
-            // Show error notification to user
-            if (typeof window.showNotification === 'function') {
-                window.showNotification('Failed to save integration settings. Please try again.', 'error');
-            } else {
-                alert('Failed to save integration settings. Please try again.');
-            }
-            
-            return false;
-        }
+        // Deprecated: PHP endpoints removed. Keep for backward compatibility but no-op.
+        console.warn('ℹ️ fallbackSaveConnections is deprecated; using Firestore only.');
+        return false;
     }
     
     /**

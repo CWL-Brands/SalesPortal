@@ -2749,21 +2749,16 @@ async showProductEditModal(productId = null) {
                 throw new Error('API Key and API Secret are required');
             }
             
-            // Create basic auth header
-            const credentials = btoa(`${apiKey}:${apiSecret}`);
-            const baseUrl = environment === 'sandbox' ? 'https://ssapi.shipstation.com' : 'https://ssapi.shipstation.com';
-            
-            // Make real API call to ShipStation
-            const response = await fetch(`${baseUrl}/accounts`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Basic ${credentials}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (response.ok) {
-                const accountData = await response.json();
+            // Configure singleton and use its tested method (handles base URL and headers)
+            if (window.shipStation) {
+                window.shipStation.configure({ apiKey, apiSecret, environment });
+            }
+
+            const result = window.shipStation
+                ? await window.shipStation.testConnection()
+                : { success: false, message: 'ShipStation integration not initialized' };
+
+            if (result.success) {
                 this.updateIntegrationStatus(statusElement, 'ok', 'Connected');
                 
                 // Save successful connection data
@@ -2772,19 +2767,18 @@ async showProductEditModal(productId = null) {
                     apiSecret: apiSecret,
                     environment: environment,
                     timestamp: new Date().toISOString(),
-                    accountData: accountData
+                    connectionTest: result.details || { message: result.message }
                 });
                 
                 this.showNotification('ShipStation connection successful!', 'success');
                 
-            } else if (response.status === 401) {
-                this.updateIntegrationStatus(statusElement, 'error', 'Unauthorized');
-                this.showNotification('ShipStation API credentials are invalid', 'error');
-            } else if (response.status === 403) {
-                this.updateIntegrationStatus(statusElement, 'error', 'Forbidden');
-                this.showNotification('Access denied. Check your ShipStation permissions', 'error');
             } else {
-                throw new Error(`ShipStation API returned ${response.status}`);
+                this.updateIntegrationStatus(statusElement, 'error', 'Error');
+                // Provide a friendlier message for common CORS/auth cases
+                const msg = /CORS/i.test(result.message || '')
+                    ? 'CORS blocked the browser request. Use a backend proxy for production.'
+                    : result.message || 'ShipStation connection failed';
+                this.showNotification(`ShipStation connection failed: ${msg}`, 'error');
             }
             
         } catch (error) {
@@ -2829,7 +2823,223 @@ async showProductEditModal(productId = null) {
      * View ShipStation orders
      */
     viewShipStationOrders() {
-        alert('ShipStation orders view would open here. This feature is under development.');
+        // Create modal container if not present
+        let modal = document.getElementById('shipstation-orders-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'shipstation-orders-modal';
+            modal.className = 'modal';
+            modal.style.display = 'none';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 900px; margin: 5% auto; max-height: 85vh; overflow: auto;">
+                    <button class="close-btn" onclick="document.getElementById('shipstation-orders-modal').style.display='none'">&times;</button>
+                    <h2>ShipStation Orders</h2>
+                    <div style="display:flex; gap:12px; align-items:center; margin: 10px 0; flex-wrap: wrap;">
+                        <label>Start: <input type="date" id="ss-orders-start"></label>
+                        <label>End: <input type="date" id="ss-orders-end"></label>
+                        <button id="ss-orders-fetch" class="btn btn-primary">Fetch</button>
+                        <input type="text" id="ss-orders-search" placeholder="Search orders..." style="flex:1; min-width: 220px; padding:6px;">
+                        <span id="ss-orders-status" style="margin-left:auto; font-size: 12px; opacity: .8;"></span>
+                    </div>
+                    <div id="ss-orders-results" style="border:1px solid #ddd; border-radius:6px; overflow:hidden; max-height:60vh; overflow-y:auto;">
+                        <table id="ss-orders-table" style="width:100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background:#f6f6f6;">
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Order #</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Date</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Customer</th>
+                                    <th style="text-align:left; padding:8px; border-bottom:1px solid #ddd;">Status</th>
+                                    <th style="text-align:right; padding:8px; border-bottom:1px solid #ddd;">Items</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ss-orders-tbody">
+                                <tr><td colspan="5" style="padding:12px;">No data yet. Choose a date and click Fetch.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content: space-between; margin-top:8px; gap:8px;">
+                        <div>
+                            <button id="ss-orders-prev" class="btn">Prev</button>
+                            <button id="ss-orders-next" class="btn">Next</button>
+                        </div>
+                        <div id="ss-orders-pageinfo" style="font-size:12px; opacity:.8;"></div>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+
+        // Initialize dates to today
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const startInput = modal.querySelector('#ss-orders-start');
+        const endInput = modal.querySelector('#ss-orders-end');
+        if (startInput && !startInput.value) startInput.value = `${yyyy}-${mm}-${dd}`;
+        if (endInput && !endInput.value) endInput.value = `${yyyy}-${mm}-${dd}`;
+
+        const statusEl = modal.querySelector('#ss-orders-status');
+        const tbody = modal.querySelector('#ss-orders-tbody');
+        const fetchBtn = modal.querySelector('#ss-orders-fetch');
+        const searchInput = modal.querySelector('#ss-orders-search');
+        const prevBtn = modal.querySelector('#ss-orders-prev');
+        const nextBtn = modal.querySelector('#ss-orders-next');
+        const pageInfo = modal.querySelector('#ss-orders-pageinfo');
+        let currentOrders = [];
+        let currentPage = 1;
+        let totalPages = 1;
+
+        const renderRows = (orders) => {
+            if (!orders || orders.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="padding:12px;">No orders found for selected date(s).</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = orders.map(o => {
+                const orderDate = o.orderDate || o.createDate || '';
+                const cust = (o.billTo?.name || o.shipTo?.name || '').toString();
+                const itemsCount = Array.isArray(o.items) ? o.items.reduce((a, it) => a + (Number(it.quantity)||0), 0) : (o.itemCount || 0);
+                const status = o.orderStatus || o.advancedOptions?.storeId || '';
+                return `
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eee;"><a href="#" class="ss-order-link" data-order-id="${o.orderId || ''}" data-order-number="${o.orderNumber || ''}">${o.orderNumber || o.orderId || ''}</a></td>
+                        <td style="padding:8px; border-bottom:1px solid #eee;">${orderDate}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eee;">${cust}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eee;">${status}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${itemsCount}</td>
+                    </tr>`;
+            }).join('');
+        };
+
+        const fetchOrders = async (page = 1) => {
+            if (!window.shipStation || !window.shipStation.isConfigured) {
+                this.showNotification('ShipStation not configured', 'error');
+                return;
+            }
+            try {
+                statusEl.textContent = 'Loading...';
+                const startDate = new Date(`${startInput.value}T00:00:00`);
+                const endDate = new Date(`${endInput.value}T23:59:59`);
+                const { orders, total, page: pg, pages } = await window.shipStation.listOrders({ start: startDate, end: endDate, page: page, pageSize: 100 });
+                currentOrders = orders || [];
+                currentPage = pg || page || 1;
+                totalPages = pages || 1;
+                statusEl.textContent = `Loaded ${currentOrders.length}${typeof total === 'number' ? ` of ${total}` : ''}`;
+                pageInfo.textContent = `Page ${currentPage}${totalPages ? ` of ${totalPages}` : ''}`;
+                prevBtn.disabled = currentPage <= 1;
+                nextBtn.disabled = totalPages ? currentPage >= totalPages : (currentOrders.length < 100);
+                renderRows(currentOrders);
+            } catch (err) {
+                console.error('Failed to fetch ShipStation orders:', err);
+                statusEl.textContent = 'Error';
+                const msg = /CORS/i.test(String(err)) ? 'CORS blocked the browser request. Use a backend proxy.' : (err.message || 'Failed to fetch orders');
+                this.showNotification(`ShipStation orders error: ${msg}`, 'error');
+            }
+        };
+
+        const filterOrders = () => {
+            const q = (searchInput.value || '').toLowerCase().trim();
+            if (!q) { renderRows(currentOrders); return; }
+            const filtered = currentOrders.filter(o => {
+                try {
+                    return JSON.stringify(o).toLowerCase().includes(q);
+                } catch { return false; }
+            });
+            renderRows(filtered);
+        };
+
+        // Wire up controls
+        fetchBtn.onclick = () => { currentPage = 1; fetchOrders(1); };
+        prevBtn.onclick = () => { if (currentPage > 1) fetchOrders(currentPage - 1); };
+        nextBtn.onclick = () => { fetchOrders(currentPage + 1); };
+
+        // Order details modal
+        const openOrderDetails = async (orderId, orderNumber) => {
+            try {
+                const order = orderId ? await window.shipStation.getOrder(orderId) : await window.shipStation.getOrderByOrderNumber(orderNumber);
+                if (!order) { this.showNotification('Order not found', 'warning'); return; }
+
+                let detail = document.getElementById('shipstation-order-detail-modal');
+                if (!detail) {
+                    detail = document.createElement('div');
+                    detail.id = 'shipstation-order-detail-modal';
+                    detail.className = 'modal';
+                    detail.style.display = 'none';
+                    document.body.appendChild(detail);
+                }
+                const itemsRows = (order.items || []).map((it, i) => `
+                    <tr>
+                        <td style="padding:6px; border-bottom:1px solid #eee;">${i+1}</td>
+                        <td style="padding:6px; border-bottom:1px solid #eee;">${it.sku || ''}</td>
+                        <td style="padding:6px; border-bottom:1px solid #eee;">${it.name || ''}</td>
+                        <td style="padding:6px; border-bottom:1px solid #eee; text-align:right;">${it.quantity || 0}</td>
+                        <td style="padding:6px; border-bottom:1px solid #eee; text-align:right;">${(it.unitPrice ?? 0)}</td>
+                    </tr>`).join('') || '<tr><td colspan="5" style="padding:8px;">No items</td></tr>';
+                detail.innerHTML = `
+                    <div class="modal-content" style="max-width: 720px; margin: 5% auto; max-height: 85vh; overflow: auto;">
+                        <button class="close-btn" onclick="document.getElementById('shipstation-order-detail-modal').style.display='none'">&times;</button>
+                        <h3>Order ${order.orderNumber || order.orderId || ''}</h3>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom:10px;">
+                            <div>
+                                <div><strong>Date:</strong> ${order.orderDate || order.createDate || ''}</div>
+                                <div><strong>Status:</strong> ${order.orderStatus || ''}</div>
+                                <div><strong>Amount Paid:</strong> ${order.amountPaid ?? 0}</div>
+                                <div><strong>Shipping:</strong> ${order.shippingAmount ?? 0}</div>
+                            </div>
+                            <div>
+                                <div><strong>Bill To:</strong> ${order.billTo?.name || ''}</div>
+                                <div><strong>Ship To:</strong> ${order.shipTo?.name || ''}</div>
+                                <div><strong>Email:</strong> ${order.customerEmail || ''}</div>
+                            </div>
+                        </div>
+                        <h4>Items</h4>
+                        <div style="border:1px solid #ddd; border-radius:6px; overflow:hidden;">
+                            <table style="width:100%; border-collapse:collapse;">
+                                <thead>
+                                    <tr style="background:#f6f6f6;">
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">#</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">SKU</th>
+                                        <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Name</th>
+                                        <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Qty</th>
+                                        <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Unit Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${itemsRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>`;
+                detail.style.display = 'block';
+            } catch (e) {
+                console.error('Failed to load order details:', e);
+                const msg = /CORS/i.test(String(e)) ? 'CORS blocked the browser request. Use a backend proxy.' : (e.message || 'Failed to load order');
+                this.showNotification(`Order details error: ${msg}`, 'error');
+            }
+        };
+
+        // Delegate click on order links
+        tbody.onclick = (ev) => {
+            const a = ev.target.closest('a.ss-order-link');
+            if (!a) return;
+            ev.preventDefault();
+            const orderId = a.getAttribute('data-order-id');
+            const orderNumber = a.getAttribute('data-order-number');
+            openOrderDetails(orderId, orderNumber);
+        };
+
+        // Bind search
+        if (searchInput) {
+            searchInput.oninput = () => {
+                // Delay-free filter on client-side list
+                filterOrders();
+            };
+        }
+
+        // Bind fetch
+        fetchBtn.onclick = fetchOrders;
+        // Show modal and auto-fetch
+        modal.style.display = 'block';
+        fetchOrders();
     }
     
     /**

@@ -767,8 +767,26 @@ class KanvaCalculator {
         // Quote generation buttons
         const generateQuoteBtn = document.getElementById('generateQuoteBtn');
         if (generateQuoteBtn) {
-            generateQuoteBtn.addEventListener('click', () => {
-                this.generateQuote();
+            generateQuoteBtn.addEventListener('click', async () => {
+                const quote = this.generateQuote();
+                // Non-blocking ShipStation order creation
+                try {
+                    if (quote && window.shipStation && window.shipStation.isConfigured) {
+                        const customerData = {
+                            companyName: document.getElementById('companyName')?.value || '',
+                            email: document.getElementById('customerEmail')?.value || '',
+                            phone: document.getElementById('customerPhone')?.value || '',
+                            state: document.getElementById('customerState')?.value || '',
+                            name: document.getElementById('contactName')?.value || document.getElementById('quoteName')?.value || ''
+                        };
+                        const resp = await window.shipStation.createOrderFromQuote(quote.quoteData || quote, customerData);
+                        console.log('✅ ShipStation order created:', resp);
+                        if (this.showNotification) this.showNotification('ShipStation order created successfully', 'success');
+                    }
+                } catch (err) {
+                    console.error('❌ ShipStation order creation failed:', err);
+                    if (this.showNotification) this.showNotification('ShipStation order creation failed (check credentials/logs)', 'warning');
+                }
             });
         }
         

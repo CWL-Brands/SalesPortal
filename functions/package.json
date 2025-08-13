@@ -1,0 +1,20 @@
+{
+  "name": "kanva-quotes-functions",
+  "private": true,
+  "engines": {
+    "node": "18"
+  },
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions",
+    "lint": "echo 'no lint'"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.4.0",
+    "firebase-functions": "^4.8.0",
+    "kanva-quotes": "file:..",
+    "node-fetch": "^3.3.2"
+  }
+}
