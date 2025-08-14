@@ -151,20 +151,21 @@ export const shipstationWebhook = functions.https.onRequest(async (req, res) => 
 export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', async (event) => {
   const snap = event.data;
   if (!snap) return;
-  const id = event.params.id;
-  const req = snap.data();
+  const requestId = event.params.id;
+  const data = event.data?.data();
+  console.log(`[shipstationWorker] 🔔 Received request ${requestId}`, { op: data?.op });
 
   const writeResponse = async (payload) => {
     try {
-      await db.collection('shipstationResponses').doc(id).set(payload, { merge: true });
+      await db.collection('shipstationResponses').doc(requestId).set(payload, { merge: true });
     } catch (e) {
       // Log but don't throw
-      console.error('Failed to write response for', id, e);
+      console.error('Failed to write response for', requestId, e);
     }
     try {
-      await db.collection('shipstationRequests').doc(id).set({ status: 'done', finishedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      await db.collection('shipstationRequests').doc(requestId).set({ status: 'done', finishedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     } catch (e) {
-      console.error('Failed to update request status for', id, e);
+      console.error('Failed to update request status for', requestId, e);
     }
   };
 
@@ -173,6 +174,7 @@ export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', a
     creds = await loadShipStationCreds();
   } catch (e) {
     await writeResponse({ status: 'error', error: `Missing credentials: ${e.message}`, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+    console.error(`[shipstationWorker] ❌ Missing credentials for ${requestId}: ${e.message}`);
     return;
   }
 
@@ -182,8 +184,8 @@ export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', a
     'Content-Type': 'application/json'
   };
 
-  const op = req?.op;
-  const params = req?.params || {};
+  const op = data?.op;
+  const params = data?.params || {};
   try {
     if (op === 'testConnection') {
       const url = new URL(base + '/stores');
@@ -193,6 +195,7 @@ export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', a
       try { data = JSON.parse(text); } catch { data = text; }
       if (!resp.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
       await writeResponse({ status: 'ok', data, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+      console.log(`[shipstationWorker] ✅ testConnection ok for ${requestId}`);
       return;
     }
 
@@ -210,6 +213,7 @@ export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', a
       try { data = JSON.parse(text); } catch { data = text; }
       if (!resp.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
       await writeResponse({ status: 'ok', data, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+      console.log(`[shipstationWorker] ✅ listOrders ok for ${requestId}`);
       return;
     }
 
@@ -222,6 +226,7 @@ export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', a
       try { data = JSON.parse(text); } catch { data = text; }
       if (!resp.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
       await writeResponse({ status: 'ok', data, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+      console.log(`[shipstationWorker] ✅ getOrder ok for ${requestId}`);
       return;
     }
 
@@ -234,12 +239,17 @@ export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', a
       try { data = JSON.parse(text); } catch { data = text; }
       if (!resp.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
       await writeResponse({ status: 'ok', data, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+      console.log(`[shipstationWorker] ✅ getRates ok for ${requestId}`);
       return;
     }
 
     // Unknown op
     await writeResponse({ status: 'error', error: `Unknown op: ${op}`, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+    console.error(`[shipstationWorker] ❌ Unknown op for ${requestId}: ${op}`);
   } catch (e) {
-    await writeResponse({ status: 'error', error: e.message || String(e), finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+    console.error(`[shipstationWorker] 💥 Error for ${requestId}:`, e?.stack || e);
+    await writeResponse({ status: 'error', error: String(e?.message || e), finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+  } finally {
+    console.log(`[shipstationWorker] 🏁 Finished ${requestId}`);
   }
 });
