@@ -376,11 +376,14 @@ class ShipStationIntegration {
         if (!this.apiKey || !this.apiSecret) throw new Error('ShipStation not configured');
         const startIso = (start instanceof Date) ? start.toISOString() : (start || new Date(Date.now() - 24*3600*1000).toISOString());
         const endIso = (end instanceof Date) ? end.toISOString() : (end || new Date().toISOString());
+        // Coerce pagination to numbers to prevent passing events/objects into Firestore
+        const safePage = Math.max(1, Number(page) || 1);
+        const safePageSize = Math.min(500, Math.max(1, Number(pageSize) || 50));
         let data;
         if (this.useQueue) {
-            data = await this._enqueue('listOrders', { start: startIso, end: endIso, page, pageSize });
+            data = await this._enqueue('listOrders', { start: startIso, end: endIso, page: safePage, pageSize: safePageSize });
         } else {
-            const params = new URLSearchParams({ 'createDateStart': startIso, 'createDateEnd': endIso, pageSize: String(pageSize), page: String(page) });
+            const params = new URLSearchParams({ 'createDateStart': startIso, 'createDateEnd': endIso, pageSize: String(safePageSize), page: String(safePage) });
             const url = this._endpoint(`/orders?${params.toString()}`);
             const resp = await fetch(url, { method: 'GET', headers: this._headers() });
             if (!resp.ok) { const txt = await resp.text().catch(() => ''); throw new Error(`ShipStation orders failed: ${resp.status} ${txt}`); }
@@ -390,8 +393,8 @@ class ShipStationIntegration {
         return {
             orders: data.orders || data || [],
             total: data.total,
-            page: data.page || page,
-            pages: data.pages || (data.total && pageSize ? Math.ceil(data.total / pageSize) : undefined)
+            page: data.page || safePage,
+            pages: data.pages || (data.total && safePageSize ? Math.ceil(data.total / safePageSize) : undefined)
         };
     }
 

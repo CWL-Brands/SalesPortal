@@ -3036,7 +3036,8 @@ async showProductEditModal(productId = null) {
         }
 
         // Bind fetch
-        fetchBtn.onclick = fetchOrders;
+        // Ensure we do NOT pass the click event as the first arg (which would become params.page)
+        fetchBtn.onclick = () => { fetchOrders(currentPage || 1); };
         // Show modal and auto-fetch
         modal.style.display = 'block';
         fetchOrders();
