@@ -28,14 +28,12 @@ class FirebaseDataService {
       return arr;
     }
     if (t === 'object') {
-      // If it looks like a Response-like object, materialize json() if possible
-      if (typeof input.json === 'function' && Object.keys(input).length <= 3) {
-        // Callers should have normalized, but guard anyway by skipping functions
-        const { json, text, ...rest } = input; // remove function props
-        return this.sanitizeData(rest);
-      }
+      // Remove known Response-like method props if present (defensive)
+      const { json: _jsonFn, text: _textFn, arrayBuffer: _abFn, blob: _blobFn, formData: _fdFn, ...rest } = input;
       const out = {};
-      for (const [k, v] of Object.entries(input)) {
+      for (const [k, v] of Object.entries(rest)) {
+        // Drop any function-valued properties outright
+        if (typeof v === 'function') continue;
         const sv = this.sanitizeData(v);
         if (sv !== undefined) out[k] = sv;
       }
