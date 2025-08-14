@@ -3105,60 +3105,79 @@ async showProductEditModal(productId = null) {
      * Save Copper CRM settings
      */
     async saveCopperSettings(showAlert = true) {
-        console.log('💾 Saving Copper CRM settings...');
-        
-        const apiKey = document.getElementById('copper-api-key')?.value;
-        const email = document.getElementById('copper-email')?.value;
+        const apiKey = document.getElementById('copper-api-key')?.value?.trim();
+        const email = document.getElementById('copper-email')?.value?.trim();
         const environment = document.getElementById('copper-environment')?.value || 'production';
-        
-        if (!apiKey) {
-            if (showAlert) alert('Please enter a Copper API key');
-            return false;
+      
+        if (!apiKey || !email) {
+          if (showAlert) alert('Please enter both API Key and Email');
+          return false;
         }
-        
+      
+        const payload = {
+          apiKey,
+          email,
+          environment,
+          enabled: true,
+          lastUpdated: new Date().toISOString()
+        };
+      
         try {
-            // For now, save to local storage since server endpoints aren't implemented
-            // In production, this would save to a proper backend API
-            localStorage.setItem('copper_api_key', apiKey);
-            localStorage.setItem('copper_email', email);
-            localStorage.setItem('copper_environment', environment);
-            localStorage.setItem('copper_last_updated', new Date().toISOString());
-            
-            // Simulate successful save
-            const result = { success: true };
-            
-            if (result.success) {
-                console.log('✅ Copper CRM settings saved to server');
-                
-                // Update status indicator
-                const statusElement = document.getElementById('copper-status');
-                if (statusElement) {
-                    this.updateIntegrationStatus(statusElement, 'ok', 'Configured');
-                }
-                
-                // Configure Copper SDK with new credentials if available
-                if (window.CopperIntegration && typeof window.CopperIntegration.configure === 'function') {
-                    await window.CopperIntegration.configure({
-                        apiKey: apiKey,
-                        email: email,
-                        environment: environment
-                    });
-                }
-                
-                if (showAlert) alert('Copper CRM settings saved successfully!');
-                return true;
-            } else {
-                console.error('Failed to save Copper settings:', result.message);
-                if (showAlert) alert(`Failed to save Copper settings: ${result.message}`);
-                return false;
+          // 1) Secure handler → Firestore (global credentials)
+          let saved = false;
+          if (window.secureIntegrationHandler) {
+            try {
+              saved = await window.secureIntegrationHandler.updateIntegration('copper', payload);
+            } catch (e) {
+              console.warn('Secure save failed, will fall back:', e);
             }
-        } catch (error) {
-            console.error('Error saving Copper settings:', error);
-            if (showAlert) alert(`Error saving Copper settings: ${error.message}`);
+          }
+      
+          // 2) Fallback → server endpoint
+          if (!saved) {
+            const resp = await fetch('/api/connections/copper', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const result = await resp.json().catch(() => ({}));
+            saved = resp.ok && result?.success !== false;
+          }
+      
+          if (!saved) {
+            if (showAlert) alert('Failed to save Copper settings');
             return false;
+          }
+      
+          // Update local cache and UI
+          this.connectionData = this.connectionData || {};
+          this.connectionData.copper = payload;
+      
+          const statusEl = document.getElementById('copper-status');
+          if (statusEl) this.updateIntegrationStatus(statusEl, 'ok', 'Configured');
+      
+          // Configure Copper SDK if available
+          if (window.CopperIntegration?.configure) {
+            await window.CopperIntegration.configure({ apiKey, email, environment });
+          }
+      
+          if (typeof this.showNotification === 'function') {
+            this.showNotification('Copper CRM settings saved', 'success');
+          } else if (showAlert) {
+            alert('Copper CRM settings saved successfully!');
+          }
+          return true;
+      
+        } catch (error) {
+          console.error('Error saving Copper settings:', error);
+          if (typeof this.showNotification === 'function') {
+            this.showNotification(`Failed to save Copper settings: ${error.message}`, 'error');
+          } else if (showAlert) {
+            alert(`Error saving Copper settings: ${error.message}`);
+          }
+          return false;
         }
-    }
-
+      }
     /**
      * View Copper activity logs
      */
