@@ -64,6 +64,22 @@ service cloud.firestore {
       allow read: if request.auth != null || isEmulator(); // Only admins can read
     }
     
+    // ShipStation Firestore queue (worker pattern)
+    // Requests: client writes a job; Responses: client reads result
+    match /shipstationRequests/{requestId} {
+      // NOTE: Temporarily allow public writes to unblock internal usage.
+      // Tighten to `request.auth != null` when Firebase Auth is enabled.
+      allow write: if true;
+      // Optional read for debugging
+      allow read: if request.auth != null || isEmulator();
+    }
+    match /shipstationResponses/{requestId} {
+      // Clients read responses
+      allow read: if true;
+      // Prevent clients from writing responses; server SDK bypasses rules anyway
+      allow write: if false;
+    }
+    
     // Analytics - write-only for app, read for admin
     match /analytics/{document=**} {
       allow write: if true;

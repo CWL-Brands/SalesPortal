@@ -5,12 +5,43 @@
 
 class FirebaseDataService {
   constructor() {
+
     this.db = null;
     this.auth = null;
     this.initialized = false;
     this.cache = new Map();
     this.initPromise = null; // Prevent multiple initialization attempts
     console.log('🔥 Firebase Data Service initializing...');
+  }
+
+  /**
+   * Recursively sanitize data to be Firestore-safe (no functions/undefined)
+   */
+  sanitizeData(input) {
+    if (input === null) return null;
+    const t = typeof input;
+    if (t === 'function' || t === 'undefined' || t === 'symbol') {
+      return undefined; // drop invalid fields
+    }
+    if (Array.isArray(input)) {
+      const arr = input.map(v => this.sanitizeData(v)).filter(v => v !== undefined);
+      return arr;
+    }
+    if (t === 'object') {
+      // If it looks like a Response-like object, materialize json() if possible
+      if (typeof input.json === 'function' && Object.keys(input).length <= 3) {
+        // Callers should have normalized, but guard anyway by skipping functions
+        const { json, text, ...rest } = input; // remove function props
+        return this.sanitizeData(rest);
+      }
+      const out = {};
+      for (const [k, v] of Object.entries(input)) {
+        const sv = this.sanitizeData(v);
+        if (sv !== undefined) out[k] = sv;
+      }
+      return out;
+    }
+    return input;
   }
 
   /**
@@ -214,10 +245,11 @@ class FirebaseDataService {
         
         for (const [key, value] of Object.entries(data)) {
           const docRef = this.db.collection(pathConfig.path).doc(key);
-          batch.set(docRef, {
+          const payload = this.sanitizeData({
             ...value,
             updatedAt: new Date()
-          }, { merge: true });
+          });
+          batch.set(docRef, payload, { merge: true });
         }
         
         await batch.commit();
@@ -239,10 +271,11 @@ class FirebaseDataService {
           cacheKey = pathConfig.path;
         }
         
-        await docRef.set({
+        const payload = this.sanitizeData({
           ...data,
           updatedAt: new Date()
-        }, { merge: true });
+        });
+        await docRef.set(payload, { merge: true });
         
         // Update cache
         this.cache.set(cacheKey, data);

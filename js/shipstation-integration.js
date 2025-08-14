@@ -18,7 +18,8 @@ class ShipStationIntegration {
         this.environment = config.environment || 'sandbox';
         this.connected = false;
         this.lastSync = null;
-        this.useProxy = true; // route through Firebase Function by default
+        this.useProxy = true; // legacy proxy flag (kept for compatibility)
+        this.useQueue = true; // NEW: use Firestore queue worker by default
         this.allowOrderCreation = config.allowOrderCreation !== undefined ? config.allowOrderCreation : false; // Do not send orders to ShipStation from this app
         
         // ShipStation uses a single base URL; sandbox/prod is determined by credentials
@@ -43,11 +44,61 @@ class ShipStationIntegration {
      * Build headers. In proxy mode, do NOT attach Authorization in browser.
      */
     _headers() {
-        if (this.useProxy) {
+        if (this.useProxy || this.useQueue) {
             return { 'Content-Type': 'application/json' };
         }
         const authHeader = 'Basic ' + btoa(`${this.apiKey}:${this.apiSecret}`);
         return { 'Authorization': authHeader, 'Content-Type': 'application/json' };
+    }
+
+    /**
+     * Enqueue a request in Firestore and wait for response.
+     * @param {string} op - operation name (e.g., 'testConnection','listOrders','getOrder','getRates')
+     * @param {Object} params - operation parameters
+     * @param {number} timeoutMs - timeout in ms
+     */
+    async _enqueue(op, params = {}, timeoutMs = 20000) {
+        // Ensure Firebase is initialized
+        if (!window.firebase || !window.firebase.db) {
+            throw new Error('Firebase is not initialized');
+        }
+        const db = window.firebase.db;
+        const now = new Date();
+        const requestRef = db.collection('shipstationRequests').doc();
+        const requestId = requestRef.id;
+        const payload = {
+            op,
+            params,
+            createdAt: now,
+            requestedBy: (window.firebase.auth && window.firebase.auth.currentUser) ? window.firebase.auth.currentUser.uid : 'anonymous'
+        };
+        await requestRef.set(payload, { merge: true });
+
+        return new Promise((resolve, reject) => {
+            const responseRef = db.collection('shipstationResponses').doc(requestId);
+            let unsub = null;
+            const timer = setTimeout(() => {
+                if (unsub) unsub();
+                reject(new Error('Request timed out'));
+            }, timeoutMs);
+
+            unsub = responseRef.onSnapshot((doc) => {
+                if (doc && doc.exists) {
+                    const data = doc.data();
+                    clearTimeout(timer);
+                    if (unsub) unsub();
+                    if (data?.status === 'ok') {
+                        resolve(data?.data);
+                    } else {
+                        reject(new Error(data?.error || 'Unknown error'));
+                    }
+                }
+            }, (err) => {
+                clearTimeout(timer);
+                if (unsub) unsub();
+                reject(err);
+            });
+        });
     }
     
     /**
@@ -221,16 +272,17 @@ class ShipStationIntegration {
         
         try {
             console.log('🔍 Testing ShipStation connection...');
-            
-            // Create Authorization header with Base64 encoded API key and secret
-            // Test connection by fetching stores (reliable endpoint)
-            const response = await fetch(this._endpoint('/stores'), {
-                method: 'GET',
-                headers: this._headers()
-            });
-            
-            if (response.ok) {
-                const stores = await response.json();
+            let stores;
+            if (this.useQueue) {
+                stores = await this._enqueue('testConnection', {});
+            } else {
+                const response = await fetch(this._endpoint('/stores'), {
+                    method: 'GET',
+                    headers: this._headers()
+                });
+                if (!response.ok) throw new Error(response.statusText);
+                stores = await response.json();
+            }
                 
                 // Connection successful, save to server
                 this.connected = true;
@@ -244,17 +296,7 @@ class ShipStationIntegration {
                         storesCount: Array.isArray(stores) ? stores.length : (stores?.length || 0)
                     }
                 };
-            } else {
-                // Authentication failed
-                this.connected = false;
-                await this.saveConnectionToServer();
-                
-                return {
-                    success: false,
-                    message: `Failed to authenticate with ShipStation API: ${response.statusText}`,
-                    details: null
-                };
-            }
+            
         } catch (error) {
             console.error('❌ ShipStation connection test failed:', error);
             
@@ -291,14 +333,11 @@ class ShipStationIntegration {
      */
     async getOrder(orderId) {
         if (!this.apiKey || !this.apiSecret) throw new Error('ShipStation not configured');
-        const resp = await fetch(this._endpoint(`/orders/${orderId}`), {
-            method: 'GET',
-            headers: this._headers()
-        });
-        if (!resp.ok) {
-            const txt = await resp.text().catch(() => '');
-            throw new Error(`Failed to get order ${orderId}: ${resp.status} ${txt}`);
+        if (this.useQueue) {
+            return await this._enqueue('getOrder', { orderId });
         }
+        const resp = await fetch(this._endpoint(`/orders/${orderId}`), { method: 'GET', headers: this._headers() });
+        if (!resp.ok) { const txt = await resp.text().catch(() => ''); throw new Error(`Failed to get order ${orderId}: ${resp.status} ${txt}`); }
         return await resp.json();
     }
 
@@ -309,16 +348,16 @@ class ShipStationIntegration {
      */
     async getOrderByOrderNumber(orderNumber) {
         if (!this.apiKey || !this.apiSecret) throw new Error('ShipStation not configured');
-        const params = new URLSearchParams({ orderNumber });
-        const resp = await fetch(this._endpoint(`/orders?${params.toString()}`), {
-            method: 'GET',
-            headers: this._headers()
-        });
-        if (!resp.ok) {
-            const txt = await resp.text().catch(() => '');
-            throw new Error(`Failed to find order ${orderNumber}: ${resp.status} ${txt}`);
+        let data;
+        if (this.useQueue) {
+            // ShipStation API doesn't have direct orderNumber lookup except via /orders
+            data = await this._enqueue('listOrders', { orderNumber });
+        } else {
+            const params = new URLSearchParams({ orderNumber });
+            const resp = await fetch(this._endpoint(`/orders?${params.toString()}`), { method: 'GET', headers: this._headers() });
+            if (!resp.ok) { const txt = await resp.text().catch(() => ''); throw new Error(`Failed to find order ${orderNumber}: ${resp.status} ${txt}`); }
+            data = await resp.json();
         }
-        const data = await resp.json();
         if (Array.isArray(data?.orders) && data.orders.length) return data.orders[0];
         if (Array.isArray(data) && data.length) return data[0];
         return null;
@@ -337,24 +376,16 @@ class ShipStationIntegration {
         if (!this.apiKey || !this.apiSecret) throw new Error('ShipStation not configured');
         const startIso = (start instanceof Date) ? start.toISOString() : (start || new Date(Date.now() - 24*3600*1000).toISOString());
         const endIso = (end instanceof Date) ? end.toISOString() : (end || new Date().toISOString());
-
-        const params = new URLSearchParams({
-            'createDateStart': startIso,
-            'createDateEnd': endIso,
-            pageSize: String(pageSize),
-            page: String(page)
-        });
-
-        const url = this._endpoint(`/orders?${params.toString()}`);
-        const resp = await fetch(url, {
-            method: 'GET',
-            headers: this._headers()
-        });
-        if (!resp.ok) {
-            const txt = await resp.text().catch(() => '');
-            throw new Error(`ShipStation orders failed: ${resp.status} ${txt}`);
+        let data;
+        if (this.useQueue) {
+            data = await this._enqueue('listOrders', { start: startIso, end: endIso, page, pageSize });
+        } else {
+            const params = new URLSearchParams({ 'createDateStart': startIso, 'createDateEnd': endIso, pageSize: String(pageSize), page: String(page) });
+            const url = this._endpoint(`/orders?${params.toString()}`);
+            const resp = await fetch(url, { method: 'GET', headers: this._headers() });
+            if (!resp.ok) { const txt = await resp.text().catch(() => ''); throw new Error(`ShipStation orders failed: ${resp.status} ${txt}`); }
+            data = await resp.json();
         }
-        const data = await resp.json();
         // Normalize response
         return {
             orders: data.orders || data || [],
@@ -375,19 +406,15 @@ class ShipStationIntegration {
         }
         
         try {
-            // Create Authorization header with Base64 encoded API key and secret
-            const response = await fetch(this._endpoint('/shipments/getrates'), {
-                method: 'POST',
-                headers: this._headers(),
-                body: JSON.stringify(shipment)
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Failed to get rates: ${response.statusText}`);
+            if (this.useQueue) {
+                const rates = await this._enqueue('getRates', { shipment });
+                return rates;
+            } else {
+                const response = await fetch(this._endpoint('/shipments/getrates'), { method: 'POST', headers: this._headers(), body: JSON.stringify(shipment) });
+                if (!response.ok) { throw new Error(`Failed to get rates: ${response.statusText}`); }
+                const rates = await response.json();
+                return rates;
             }
-            
-            const rates = await response.json();
-            return rates;
         } catch (error) {
             console.error('❌ Error getting shipping rates:', error);
             throw error;

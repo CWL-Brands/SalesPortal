@@ -1,6 +1,7 @@
 import functions from 'firebase-functions';
 import admin from 'firebase-admin';
 import fetch from 'node-fetch';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -141,5 +142,104 @@ export const shipstationWebhook = functions.https.onRequest(async (req, res) => 
     res.status(200).json({ ok: true, id: ref.id });
   } catch (e) {
     res.status(500).json({ error: `Failed to process webhook: ${e.message}` });
+  }
+});
+
+// Firestore queue worker: process ShipStation requests without HTTPS invocation
+// Collection: shipstationRequests/{id}
+// Writes result to: shipstationResponses/{id}
+export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const id = event.params.id;
+  const req = snap.data();
+
+  const writeResponse = async (payload) => {
+    try {
+      await db.collection('shipstationResponses').doc(id).set(payload, { merge: true });
+    } catch (e) {
+      // Log but don't throw
+      console.error('Failed to write response for', id, e);
+    }
+    try {
+      await db.collection('shipstationRequests').doc(id).set({ status: 'done', finishedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    } catch (e) {
+      console.error('Failed to update request status for', id, e);
+    }
+  };
+
+  let creds;
+  try {
+    creds = await loadShipStationCreds();
+  } catch (e) {
+    await writeResponse({ status: 'error', error: `Missing credentials: ${e.message}`, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+    return;
+  }
+
+  const base = 'https://ssapi.shipstation.com';
+  const headers = {
+    'Authorization': buildAuthHeader(creds),
+    'Content-Type': 'application/json'
+  };
+
+  const op = req?.op;
+  const params = req?.params || {};
+  try {
+    if (op === 'testConnection') {
+      const url = new URL(base + '/stores');
+      const resp = await fetch(url.toString(), { method: 'GET', headers });
+      const text = await resp.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      if (!resp.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
+      await writeResponse({ status: 'ok', data, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+      return;
+    }
+
+    if (op === 'listOrders') {
+      const { start, end, page = 1, pageSize = 50, orderNumber } = params;
+      const url = new URL(base + '/orders');
+      if (start) url.searchParams.set('createDateStart', start);
+      if (end) url.searchParams.set('createDateEnd', end);
+      if (orderNumber) url.searchParams.set('orderNumber', String(orderNumber));
+      url.searchParams.set('page', String(page));
+      url.searchParams.set('pageSize', String(pageSize));
+      const resp = await fetch(url.toString(), { method: 'GET', headers });
+      const text = await resp.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      if (!resp.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
+      await writeResponse({ status: 'ok', data, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+      return;
+    }
+
+    if (op === 'getOrder') {
+      const { orderId } = params;
+      const url = new URL(base + `/orders/${orderId}`);
+      const resp = await fetch(url.toString(), { method: 'GET', headers });
+      const text = await resp.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      if (!resp.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
+      await writeResponse({ status: 'ok', data, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+      return;
+    }
+
+    if (op === 'getRates') {
+      const body = params?.shipment || params;
+      const url = new URL(base + '/shipments/getrates');
+      const resp = await fetch(url.toString(), { method: 'POST', headers, body: JSON.stringify(body || {}) });
+      const text = await resp.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      if (!resp.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
+      await writeResponse({ status: 'ok', data, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+      return;
+    }
+
+    // Unknown op
+    await writeResponse({ status: 'error', error: `Unknown op: ${op}`, finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+  } catch (e) {
+    await writeResponse({ status: 'error', error: e.message || String(e), finishedAt: admin.firestore.FieldValue.serverTimestamp() });
   }
 });

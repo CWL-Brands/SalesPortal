@@ -31,7 +31,15 @@ class SecureIntegrationHandler {
             throw new Error('Firebase Data Service not initialized');
         }
         
-        this.connections = await window.firebaseDataService.fetchData(this.connectionsPath);
+        // Some callers use firebaseDataService.fetchData(), which returns a Response-like
+        // object with json() and text() functions. We must normalize to plain JSON
+        // before caching or saving to Firestore to avoid writing function fields.
+        const fetched = await window.firebaseDataService.fetchData(this.connectionsPath);
+        if (fetched && typeof fetched.json === 'function') {
+            this.connections = await fetched.json();
+        } else {
+            this.connections = fetched || {};
+        }
         this.isLoaded = true;
         
         // Update cache locally (guard in case helper is unavailable)
@@ -108,7 +116,22 @@ class SecureIntegrationHandler {
             if (!window.firebaseDataService) {
                 throw new Error('Firebase Data Service not available');
             }
-            const success = await window.firebaseDataService.saveData(this.connectionsPath, this.connections);
+            // Ensure we never pass functions (e.g., lingering Response.json()) into Firestore
+            // Convert to a plain JSON structure, dropping any functions/undefined/symbols
+            let plain;
+            try {
+                plain = JSON.parse(JSON.stringify(this.connections));
+            } catch (e) {
+                // Fallback: shallow copy if stringify fails for any reason
+                plain = { ...this.connections };
+            }
+
+            // Extra guard: if a rogue 'json' key exists and is a function, drop it
+            if (plain && typeof plain.json === 'function') {
+                try { delete plain.json; } catch (_) {}
+            }
+
+            const success = await window.firebaseDataService.saveData(this.connectionsPath, plain);
             if (!success) throw new Error('Failed to save to Firestore');
             console.log('✅ Saved connections to Firestore');
             return true;

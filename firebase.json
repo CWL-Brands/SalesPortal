@@ -3,6 +3,9 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "functions": {
+    "source": "functions"
+  },
   "storage": {
     "rules": "storage.rules"
   },
@@ -31,8 +34,22 @@
       "*.md"
     ],
     "rewrites": [
-      { "source": "/api/shipstation/webhook", "function": "shipstationWebhook" },
-      { "source": "/api/shipstation/**", "function": "shipstationApi" },
+      {
+        "source": "/api/shipstation/webhook",
+        "run": {
+          "serviceId": "shipstationwebhook",
+          "region": "us-central1",
+          "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com"
+        }
+      },
+      {
+        "source": "/api/shipstation/**",
+        "run": {
+          "serviceId": "shipstationapi",
+          "region": "us-central1",
+          "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com"
+        }
+      },
       {
         "source": "**",
         "destination": "/index.html"
