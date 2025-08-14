@@ -109,7 +109,8 @@ const server = http.createServer((req, res) => {
                     // Resolve credentials: prefer stored connections, fallback to env
                     const copperCfg = connectionsStore.copper || {};
                     const apiKey = copperCfg.apiKey || process.env.COPPER_API_KEY || '';
-                    const userEmail = copperCfg.userEmail || process.env.COPPER_USER_EMAIL || '';
+                    // Accept either 'userEmail' or 'email' from the UI/config
+                    const userEmail = copperCfg.userEmail || copperCfg.email || process.env.COPPER_USER_EMAIL || process.env.COPPER_EMAIL || '';
                     if (!apiKey || !userEmail) {
                         throw new Error('Missing Copper API credentials (apiKey/userEmail)');
                     }
@@ -125,29 +126,42 @@ const server = http.createServer((req, res) => {
                         'Content-Type': 'application/json'
                     };
 
-                    const [oppFieldsRes, companyFieldsRes, pipelinesRes, stagesRes] = await Promise.all([
+                    const [oppFieldsRes, companyFieldsRes, pipelinesRes] = await Promise.all([
                         fetchImpl(`${baseUrl}/custom_field_definitions?parent_type=opportunity`, { headers }),
                         fetchImpl(`${baseUrl}/custom_field_definitions?parent_type=company`, { headers }),
-                        fetchImpl(`${baseUrl}/pipelines`, { headers }),
-                        fetchImpl(`${baseUrl}/stages`, { headers })
+                        fetchImpl(`${baseUrl}/pipelines`, { headers })
                     ]);
 
-                    if (!oppFieldsRes.ok || !companyFieldsRes.ok || !pipelinesRes.ok || !stagesRes.ok) {
+                    if (!oppFieldsRes.ok || !companyFieldsRes.ok || !pipelinesRes.ok) {
                         const details = {
                             opportunityFieldsStatus: oppFieldsRes.status,
                             companyFieldsStatus: companyFieldsRes.status,
-                            pipelinesStatus: pipelinesRes.status,
-                            stagesStatus: stagesRes.status
+                            pipelinesStatus: pipelinesRes.status
                         };
                         throw new Error(`Copper metadata fetch failed: ${JSON.stringify(details)}`);
                     }
 
-                    const [opportunityFields, companyFields, pipelines, stages] = await Promise.all([
+                    const [opportunityFields, companyFields, pipelines] = await Promise.all([
                         oppFieldsRes.json(),
                         companyFieldsRes.json(),
-                        pipelinesRes.json(),
-                        stagesRes.json()
+                        pipelinesRes.json()
                     ]);
+
+                    // Fetch stages per pipeline (Copper API requires pipeline_id)
+                    let stages = [];
+                    try {
+                        const stageLists = await Promise.all(
+                            (pipelines || []).map(p =>
+                                fetchImpl(`${baseUrl}/stages?pipeline_id=${encodeURIComponent(p.id)}`, { headers })
+                                    .then(r => r.ok ? r.json() : [])
+                                    .catch(() => [])
+                            )
+                        );
+                        stages = stageLists.flat();
+                    } catch (e) {
+                        console.warn('⚠️ Failed to fetch one or more Copper stages lists:', e.message);
+                        stages = [];
+                    }
 
                     const copperMetadata = {
                         fetchedAt: new Date().toISOString(),

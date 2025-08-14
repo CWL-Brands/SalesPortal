@@ -21,9 +21,8 @@ class AdminDashboard {
         this.loginModal = null;
         this.connectionData = {}; // Store real connection data
         
-        // Initialize GitConnector for data persistence
+        // Git integration is deprecated; ensure connector is null
         this.gitConnector = null;
-        this.initializeGitConnector();
         
         // Admin emails loaded from data file
         this.adminEmails = [];
@@ -62,41 +61,8 @@ class AdminDashboard {
      */
     async loadConnectionData() {
         try {
-            // Check if we're running on GitHub Pages (no local server)
-            const isGitHubPages = window.location.hostname.includes('github.io');
-            
-            if (isGitHubPages) {
-                // Running on GitHub Pages - load from localStorage
-                console.log('💾 Loading connection data from localStorage (GitHub Pages mode)...');
-                this.connectionData = {};
-                
-                // Load GitHub connection from localStorage
-                const githubConnection = localStorage.getItem('github-connection');
-                if (githubConnection) {
-                    try {
-                        this.connectionData.github = JSON.parse(githubConnection);
-                        console.log('✅ GitHub connection loaded from localStorage');
-                    } catch (e) {
-                        console.warn('⚠️ Failed to parse GitHub connection from localStorage');
-                    }
-                }
-                
-                // Load other connections from localStorage if they exist
-                ['copper', 'shipstation', 'fishbowl'].forEach(integration => {
-                    const connectionData = localStorage.getItem(`${integration}-connection`);
-                    if (connectionData) {
-                        try {
-                            this.connectionData[integration] = JSON.parse(connectionData);
-                            console.log(`✅ ${integration} connection loaded from localStorage`);
-                        } catch (e) {
-                            console.warn(`⚠️ Failed to parse ${integration} connection from localStorage`);
-                        }
-                    }
-                });
-                
-                // Update UI with connection statuses
-                this.updateConnectionStatuses();
-            } else {
+            // Always load from server in our environment
+            {
                 // Running locally - load from server
                 console.log('🔄 Loading connection data from server...');
                 const response = await fetch('/api/connections');
@@ -124,7 +90,7 @@ class AdminDashboard {
      * Update UI with real connection statuses
      */
     updateConnectionStatuses() {
-        const integrations = ['github', 'copper', 'shipstation', 'fishbowl'];
+        const integrations = ['copper', 'shipstation', 'fishbowl'];
         
         integrations.forEach(integration => {
             const statusElement = document.getElementById(`${integration}-status`);
@@ -146,8 +112,6 @@ class AdminDashboard {
         if (!connectionInfo) return false;
         
         switch (integration) {
-            case 'github':
-                return connectionInfo.token && connectionInfo.repo;
             case 'copper':
                 return connectionInfo.apiKey && connectionInfo.email;
             case 'shipstation':
@@ -214,18 +178,6 @@ class AdminDashboard {
      * Populate form fields with existing connection data
      */
     populateConnectionForms() {
-        // GitHub form population
-        if (this.connectionData.github) {
-            const github = this.connectionData.github;
-            const ownerInput = document.getElementById('github-owner');
-            const repoInput = document.getElementById('github-repo');
-            const tokenInput = document.getElementById('github-token');
-            
-            if (ownerInput && github.owner) ownerInput.value = github.owner;
-            if (repoInput && github.repoName) repoInput.value = github.repoName;
-            if (tokenInput && github.token) tokenInput.value = github.token;
-        }
-        
         // Copper CRM form population
         if (this.connectionData.copper) {
             const copper = this.connectionData.copper;
@@ -260,195 +212,6 @@ class AdminDashboard {
             if (serverInput && fishbowl.host) serverInput.value = fishbowl.host;
             if (usernameInput && fishbowl.username) usernameInput.value = fishbowl.username;
             if (passwordInput && fishbowl.password) passwordInput.value = fishbowl.password;
-        }
-    }
-
-    /**
-     * Initialize GitConnector for data persistence
-     */
-    async initializeGitConnector() {
-        try {
-            console.log('🐙 Initializing GitConnector...');
-            
-            // Check if GitConnector is available
-            if (typeof window.GitConnector === 'undefined') {
-                console.warn('⚠️ GitConnector not available, data will only be saved locally');
-                return;
-            }
-            
-            // Check if we're running on GitHub Pages
-            const isGitHubPages = window.location.hostname.includes('github.io');
-            
-            // Load environment configuration from server (only if not on GitHub Pages)
-            let envConfig = null;
-            if (!isGitHubPages) {
-                try {
-                    console.log('🔄 Loading environment configuration from server...');
-                    const response = await fetch('/api/env-config');
-                    if (response.ok) {
-                        const result = await response.json();
-                        if (result.success) {
-                            envConfig = result.data.github;
-                            console.log('✅ Environment configuration loaded from server');
-                        }
-                    }
-                } catch (envError) {
-                    console.warn('⚠️ Failed to load environment config from server:', envError);
-                }
-            } else {
-                console.log('💾 Running on GitHub Pages - skipping server environment config');
-            }
-            
-            // Initialize GitConnector with environment config or defaults
-            const config = envConfig || {
-                repo: 'benatkanva/kanva-quotes',
-                branch: 'main',
-                username: 'kanva-admin',
-                email: 'admin@kanva.com'
-            };
-            
-            this.gitConnector = new window.GitConnector(config);
-            
-            // If we have environment config with token, configure immediately
-            if (envConfig && envConfig.token) {
-                await this.gitConnector.configure({
-                    token: envConfig.token,
-                    repo: envConfig.repo,
-                    branch: envConfig.branch,
-                    username: envConfig.username,
-                    email: envConfig.email
-                });
-                console.log('✅ GitConnector configured with environment variables');
-                
-                // Update connection data for UI
-                this.connectionData.github = {
-                    token: envConfig.token,
-                    repo: envConfig.repo,
-                    owner: envConfig.repo.split('/')[0],
-                    repoName: envConfig.repo.split('/')[1],
-                    branch: envConfig.branch,
-                    username: envConfig.username,
-                    email: envConfig.email
-                };
-                
-                // Update UI to show connected status
-                this.updateConnectionStatuses();
-            } else {
-                // Try to load existing GitHub connection from localStorage as fallback
-                if (this.connectionData.github) {
-                    const github = this.connectionData.github;
-                    await this.gitConnector.configure({
-                        token: github.token,
-                        repo: github.repo || `${github.owner}/${github.repoName}`,
-                        branch: github.branch || 'main',
-                        username: github.username || 'kanva-admin',
-                        email: github.email || 'admin@kanva.com'
-                    });
-                    console.log('✅ GitConnector configured with saved credentials');
-                } else {
-                    console.log('⚠️ No GitHub credentials found, GitConnector initialized with defaults');
-                }
-            }
-        } catch (error) {
-            console.error('❌ Error initializing GitConnector:', error);
-        }
-    }
-    
-    /**
-     * Save data to Git repository
-     * @param {string} filename - The filename to save (e.g., 'products.json')
-     * @param {Object} data - The data to save
-     * @param {string} commitMessage - Optional commit message
-     * @returns {Promise<Object>} - Result object with success status
-     */
-    async saveDataToGit(filename, data, commitMessage = null) {
-        try {
-            console.log(`🐙 Saving ${filename} to Git...`);
-            
-            // Check if GitConnector is available and configured
-            if (!this.gitConnector) {
-                console.warn('⚠️ GitConnector not available, falling back to local server save');
-                return await this.saveDataToServer(filename, data);
-            }
-            
-            // Check if GitConnector has token
-            if (!this.gitConnector.token) {
-                console.warn('⚠️ GitConnector not configured with token, falling back to local server save');
-                return await this.saveDataToServer(filename, data);
-            }
-            
-            // Generate commit message if not provided
-            if (!commitMessage) {
-                const timestamp = new Date().toISOString();
-                commitMessage = `Update ${filename} via Admin Dashboard - ${timestamp}`;
-            }
-            
-            // Save to Git
-            const result = await this.gitConnector.saveFile(
-                `data/${filename}`,
-                data,
-                commitMessage
-            );
-            
-            console.log('✅ Data saved to Git successfully:', result);
-            
-            return {
-                success: true,
-                message: 'Data saved to Git repository',
-                sha: result.sha,
-                url: result.url
-            };
-            
-        } catch (error) {
-            console.error('❌ Error saving to Git:', error);
-            
-            // Fallback to local server save
-            console.log('🔄 Falling back to local server save...');
-            return await this.saveDataToServer(filename, data);
-        }
-    }
-    
-    /**
-     * Save data to local server as fallback
-     * @param {string} filename - The filename to save
-     * @param {Object} data - The data to save
-     * @returns {Promise<Object>} - Result object with success status
-     */
-    async saveDataToServer(filename, data) {
-        try {
-            console.log(`💾 Saving ${filename} to local server...`);
-            
-            const response = await fetch('/api/save-data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    filename: filename,
-                    data: data
-                })
-            });
-            
-            if (response.ok) {
-                const result = await response.json();
-                if (result.success) {
-                    console.log('✅ Data saved to local server successfully');
-                    return {
-                        success: true,
-                        message: 'Data saved to local server'
-                    };
-                } else {
-                    throw new Error(result.message || 'Failed to save data');
-                }
-            } else {
-                throw new Error(`Server returned ${response.status}`);
-            }
-        } catch (error) {
-            console.error('❌ Error saving to local server:', error);
-            return {
-                success: false,
-                message: `Failed to save data: ${error.message}`
-            };
         }
     }
 
@@ -1101,6 +864,236 @@ class AdminDashboard {
     }
 
     /**
+     * Refresh Copper metadata via backend and display summary
+     */
+    async refreshCopperMetadata() {
+        const out = document.getElementById('copper-metadata-summary');
+        try {
+            if (out) out.textContent = 'Loading Copper metadata...';
+            // Hit refresh endpoint to fetch and cache latest metadata
+            const res = await fetch('/api/metadata/copper/refresh');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const payload = await res.json();
+            const data = payload?.data || payload;
+            // Show concise summary
+            const summary = {
+                pipelines: data?.pipelines?.map(p => ({ id: p.id, name: p.name })) || [],
+                stages: data?.stages?.map(s => ({ id: s.id, name: s.name, pipeline_id: s.pipeline_id })) || [],
+                customFields: {
+                    opportunity: data?.customFields?.opportunity?.map(f => ({ id: f.id, name: f.name, type: f.value_type })) || [],
+                    company: data?.customFields?.company?.map(f => ({ id: f.id, name: f.name, type: f.value_type })) || []
+                }
+            };
+            if (out) out.textContent = JSON.stringify(summary, null, 2);
+            this.showNotification('Copper metadata refreshed', 'success');
+        } catch (e) {
+            console.error('Failed to refresh Copper metadata', e);
+            if (out) out.textContent = `Error loading Copper metadata: ${e.message}`;
+            this.showNotification('Failed to refresh Copper metadata', 'error');
+        }
+    }
+
+    /**
+     * Refresh ShipStation metadata via backend and display summary
+     */
+    async refreshShipStationMetadata() {
+        const out = document.getElementById('shipstation-metadata-summary');
+        try {
+            if (out) out.textContent = 'Loading ShipStation metadata...';
+            // Hit refresh endpoint to fetch and cache latest metadata
+            const res = await fetch('/api/metadata/shipstation/refresh');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const payload = await res.json();
+            const data = payload?.data || payload;
+            const summary = {
+                stores: data?.stores?.map(s => ({ id: s.storeId || s.id, name: s.storeName || s.name })) || [],
+                carriers: data?.carriers?.map(c => ({ code: c.code || c.carrierCode, name: c.name })) || [],
+                servicesByCarrier: Object.keys(data?.servicesByCarrier || {})
+            };
+            if (out) out.textContent = JSON.stringify(summary, null, 2);
+            this.showNotification('ShipStation metadata refreshed', 'success');
+        } catch (e) {
+            console.error('Failed to refresh ShipStation metadata', e);
+            if (out) out.textContent = `Error loading ShipStation metadata: ${e.message}`;
+            this.showNotification('Failed to refresh ShipStation metadata', 'error');
+        }
+    }
+
+    /**
+     * Load current ShipStation → Copper mapping and display
+     */
+    async loadCurrentMapping() {
+        const out = document.getElementById('current-mapping-summary');
+        try {
+            if (out) out.textContent = 'Loading current mapping...';
+            const res = await fetch('/api/mappings/shipstation-to-copper');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const payload = await res.json();
+            const mapping = payload?.data ?? payload;
+            if (out) out.textContent = JSON.stringify(mapping, null, 2);
+            this._currentMapping = mapping;
+            this.showNotification('Mapping loaded', 'success');
+        } catch (e) {
+            console.error('Failed to load mapping', e);
+            if (out) out.textContent = `Error loading mapping: ${e.message}`;
+            this.showNotification('Failed to load mapping', 'error');
+        }
+    }
+
+    /**
+     * Validate ShipStation → Copper mapping against live metadata
+     */
+    async validateShipStationToCopperMapping() {
+        const resultsEl = document.getElementById('mapping-validation-results');
+        if (resultsEl) resultsEl.textContent = 'Validating...';
+        try {
+            // Ensure we have mapping and metadata
+            const [mappingRes, copperRes] = await Promise.all([
+                fetch('/api/mappings/shipstation-to-copper'),
+                fetch('/api/metadata/copper')
+            ]);
+            if (!mappingRes.ok) throw new Error(`Mapping HTTP ${mappingRes.status}`);
+            if (!copperRes.ok) throw new Error(`Copper HTTP ${copperRes.status}`);
+            const mappingPayload = await mappingRes.json();
+            const copperPayload = await copperRes.json();
+            const mapping = mappingPayload?.data ?? mappingPayload;
+            const copper = copperPayload?.data ?? copperPayload;
+
+            const issues = [];
+            const pipelines = new Map((copper?.pipelines || []).map(p => [String(p.id), p]));
+            const stagesByPipeline = new Map();
+            (copper?.stages || []).forEach(s => {
+                const pid = String(s.pipeline_id);
+                if (!stagesByPipeline.has(pid)) stagesByPipeline.set(pid, new Map());
+                stagesByPipeline.get(pid).set(String(s.id), s);
+            });
+            const customFieldArray = [
+                ...((copper?.customFields?.opportunity) || []),
+                ...((copper?.customFields?.company) || [])
+            ];
+            const customFields = new Map(customFieldArray.map(f => [String(f.id), f]));
+
+            const pipelineId = String(mapping?.opportunity?.pipelineId || '');
+            const stageId = String(mapping?.opportunity?.stageId || '');
+            if (!pipelineId || !pipelines.has(pipelineId)) {
+                issues.push('Invalid or missing pipelineId');
+            }
+            if (!stageId || !stagesByPipeline.get(pipelineId)?.has(stageId)) {
+                issues.push('Invalid or missing stageId for selected pipeline');
+            }
+            // Validate required custom field mappings if present
+            const fieldMap = mapping?.fieldMap || {};
+            Object.entries(fieldMap).forEach(([key, cfg]) => {
+                const cfId = cfg?.copperFieldId != null ? String(cfg.copperFieldId) : '';
+                if (cfId && !customFields.has(cfId)) {
+                    issues.push(`Custom field not found for mapping key "${key}": ${cfId}`);
+                }
+            });
+
+            if (resultsEl) {
+                if (issues.length === 0) {
+                    resultsEl.innerHTML = '<div class="status-ok">✅ Mapping looks valid.</div>';
+                } else {
+                    resultsEl.innerHTML = `
+                        <div class="status-warning">⚠️ Issues found:</div>
+                        <ul>${issues.map(i => `<li>${i}</li>`).join('')}</ul>
+                    `;
+                }
+            }
+        } catch (e) {
+            console.error('Validation failed', e);
+            if (resultsEl) resultsEl.textContent = `Validation error: ${e.message}`;
+            this.showNotification('Mapping validation failed', 'error');
+        }
+    }
+
+    /**
+     * Open a simple JSON edit modal for the mapping
+     */
+    async openEditMappingModal() {
+        try {
+            if (!this._currentMapping) await this.loadCurrentMapping();
+        } catch {}
+        const mapping = this._currentMapping || { opportunity: {}, fieldMap: {} };
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modern-modal">
+                <div class="modal-header">
+                    <div class="modal-title-text">✏️ Edit ShipStation → Copper Mapping</div>
+                    <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p style="margin-bottom:8px;">Edit the JSON mapping below. Ensure valid JSON.</p>
+                    <textarea id="mapping-json-editor" style="width:100%; height:300px; font-family:monospace;">${
+                        JSON.stringify(mapping, null, 2)
+                    }</textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                    <button class="btn btn-primary" id="save-mapping-btn">Save</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        const saveBtn = overlay.querySelector('#save-mapping-btn');
+        saveBtn.onclick = async () => {
+            try {
+                const text = overlay.querySelector('#mapping-json-editor').value;
+                const next = JSON.parse(text);
+                await this.saveShipStationToCopperMapping(next);
+                overlay.remove();
+                await this.loadCurrentMapping();
+            } catch (e) {
+                alert(`Invalid JSON or save failed: ${e.message}`);
+            }
+        };
+    }
+
+    /**
+     * Save mapping via backend
+     */
+    async saveShipStationToCopperMapping(mapping) {
+        try {
+            const res = await fetch('/api/mappings/shipstation-to-copper', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(mapping)
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const payload = await res.json();
+            this._currentMapping = payload?.data ?? mapping;
+            this.showNotification('Mapping saved', 'success');
+        } catch (e) {
+            console.error('Failed to save mapping', e);
+            this.showNotification('Failed to save mapping', 'error');
+            throw e;
+        }
+    }
+
+    /**
+     * Initialize integration tab switching
+     */
+    initIntegrationTabs() {
+        const tabs = Array.from(document.querySelectorAll('.integration-tabs .integration-tab'));
+        const allPanels = Array.from(document.querySelectorAll('.integration-tab-content'));
+        if (!tabs.length || !allPanels.length) return;
+
+        const activate = (key) => {
+            tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === key));
+            allPanels.forEach(p => p.classList.toggle('active', p.id === `${key}-tab`));
+        };
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => activate(tab.dataset.tab));
+        });
+
+        // Ensure default selection
+        const defaultKey = 'metadata';
+        activate(defaultKey);
+    }
+
+    /**
      * Render shipping section with table structure
      */
     renderShippingSection() {
@@ -1152,252 +1145,246 @@ class AdminDashboard {
     }
 
     /**
-     * Render integrations section
+     * Render tiers table with data
      */
-    renderIntegrationsSection() {
-        return `
-            <div class="integrations-container">
-                <div class="integration-tabs">
-                    <button class="integration-tab active" data-tab="github" onclick="window.adminDashboard.showIntegrationTab('github')">
-                        GitHub
-                    </button>
-                    <button class="integration-tab" data-tab="copper" onclick="window.adminDashboard.showIntegrationTab('copper')">
-                        Copper CRM
-                    </button>
-                    <button class="integration-tab" data-tab="shipstation" onclick="window.adminDashboard.showIntegrationTab('shipstation')">
-                        ShipStation
-                    </button>
-                    <button class="integration-tab" data-tab="fishbowl" onclick="window.adminDashboard.showIntegrationTab('fishbowl')">
-                        Fishbowl ERP
-                    </button>
-                </div>
-                <div class="integration-content" id="integration-content">
-                    ${this.renderGitHubIntegration()}
-                </div>
-            </div>
-        `;
-    }
-
-/**
- * Render tiers table with data
- */
-renderTiersTable(tiers) {
-    const tbody = document.getElementById('tiers-table-body');
-    if (!tbody) return;
-    
-    tbody.innerHTML = tiers.map(tier => `
-        <tr data-tier-id="${tier.id}">
-            <td class="tier-id">${tier.id}</td>
-            <td class="tier-name editable" data-field="name">${tier.name}</td>
-            <td class="tier-min-qty editable" data-field="minQuantity">${tier.minQuantity}</td>
-            <td class="tier-discount editable" data-field="discount">${(tier.discount * 100).toFixed(1)}%</td>
-            <td class="tier-description editable" data-field="description">${tier.description || ''}</td>
-            <td class="tier-status">
-                <span class="status-badge status-active">✓ Active</span>
-            </td>
-            <td class="tier-actions">
-                <button class="btn-small btn-edit" onclick="window.adminDashboard.editTier('${tier.id}')" title="Edit Tier">
-                    ✏️
-                </button>
-                <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleTierStatus('${tier.id}')" title="Toggle Status">
-                    ⏸️
-                </button>
-                <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteTier('${tier.id}')" title="Delete Tier">
-                    🗑️
-                </button>
-            </td>
-        </tr>
-    `).join('');
-    
-    // Add click listeners for inline editing
-    this.setupInlineEditing();
-    
-    // Adjust modal height after table is rendered
-    setTimeout(() => this.adjustModalHeight(), 100);
-}
-
-/**
- * Render shipping table with data
- */
-renderShippingTable(zones) {
-    const tbody = document.getElementById('shipping-table-body');
-    if (!tbody) return;
-    
-    tbody.innerHTML = zones.map(zone => {
-        const groundRates = zone.groundRates || { '1-3': 0, '4-8': 0, '9-11': 0 };
-        const statesDisplay = Array.isArray(zone.states) ? zone.states.join(', ') : zone.states;
-        const statesShort = statesDisplay.length > 50 ? statesDisplay.substring(0, 50) + '...' : statesDisplay;
+    renderTiersTable(tiers) {
+        const tbody = document.getElementById('tiers-table-body');
+        if (!tbody) return;
         
-        return `
-            <tr data-zone-id="${zone.id}">
-                <td class="zone-id">${zone.id}</td>
-                <td class="zone-name editable" data-field="name">${zone.name}</td>
-                <td class="zone-ltl editable" data-field="ltlPercentage">${zone.ltlPercentage}%</td>
-                <td class="ground-rate editable" data-field="ground1-3" data-zone="${zone.zoneNumber}">$${groundRates['1-3']}</td>
-                <td class="ground-rate editable" data-field="ground4-8" data-zone="${zone.zoneNumber}">$${groundRates['4-8']}</td>
-                <td class="ground-rate editable" data-field="ground9-11" data-zone="${zone.zoneNumber}">$${groundRates['9-11']}</td>
-                <td class="zone-states" title="${statesDisplay}">${statesShort}</td>
-                <td class="zone-color">
-                    <div class="color-indicator" style="background-color: ${zone.color}; width: 20px; height: 20px; border-radius: 3px; display: inline-block;"></div>
-                </td>
-                <td class="zone-status">
+        tbody.innerHTML = tiers.map(tier => `
+            <tr data-tier-id="${tier.id}">
+                <td class="tier-id">${tier.id}</td>
+                <td class="tier-name editable" data-field="name">${tier.name}</td>
+                <td class="tier-min-qty editable" data-field="minQuantity">${tier.minQuantity}</td>
+                <td class="tier-discount editable" data-field="discount">${(tier.discount * 100).toFixed(1)}%</td>
+                <td class="tier-description editable" data-field="description">${tier.description || ''}</td>
+                <td class="tier-status">
                     <span class="status-badge status-active">✓ Active</span>
                 </td>
-                <td class="zone-actions">
-                    <button class="btn-small btn-edit" onclick="window.adminDashboard.editShippingZone('${zone.id}')" title="Edit Zone">
+                <td class="tier-actions">
+                    <button class="btn-small btn-edit" onclick="window.adminDashboard.editTier('${tier.id}')" title="Edit Tier">
                         ✏️
                     </button>
-                    <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleShippingZoneStatus('${zone.id}')" title="Toggle Status">
+                    <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleTierStatus('${tier.id}')" title="Toggle Status">
                         ⏸️
                     </button>
-                    <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteShippingZone('${zone.id}')" title="Delete Zone">
+                    <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteTier('${tier.id}')" title="Delete Tier">
                         🗑️
                     </button>
                 </td>
             </tr>
-        `;
-    }).join('');
-    
-    // Add click listeners for inline editing
-    this.setupInlineEditing();
-    
-    // Adjust modal height after table is rendered
-    setTimeout(() => this.adjustModalHeight(), 100);
-}
-
-/**
- * Render error state for tiers table
- */
-renderTiersError() {
-    const tbody = document.getElementById('tiers-table-body');
-    if (tbody) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="7" class="error-row">
-                    ❌ Failed to load tiers data. 
-                    <button onclick="window.adminDashboard.loadTiersData()" class="btn btn-small">
-                        Try Again
-                    </button>
-                </td>
-            </tr>
-        `;
+        `).join('');
         
-        // Adjust modal height after error is rendered
+        // Add click listeners for inline editing
+        this.setupInlineEditing();
+        
+        // Adjust modal height after table is rendered
         setTimeout(() => this.adjustModalHeight(), 100);
     }
-}
 
-/**
- * Render error state for shipping table
- */
-renderShippingError() {
-    const tbody = document.getElementById('shipping-table-body');
-    if (tbody) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="10" class="error-row">
-                    ❌ Failed to load shipping data. 
-                    <button onclick="window.adminDashboard.loadShippingData()" class="btn btn-small">
-                        Try Again
-                    </button>
-                </td>
-            </tr>
-        `;
+    /**
+     * Render shipping table with data
+     */
+    renderShippingTable(zones) {
+        const tbody = document.getElementById('shipping-table-body');
+        if (!tbody) return;
         
-        // Adjust modal height after error is rendered
+        tbody.innerHTML = zones.map(zone => {
+            const groundRates = zone.groundRates || { '1-3': 0, '4-8': 0, '9-11': 0 };
+            const statesDisplay = Array.isArray(zone.states) ? zone.states.join(', ') : zone.states;
+            const statesShort = statesDisplay.length > 50 ? statesDisplay.substring(0, 50) + '...' : statesDisplay;
+            
+            return `
+                <tr data-zone-id="${zone.id}">
+                    <td class="zone-id">${zone.id}</td>
+                    <td class="zone-name editable" data-field="name">${zone.name}</td>
+                    <td class="zone-ltl editable" data-field="ltlPercentage">${zone.ltlPercentage}%</td>
+                    <td class="ground-rate editable" data-field="ground1-3" data-zone="${zone.zoneNumber}">$${groundRates['1-3']}</td>
+                    <td class="ground-rate editable" data-field="ground4-8" data-zone="${zone.zoneNumber}">$${groundRates['4-8']}</td>
+                    <td class="ground-rate editable" data-field="ground9-11" data-zone="${zone.zoneNumber}">$${groundRates['9-11']}</td>
+                    <td class="zone-states" title="${statesDisplay}">${statesShort}</td>
+                    <td class="zone-color">
+                        <div class="color-indicator" style="background-color: ${zone.color}; width: 20px; height: 20px; border-radius: 3px; display: inline-block;"></div>
+                    </td>
+                    <td class="zone-status">
+                        <span class="status-badge status-active">✓ Active</span>
+                    </td>
+                    <td class="zone-actions">
+                        <button class="btn-small btn-edit" onclick="window.adminDashboard.editShippingZone('${zone.id}')" title="Edit Zone">
+                            ✏️
+                        </button>
+                        <button class="btn-small btn-toggle" onclick="window.adminDashboard.toggleShippingZoneStatus('${zone.id}')" title="Toggle Status">
+                            ⏸️
+                        </button>
+                        <button class="btn-small btn-delete" onclick="window.adminDashboard.deleteShippingZone('${zone.id}')" title="Delete Zone">
+                            🗑️
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        
+        // Add click listeners for inline editing
+        this.setupInlineEditing();
+        
+        // Adjust modal height after table is rendered
         setTimeout(() => this.adjustModalHeight(), 100);
     }
-}
 
-/**
- * Setup inline editing for data tables
- */
-setupInlineEditing() {
-    const editableCells = document.querySelectorAll('.editable');
-    editableCells.forEach(cell => {
-        cell.addEventListener('click', (e) => {
-            this.startInlineEdit(e.target);
+    /**
+     * Render error state for tiers table
+     */
+    renderTiersError() {
+        const tbody = document.getElementById('tiers-table-body');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="error-row">
+                        ❌ Failed to load tiers data. 
+                        <button onclick="window.adminDashboard.loadTiersData()" class="btn btn-small">
+                            Try Again
+                        </button>
+                    </td>
+                </tr>
+            `;
+            
+            // Adjust modal height after error is rendered
+            setTimeout(() => this.adjustModalHeight(), 100);
+        }
+    }
+
+    /**
+     * Render error state for shipping table
+     */
+    renderShippingError() {
+        const tbody = document.getElementById('shipping-table-body');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="error-row">
+                        ❌ Failed to load shipping data. 
+                        <button onclick="window.adminDashboard.loadShippingData()" class="btn btn-small">
+                            Try Again
+                        </button>
+                    </td>
+                </tr>
+            `;
+            
+            // Adjust modal height after error is rendered
+            setTimeout(() => this.adjustModalHeight(), 100);
+        }
+    }
+
+    /**
+     * Setup inline editing for data tables
+     */
+    setupInlineEditing() {
+        const editableCells = document.querySelectorAll('.editable');
+        editableCells.forEach(cell => {
+            cell.addEventListener('click', (e) => {
+                this.startInlineEdit(e.target);
+            });
         });
-    });
-}
-
-/**
- * Start inline editing for a cell
- */
-startInlineEdit(cell) {
-    if (cell.classList.contains('editing')) return;
-    
-    const originalValue = cell.textContent.replace('$', '');
-    const field = cell.dataset.field;
-    
-    cell.classList.add('editing');
-    cell.innerHTML = `
-        <input type="text" 
-               value="${originalValue}" 
-               class="inline-edit-input"
-               data-original="${originalValue}"
-               onblur="window.adminDashboard.finishInlineEdit(this)"
-               onkeydown="window.adminDashboard.handleInlineEditKey(event, this)">
-    `;
-    
-    const input = cell.querySelector('input');
-    input.focus();
-    input.select();
-}
-
-/**
- * Handle keyboard events in inline edit
- */
-handleInlineEditKey(event, input) {
-    if (event.key === 'Enter') {
-        this.finishInlineEdit(input);
-    } else if (event.key === 'Escape') {
-        this.cancelInlineEdit(input);
     }
-}
 
-/**
- * Finish inline editing
- */
-finishInlineEdit(input) {
-    const cell = input.parentElement;
-    const newValue = input.value;
-    const originalValue = input.dataset.original;
-    const field = cell.dataset.field;
-    const row = cell.closest('tr');
-    const productId = row.dataset.productId;
-    const zoneId = row.dataset.zoneId;
-    
-    if (newValue !== originalValue) {
-        // Save the change based on field type
-        if (field.startsWith('ground')) {
-            // Handle ground shipping rate changes
-            const zoneNumber = cell.dataset.zone;
-            this.saveGroundShippingRate(zoneId, field, newValue, zoneNumber);
-        } else if (productId) {
-            // Handle product field changes
-            this.saveProductField(productId, field, newValue);
-        } else if (zoneId) {
-            // Handle shipping zone field changes
-            this.saveShippingField(zoneId, field, newValue);
+    /**
+     * Start inline editing for a cell
+     */
+    startInlineEdit(cell) {
+        if (cell.classList.contains('editing')) return;
+        
+        const originalValue = cell.textContent.replace('$', '');
+        const field = cell.dataset.field;
+        
+        cell.classList.add('editing');
+        cell.innerHTML = `
+            <input type="text" 
+                   value="${originalValue}" 
+                   class="inline-edit-input"
+                   data-original="${originalValue}"
+                   onblur="window.adminDashboard.finishInlineEdit(this)"
+                   onkeydown="window.adminDashboard.handleInlineEditKey(event, this)">
+        `;
+        
+        const input = cell.querySelector('input');
+        input.focus();
+        input.select();
+    }
+
+    /**
+     * Handle keyboard events in inline edit
+     */
+    handleInlineEditKey(event, input) {
+        if (event.key === 'Enter') {
+            this.finishInlineEdit(input);
+        } else if (event.key === 'Escape') {
+            this.cancelInlineEdit(input);
+        }
+    }
+
+    /**
+     * Finish inline editing
+     */
+    finishInlineEdit(input) {
+        const cell = input.parentElement;
+        const newValue = input.value;
+        const originalValue = input.dataset.original;
+        const field = cell.dataset.field;
+        const row = cell.closest('tr');
+        const productId = row.dataset.productId;
+        const zoneId = row.dataset.zoneId;
+        
+        if (newValue !== originalValue) {
+            // Save the change based on field type
+            if (field.startsWith('ground')) {
+                // Handle ground shipping rate changes
+                const zoneNumber = cell.dataset.zone;
+                this.saveGroundShippingRate(zoneId, field, newValue, zoneNumber);
+            } else if (productId) {
+                // Handle product field changes
+                this.saveProductField(productId, field, newValue);
+            } else if (zoneId) {
+                // Handle shipping zone field changes
+                this.saveShippingField(zoneId, field, newValue);
+            }
+            
+            // Update display
+            let displayValue = newValue;
+            if (field === 'price' || field === 'msrp' || field === 'cost' || field.startsWith('ground')) {
+                displayValue = `$${newValue}`;
+            } else if (field === 'ltlPercentage') {
+                displayValue = `${newValue}%`;
+            }
+            
+            cell.innerHTML = displayValue;
+            cell.classList.add('field-updated');
+            
+            // Remove the updated class after animation
+            setTimeout(() => {
+                cell.classList.remove('field-updated');
+            }, 2000);
+        } else {
+            const needsDollar = field.includes('price') || field.includes('msrp') || field.includes('cost') || field.startsWith('ground');
+            const needsPercent = field === 'ltlPercentage';
+            
+            let displayValue = originalValue;
+            if (needsDollar) displayValue = `$${originalValue}`;
+            else if (needsPercent) displayValue = `${originalValue}%`;
+            
+            cell.innerHTML = displayValue;
         }
         
-        // Update display
-        let displayValue = newValue;
-        if (field === 'price' || field === 'msrp' || field === 'cost' || field.startsWith('ground')) {
-            displayValue = `$${newValue}`;
-        } else if (field === 'ltlPercentage') {
-            displayValue = `${newValue}%`;
-        }
+        cell.classList.remove('editing');
+    }
+
+    /**
+     * Cancel inline editing
+     */
+    cancelInlineEdit(input) {
+        const cell = input.parentElement;
+        const originalValue = input.dataset.original;
+        const field = cell.dataset.field;
         
-        cell.innerHTML = displayValue;
-        cell.classList.add('field-updated');
-        
-        // Remove the updated class after animation
-        setTimeout(() => {
-            cell.classList.remove('field-updated');
-        }, 2000);
-    } else {
         const needsDollar = field.includes('price') || field.includes('msrp') || field.includes('cost') || field.startsWith('ground');
         const needsPercent = field === 'ltlPercentage';
         
@@ -1406,34 +1393,13 @@ finishInlineEdit(input) {
         else if (needsPercent) displayValue = `${originalValue}%`;
         
         cell.innerHTML = displayValue;
+        cell.classList.remove('editing');
     }
-    
-    cell.classList.remove('editing');
-}
 
-/**
- * Cancel inline editing
- */
-cancelInlineEdit(input) {
-    const cell = input.parentElement;
-    const originalValue = input.dataset.original;
-    const field = cell.dataset.field;
-    
-    const needsDollar = field.includes('price') || field.includes('msrp') || field.includes('cost') || field.startsWith('ground');
-    const needsPercent = field === 'ltlPercentage';
-    
-    let displayValue = originalValue;
-    if (needsDollar) displayValue = `$${originalValue}`;
-    else if (needsPercent) displayValue = `${originalValue}%`;
-        
-    cell.innerHTML = displayValue;
-    cell.classList.remove('editing');
-}
-
-/**
- * Save product field change
- */
-async saveProductField(productId, field, value) {
+    /**
+     * Save product field change
+     */
+    async saveProductField(productId, field, value) {
         try {
             console.log(`💾 Saving ${field} = ${value} for product ${productId}`);
             
@@ -1958,61 +1924,45 @@ async showProductEditModal(productId = null) {
                 </div>
                 
                 <div class="integration-tabs">
-                    <div class="integration-tab active" data-tab="github">💙 GitHub</div>
+                    <div class="integration-tab active" data-tab="metadata">🗂️ Metadata & Mapping</div>
                     <div class="integration-tab" data-tab="copper">🥇 Copper CRM</div>
                     <div class="integration-tab" data-tab="shipstation">🚢 ShipStation</div>
                     <div class="integration-tab" data-tab="fishbowl">🐟 Fishbowl ERP</div>
                 </div>
                 
                 <div class="integration-cards">
-                    <!-- GitHub Integration -->
-                    <div class="integration-tab-content active" id="github-tab">
+                    <!-- Metadata & Mapping -->
+                    <div class="integration-tab-content active" id="metadata-tab">
                         <div class="integration-card">
                             <div class="integration-header">
-                                <h3>💙 GitHub Integration</h3>
-                                <div class="integration-status" id="github-status">
-                                    <span class="status-indicator status-unknown">❔</span>
-                                    <span>Not Tested</span>
-                                </div>
+                                <h3>🗂️ Metadata & Mapping</h3>
                             </div>
                             <div class="integration-content">
-                                <p>Connect to GitHub to enable version control for product data, configurations, and templates.</p>
-                                <div class="form-group">
-                                    <label>Repository Owner:</label>
-                                    <input type="text" id="github-owner" value="benatkanva" class="form-control">
+                                <p>Fetch live metadata from Copper CRM and ShipStation. Configure and validate the ShipStation → Copper mapping.</p>
+                                <div class="metadata-actions" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                                    <button class="btn btn-secondary" onclick="window.adminDashboard.refreshCopperMetadata()">🔄 Refresh Copper Metadata</button>
+                                    <button class="btn btn-secondary" onclick="window.adminDashboard.refreshShipStationMetadata()">🔄 Refresh ShipStation Metadata</button>
+                                    <button class="btn" onclick="window.adminDashboard.loadCurrentMapping()">📥 Load Current Mapping</button>
+                                    <button class="btn" onclick="window.adminDashboard.validateShipStationToCopperMapping()">✅ Validate Mapping</button>
+                                    <button class="btn btn-primary" onclick="window.adminDashboard.openEditMappingModal()">✏️ Edit Mapping</button>
                                 </div>
-                                <div class="form-group">
-                                    <label>Repository Name:</label>
-                                    <input type="text" id="github-repo" value="kanva-quotes" class="form-control">
-                                </div>
-                                <div class="form-group">
-                                    <label>Access Token:</label>
-                                    <input type="password" id="github-token" placeholder="Enter GitHub token" class="form-control">
-                                </div>
-                                <div class="integration-features">
-                                    <div class="feature-item">
-                                        <span class="feature-icon">📦</span>
-                                        <span>Product Data Versioning</span>
+                                <div class="metadata-summary" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                    <div class="card">
+                                        <div class="card-header"><h4>Copper Metadata</h4></div>
+                                        <div class="card-body"><pre id="copper-metadata-summary" style="white-space:pre-wrap; word-break:break-word;">No data yet.</pre></div>
                                     </div>
-                                    <div class="feature-item">
-                                        <span class="feature-icon">🔄</span>
-                                        <span>Automated Backups</span>
-                                    </div>
-                                    <div class="feature-item">
-                                        <span class="feature-icon">📝</span>
-                                        <span>Change History</span>
+                                    <div class="card">
+                                        <div class="card-header"><h4>ShipStation Metadata</h4></div>
+                                        <div class="card-body"><pre id="shipstation-metadata-summary" style="white-space:pre-wrap; word-break:break-word;">No data yet.</pre></div>
                                     </div>
                                 </div>
-                                <div class="integration-actions">
-                                    <button class="btn btn-primary" onclick="window.adminDashboard.testGitHubIntegration()">
-                                        🧪 Test Connection
-                                    </button>
-                                    <button class="btn btn-secondary" onclick="window.adminDashboard.saveGitHubSettings()">
-                                        💾 Save Settings
-                                    </button>
-                                    <button class="btn btn-secondary" onclick="window.adminDashboard.viewGitHubHistory()">
-                                        📜 View History
-                                    </button>
+                                <div class="card" style="margin-top:12px;">
+                                    <div class="card-header"><h4>Current Mapping</h4></div>
+                                    <div class="card-body"><pre id="current-mapping-summary" style="white-space:pre-wrap; word-break:break-word;">No mapping loaded.</pre></div>
+                                </div>
+                                <div class="card" style="margin-top:12px;">
+                                    <div class="card-header"><h4>Validation</h4></div>
+                                    <div class="card-body"><div id="mapping-validation-results">Not validated.</div></div>
                                 </div>
                             </div>
                         </div>
