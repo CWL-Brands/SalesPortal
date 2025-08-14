@@ -23,6 +23,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "npx tailwindcss -i ./src/input.css -o ./css/tailwind-production.css --watch",
     "build": "echo 'Build completed - static files ready'",
+    "start": "node server.js",
     "secure-connections": "node scripts/secure-connections.cjs",
     "migrate-to-firebase": "node scripts/migrate-to-firebase.js",
     "test-firebase": "node scripts/test-firebase-data.js",
@@ -36,7 +37,8 @@
     "dotenv": "^16.6.1",
     "firebase": "^12.0.0",
     "fs-extra": "^11.1.0",
-    "multiparty": "^4.2.3"
+    "multiparty": "^4.2.3",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",

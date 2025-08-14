@@ -99,6 +99,226 @@ const server = http.createServer((req, res) => {
             res.end();
             return;
         }
+        // -------------------------------
+        // Metadata: Copper (refresh & get)
+        // -------------------------------
+        else if (pathname === '/api/metadata/copper/refresh' && req.method === 'GET') {
+            // Fetch live Copper metadata and cache to data/metadata.copper.json
+            (async () => {
+                try {
+                    // Resolve credentials: prefer stored connections, fallback to env
+                    const copperCfg = connectionsStore.copper || {};
+                    const apiKey = copperCfg.apiKey || process.env.COPPER_API_KEY || '';
+                    const userEmail = copperCfg.userEmail || process.env.COPPER_USER_EMAIL || '';
+                    if (!apiKey || !userEmail) {
+                        throw new Error('Missing Copper API credentials (apiKey/userEmail)');
+                    }
+
+                    const baseUrl = 'https://api.prosperworks.com/developer_api/v1';
+
+                    // Use global fetch if available, else dynamic import
+                    const fetchImpl = (typeof fetch !== 'undefined') ? fetch : (await import('node-fetch')).default;
+                    const headers = {
+                        'X-PW-AccessToken': apiKey,
+                        'X-PW-Application': 'developer_api',
+                        'X-PW-UserEmail': userEmail,
+                        'Content-Type': 'application/json'
+                    };
+
+                    const [oppFieldsRes, companyFieldsRes, pipelinesRes, stagesRes] = await Promise.all([
+                        fetchImpl(`${baseUrl}/custom_field_definitions?parent_type=opportunity`, { headers }),
+                        fetchImpl(`${baseUrl}/custom_field_definitions?parent_type=company`, { headers }),
+                        fetchImpl(`${baseUrl}/pipelines`, { headers }),
+                        fetchImpl(`${baseUrl}/stages`, { headers })
+                    ]);
+
+                    if (!oppFieldsRes.ok || !companyFieldsRes.ok || !pipelinesRes.ok || !stagesRes.ok) {
+                        const details = {
+                            opportunityFieldsStatus: oppFieldsRes.status,
+                            companyFieldsStatus: companyFieldsRes.status,
+                            pipelinesStatus: pipelinesRes.status,
+                            stagesStatus: stagesRes.status
+                        };
+                        throw new Error(`Copper metadata fetch failed: ${JSON.stringify(details)}`);
+                    }
+
+                    const [opportunityFields, companyFields, pipelines, stages] = await Promise.all([
+                        oppFieldsRes.json(),
+                        companyFieldsRes.json(),
+                        pipelinesRes.json(),
+                        stagesRes.json()
+                    ]);
+
+                    const copperMetadata = {
+                        fetchedAt: new Date().toISOString(),
+                        customFields: {
+                            opportunity: opportunityFields,
+                            company: companyFields
+                        },
+                        pipelines,
+                        stages
+                    };
+
+                    const metadataDir = path.join(__dirname, 'data');
+                    if (!fs.existsSync(metadataDir)) fs.mkdirSync(metadataDir, { recursive: true });
+                    fs.writeFileSync(path.join(metadataDir, 'metadata.copper.json'), JSON.stringify(copperMetadata, null, 2), 'utf8');
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true, data: copperMetadata }));
+                } catch (error) {
+                    console.error('❌ Copper metadata refresh error:', error);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: 'Copper metadata refresh failed', error: error.message }));
+                }
+            })();
+            return;
+        }
+        else if (pathname === '/api/metadata/copper' && req.method === 'GET') {
+            try {
+                const file = path.join(__dirname, 'data', 'metadata.copper.json');
+                if (!fs.existsSync(file)) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: 'Copper metadata not found. Refresh first.' }));
+                    return;
+                }
+                const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, data }));
+            } catch (error) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: 'Failed to read Copper metadata', error: error.message }));
+            }
+            return;
+        }
+        // ------------------------------------
+        // Metadata: ShipStation (refresh & get)
+        // ------------------------------------
+        else if (pathname === '/api/metadata/shipstation/refresh' && req.method === 'GET') {
+            (async () => {
+                try {
+                    const ssCfg = connectionsStore.shipstation || {};
+                    const apiKey = ssCfg.apiKey || process.env.SHIPSTATION_API_KEY || '';
+                    const apiSecret = ssCfg.apiSecret || process.env.SHIPSTATION_API_SECRET || '';
+                    if (!apiKey || !apiSecret) {
+                        throw new Error('Missing ShipStation API credentials (apiKey/apiSecret)');
+                    }
+
+                    const baseUrl = 'https://ssapi.shipstation.com';
+                    const fetchImpl = (typeof fetch !== 'undefined') ? fetch : (await import('node-fetch')).default;
+
+                    const authHeader = 'Basic ' + Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+                    const headers = { 'Authorization': authHeader, 'Content-Type': 'application/json' };
+
+                    // Fetch carriers and stores first
+                    const [carriersRes, storesRes] = await Promise.all([
+                        fetchImpl(`${baseUrl}/carriers`, { headers }),
+                        fetchImpl(`${baseUrl}/stores`, { headers })
+                    ]);
+                    if (!carriersRes.ok || !storesRes.ok) {
+                        const details = { carriersStatus: carriersRes.status, storesStatus: storesRes.status };
+                        throw new Error(`ShipStation carriers/stores fetch failed: ${JSON.stringify(details)}`);
+                    }
+                    const carriers = await carriersRes.json();
+                    const stores = await storesRes.json();
+
+                    // For each carrier, fetch services and packages (best-effort)
+                    const servicesByCarrier = {};
+                    const packagesByCarrier = {};
+                    for (const c of carriers) {
+                        const code = c.code || c.carrierCode || c.name;
+                        if (!code) continue;
+                        try {
+                            const [servicesRes, packagesRes] = await Promise.all([
+                                fetchImpl(`${baseUrl}/carriers/listservices?carrierCode=${encodeURIComponent(code)}`, { headers }),
+                                fetchImpl(`${baseUrl}/carriers/listpackages?carrierCode=${encodeURIComponent(code)}`, { headers })
+                            ]);
+                            servicesByCarrier[code] = servicesRes.ok ? await servicesRes.json() : [];
+                            packagesByCarrier[code] = packagesRes.ok ? await packagesRes.json() : [];
+                        } catch (e) {
+                            console.warn(`⚠️ ShipStation services/packages fetch failed for ${code}:`, e.message);
+                            servicesByCarrier[code] = servicesByCarrier[code] || [];
+                            packagesByCarrier[code] = packagesByCarrier[code] || [];
+                        }
+                    }
+
+                    const ssMetadata = {
+                        fetchedAt: new Date().toISOString(),
+                        carriers,
+                        servicesByCarrier,
+                        packagesByCarrier,
+                        stores
+                    };
+
+                    const metadataDir = path.join(__dirname, 'data');
+                    if (!fs.existsSync(metadataDir)) fs.mkdirSync(metadataDir, { recursive: true });
+                    fs.writeFileSync(path.join(metadataDir, 'metadata.shipstation.json'), JSON.stringify(ssMetadata, null, 2), 'utf8');
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true, data: ssMetadata }));
+                } catch (error) {
+                    console.error('❌ ShipStation metadata refresh error:', error);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: 'ShipStation metadata refresh failed', error: error.message }));
+                }
+            })();
+            return;
+        }
+        else if (pathname === '/api/metadata/shipstation' && req.method === 'GET') {
+            try {
+                const file = path.join(__dirname, 'data', 'metadata.shipstation.json');
+                if (!fs.existsSync(file)) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: 'ShipStation metadata not found. Refresh first.' }));
+                    return;
+                }
+                const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, data }));
+            } catch (error) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: 'Failed to read ShipStation metadata', error: error.message }));
+            }
+            return;
+        }
+        // -------------------------------
+        // Mapping: ShipStation → Copper
+        // -------------------------------
+        else if (pathname === '/api/mappings/shipstation-to-copper' && req.method === 'GET') {
+            try {
+                const file = path.join(__dirname, 'data', 'mappings.shipstation_to_copper.json');
+                if (!fs.existsSync(file)) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true, data: null, message: 'No mapping found yet' }));
+                    return;
+                }
+                const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, data }));
+            } catch (error) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: 'Failed to read mapping', error: error.message }));
+            }
+            return;
+        }
+        else if (pathname === '/api/mappings/shipstation-to-copper' && req.method === 'PUT') {
+            let body = '';
+            req.on('data', chunk => { body += chunk.toString(); });
+            req.on('end', () => {
+                try {
+                    const data = JSON.parse(body);
+                    const file = path.join(__dirname, 'data', 'mappings.shipstation_to_copper.json');
+                    const dir = path.dirname(file);
+                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: true, message: 'Mapping saved', data }));
+                } catch (error) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: 'Invalid mapping payload', error: error.message }));
+                }
+            });
+            return;
+        }
         
         // Handle API endpoints
         if (pathname === '/api/connections' && req.method === 'GET') {
