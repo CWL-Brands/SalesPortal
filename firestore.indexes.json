@@ -4,56 +4,24 @@
       "collectionGroup": "products",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "category",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "products",
-      "queryScope": "COLLECTION", 
-      "fields": [
-        {
-          "fieldPath": "isBestSeller",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "name",
-          "order": "ASCENDING"
-        }
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "name",   "order": "ASCENDING" }
       ]
     },
     {
       "collectionGroup": "products",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "active",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "price",
-          "order": "ASCENDING"
-        }
+        { "fieldPath": "active",   "order": "ASCENDING" },
+        { "fieldPath": "category", "order": "ASCENDING" }
       ]
     },
     {
       "collectionGroup": "products",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "category",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "name",
-          "order": "ASCENDING"
-        }
+        { "fieldPath": "isBestSeller", "order": "DESCENDING" },
+        { "fieldPath": "name",         "order": "ASCENDING" }
       ]
     }
   ],
