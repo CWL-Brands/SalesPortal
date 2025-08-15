@@ -39,7 +39,8 @@ const connectionsStore = {
     github: null,
     copper: null,
     fishbowl: null,
-    shipstation: null
+    shipstation: null,
+    ringcentral: null
 };
 
 // Path to store connections locally
@@ -360,6 +361,7 @@ const server = http.createServer((req, res) => {
                     if (data.copper) connectionsStore.copper = data.copper;
                     if (data.fishbowl) connectionsStore.fishbowl = data.fishbowl;
                     if (data.shipstation) connectionsStore.shipstation = data.shipstation;
+                    if (data.ringcentral) connectionsStore.ringcentral = data.ringcentral;
                     
                     // Save to file
                     const saved = saveConnectionsToFile();
@@ -385,7 +387,7 @@ const server = http.createServer((req, res) => {
             // Update specific connection
             const connectionType = pathname.split('/').pop();
             
-            if (!['github', 'copper', 'fishbowl', 'shipstation'].includes(connectionType)) {
+            if (!['github', 'copper', 'fishbowl', 'shipstation', 'ringcentral'].includes(connectionType)) {
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: false,

@@ -54,9 +54,9 @@
     const sessionId = state.sessionId || 'draft';
     const endedAt = state.lastEndedAt || (state.status === 'Disconnected' ? nowIso() : null);
 
-    // Prefer Cloud Functions endpoint if configured
+    // Use Hosting rewrite base (e.g., https://<site>/rc)
     const base = (window.RC_CONFIG && window.RC_CONFIG.functionsBase) || '';
-    const url = base ? `${base}/ringcentralNotes` : null;
+    const url = base ? `${base}/notes` : null;
 
     try {
       if (url) {
@@ -81,7 +81,7 @@
 
   async function queueCopperSync() {
     const base = (window.RC_CONFIG && window.RC_CONFIG.functionsBase) || '';
-    const url = base ? `${base}/ringcentralSyncCopper` : null;
+    const url = base ? `${base}/sync` : null;
     if (!url) return; // no server configured yet
     try {
       const payload = {

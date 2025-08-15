@@ -55,6 +55,79 @@ class AdminDashboard {
             this.adminEmails = ['ben@kanvabotanicals.com'];
         }
     }
+
+    /**
+     * Save RingCentral settings
+     */
+    async saveRingCentralSettings(showAlert = true) {
+        const environment = document.getElementById('ringcentral-environment')?.value || 'production';
+        const clientId = document.getElementById('ringcentral-client-id')?.value?.trim();
+        const redirectUri = document.getElementById('ringcentral-redirect-uri')?.value?.trim() || 'https://kanvaportal.web.app/rc/auth/callback';
+        if (!clientId) {
+            if (showAlert) alert('Please enter RingCentral Client ID');
+            return false;
+        }
+        const payload = { environment, clientId, redirectUri, enabled: true, lastUpdated: new Date().toISOString() };
+        try {
+            let saved = false;
+            if (window.secureIntegrationHandler) {
+                try { saved = await window.secureIntegrationHandler.updateIntegration('ringcentral', payload); } catch (e) { console.warn('Secure save failed:', e); }
+            }
+            if (!saved) {
+                const resp = await fetch('/api/connections/ringcentral', {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                const result = await resp.json().catch(() => ({}));
+                saved = resp.ok && result?.success !== false;
+            }
+            if (!saved) { if (showAlert) alert('Failed to save RingCentral settings'); return false; }
+            this.connectionData = this.connectionData || {}; this.connectionData.ringcentral = payload;
+            const statusEl = document.getElementById('ringcentral-status');
+            if (statusEl) this.updateIntegrationStatus(statusEl, 'ok', 'Configured');
+            if (this.showNotification) this.showNotification('RingCentral settings saved', 'success');
+            return true;
+        } catch (e) {
+            console.error('Error saving RingCentral settings:', e);
+            if (this.showNotification) this.showNotification(`Failed to save RingCentral settings: ${e.message}`, 'error');
+            return false;
+        }
+    }
+
+    /**
+     * Start RingCentral OAuth via Hosting rewrite
+     */
+    startRingCentralOAuth() {
+        window.open('https://kanvaportal.web.app/rc/auth/start', '_blank');
+    }
+
+    /**
+     * View RingCentral status endpoint and display basic info
+     */
+    async viewRingCentralStatus() {
+        const statusEl = document.getElementById('ringcentral-status');
+        this.updateIntegrationStatus(statusEl, 'testing', 'Checking...');
+        try {
+            const resp = await fetch('/rc/status');
+            const text = await resp.text();
+            this.updateIntegrationStatus(statusEl, resp.ok ? 'ok' : 'warning', resp.ok ? 'OK' : `HTTP ${resp.status}`);
+            alert(`RingCentral Status:\n${text.substring(0, 2000)}`);
+        } catch (e) {
+            this.updateIntegrationStatus(statusEl, 'error', 'Error');
+            alert(`Failed to fetch status: ${e.message}`);
+        }
+    }
+
+    /**
+     * Send a test webhook POST to validate endpoint
+     */
+    async sendRingCentralTestWebhook() {
+        try {
+            const resp = await fetch('/rc/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'test', ts: new Date().toISOString() }) });
+            alert(resp.ok ? 'Webhook test sent successfully' : `Webhook test failed: HTTP ${resp.status}`);
+        } catch (e) {
+            alert(`Webhook test error: ${e.message}`);
+        }
+    }
     
     /**
      * Load real connection data from server or localStorage
@@ -90,7 +163,7 @@ class AdminDashboard {
      * Update UI with real connection statuses
      */
     updateConnectionStatuses() {
-        const integrations = ['copper', 'shipstation', 'fishbowl'];
+        const integrations = ['copper', 'ringcentral', 'shipstation', 'fishbowl'];
         
         integrations.forEach(integration => {
             const statusElement = document.getElementById(`${integration}-status`);
@@ -114,6 +187,8 @@ class AdminDashboard {
         switch (integration) {
             case 'copper':
                 return connectionInfo.apiKey && connectionInfo.email;
+            case 'ringcentral':
+                return !!connectionInfo.clientId;
             case 'shipstation':
                 return connectionInfo.apiKey && connectionInfo.apiSecret;
             case 'fishbowl':
@@ -188,6 +263,25 @@ class AdminDashboard {
             if (apiKeyInput && copper.apiKey) apiKeyInput.value = copper.apiKey;
             if (emailInput && copper.email) emailInput.value = copper.email;
             if (envSelect && copper.environment) envSelect.value = copper.environment;
+
+            // Advanced Copper settings
+            const actTypeEl = document.getElementById('copper-activity-type-id');
+            const assignUserEl = document.getElementById('copper-assign-user-id');
+            const phoneStrategyEl = document.getElementById('copper-phone-strategy');
+            const defaultCountryEl = document.getElementById('copper-default-country');
+            const taskStatusEl = document.getElementById('copper-task-status');
+            const taskDueEl = document.getElementById('copper-task-due-offset');
+            const actFieldsEl = document.getElementById('copper-activity-custom-fields-json');
+            const taskFieldsEl = document.getElementById('copper-task-custom-fields-json');
+
+            if (actTypeEl && typeof copper.activityTypeId === 'number') actTypeEl.value = String(copper.activityTypeId);
+            if (assignUserEl && typeof copper.assignToUserId === 'number') assignUserEl.value = String(copper.assignToUserId);
+            if (phoneStrategyEl && copper.phoneMatch?.strategy) phoneStrategyEl.value = copper.phoneMatch.strategy;
+            if (defaultCountryEl && copper.phoneMatch?.defaultCountry) defaultCountryEl.value = copper.phoneMatch.defaultCountry;
+            if (taskStatusEl && copper.taskDefaults?.status) taskStatusEl.value = copper.taskDefaults.status;
+            if (taskDueEl && typeof copper.taskDefaults?.dueDateOffsetMinutes === 'number') taskDueEl.value = String(copper.taskDefaults.dueDateOffsetMinutes);
+            if (actFieldsEl && copper.activityCustomFields) actFieldsEl.value = JSON.stringify(copper.activityCustomFields, null, 2);
+            if (taskFieldsEl && copper.taskCustomFields) taskFieldsEl.value = JSON.stringify(copper.taskCustomFields, null, 2);
         }
         
         // ShipStation form population
@@ -212,6 +306,17 @@ class AdminDashboard {
             if (serverInput && fishbowl.host) serverInput.value = fishbowl.host;
             if (usernameInput && fishbowl.username) usernameInput.value = fishbowl.username;
             if (passwordInput && fishbowl.password) passwordInput.value = fishbowl.password;
+        }
+
+        // RingCentral form population
+        if (this.connectionData.ringcentral) {
+            const rc = this.connectionData.ringcentral;
+            const envEl = document.getElementById('ringcentral-environment');
+            const clientIdEl = document.getElementById('ringcentral-client-id');
+            const redirectEl = document.getElementById('ringcentral-redirect-uri');
+            if (envEl && rc.environment) envEl.value = rc.environment;
+            if (clientIdEl && rc.clientId) clientIdEl.value = rc.clientId;
+            if (redirectEl && rc.redirectUri) redirectEl.value = rc.redirectUri;
         }
     }
 
@@ -1926,6 +2031,7 @@ async showProductEditModal(productId = null) {
                 <div class="integration-tabs">
                     <div class="integration-tab active" data-tab="metadata">🗂️ Metadata & Mapping</div>
                     <div class="integration-tab" data-tab="copper">🥇 Copper CRM</div>
+                    <div class="integration-tab" data-tab="ringcentral">📞 RingCentral</div>
                     <div class="integration-tab" data-tab="shipstation">🚢 ShipStation</div>
                     <div class="integration-tab" data-tab="fishbowl">🐟 Fishbowl ERP</div>
                 </div>
@@ -1995,6 +2101,48 @@ async showProductEditModal(productId = null) {
                                         <option value="sandbox">Sandbox</option>
                                     </select>
                                 </div>
+                                <hr/>
+                                <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                    <div class="form-group">
+                                        <label>Activity Type ID:</label>
+                                        <input type="number" id="copper-activity-type-id" placeholder="e.g. 1" class="form-control">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Default Owner User ID:</label>
+                                        <input type="number" id="copper-assign-user-id" placeholder="e.g. 12345" class="form-control">
+                                    </div>
+                                </div>
+                                <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                    <div class="form-group">
+                                        <label>Phone Match Strategy:</label>
+                                        <select id="copper-phone-strategy" class="form-control">
+                                            <option value="e164">E.164 (recommended)</option>
+                                            <option value="any">Any substring</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Default Country (for 10-digit):</label>
+                                        <input type="text" id="copper-default-country" placeholder="US" class="form-control">
+                                    </div>
+                                </div>
+                                <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                    <div class="form-group">
+                                        <label>Task Default Status:</label>
+                                        <input type="text" id="copper-task-status" placeholder="Completed" class="form-control">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Task Due Offset (minutes):</label>
+                                        <input type="number" id="copper-task-due-offset" placeholder="60" class="form-control">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Activity Custom Fields (JSON map of label -> definitionId):</label>
+                                    <textarea id="copper-activity-custom-fields-json" class="form-control" placeholder='{"Session ID": 1111, "Recording URL": 2222}'></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label>Task Custom Fields (JSON map of label -> definitionId):</label>
+                                    <textarea id="copper-task-custom-fields-json" class="form-control" placeholder='{"Outcome": 3333}'></textarea>
+                                </div>
                                 <div class="integration-features">
                                     <div class="feature-item">
                                         <span class="feature-icon">👥</span>
@@ -2019,6 +2167,53 @@ async showProductEditModal(productId = null) {
                                     <button class="btn btn-secondary" onclick="window.adminDashboard.viewCopperLogs()">
                                         📔 View Activity Logs
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RingCentral Integration -->
+                    <div class="integration-tab-content" id="ringcentral-tab">
+                        <div class="integration-card">
+                            <div class="integration-header">
+                                <h3>📞 RingCentral Integration</h3>
+                                <div class="integration-status" id="ringcentral-status">
+                                    <span class="status-indicator status-unknown">❓</span>
+                                    <span>Not Configured</span>
+                                </div>
+                            </div>
+                            <div class="integration-content">
+                                <p>Configure RingCentral OAuth and verify Hosting endpoints. Keep Cloud Run private; use Hosting rewrites.</p>
+                                <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                    <div class="form-group">
+                                        <label>Environment:</label>
+                                        <select id="ringcentral-environment" class="form-control">
+                                            <option value="production">Production</option>
+                                            <option value="sandbox">Sandbox</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Client ID:</label>
+                                        <input type="text" id="ringcentral-client-id" placeholder="RC App Client ID" class="form-control">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Redirect URI:</label>
+                                    <input type="text" id="ringcentral-redirect-uri" placeholder="https://kanvaportal.web.app/rc/auth/callback" class="form-control">
+                                </div>
+                                <div class="card" style="margin:8px 0;">
+                                    <div class="card-body" style="font-size:13px; line-height:1.6;">
+                                        <div><strong>Auth Start:</strong> <code>https://kanvaportal.web.app/rc/auth/start</code></div>
+                                        <div><strong>Status:</strong> <code>https://kanvaportal.web.app/rc/status</code></div>
+                                        <div><strong>Webhook:</strong> <code>https://kanvaportal.web.app/rc/webhook</code></div>
+                                        <div><strong>Widget URL:</strong> <code>https://kanvaportal.web.app/rc-widget.html</code></div>
+                                    </div>
+                                </div>
+                                <div class="integration-actions">
+                                    <button class="btn btn-primary" onclick="window.adminDashboard.startRingCentralOAuth()">🔐 Start OAuth</button>
+                                    <button class="btn btn-secondary" onclick="window.adminDashboard.viewRingCentralStatus()">🩺 View Status</button>
+                                    <button class="btn btn-secondary" onclick="window.adminDashboard.sendRingCentralTestWebhook()">📤 Send Test Webhook</button>
+                                    <button class="btn" onclick="window.adminDashboard.saveRingCentralSettings()">💾 Save Settings</button>
                                 </div>
                             </div>
                         </div>
@@ -3121,6 +3316,7 @@ async showProductEditModal(productId = null) {
         const taskStatus = document.getElementById('copper-task-status')?.value?.trim() || undefined; // default 'Completed'
         const taskDueOffsetStr = document.getElementById('copper-task-due-offset')?.value?.trim(); // minutes
         const activityCustomFieldsJson = document.getElementById('copper-activity-custom-fields-json')?.value?.trim();
+        const taskCustomFieldsJson = document.getElementById('copper-task-custom-fields-json')?.value?.trim();
 
         // Build payload
         const payload = {
@@ -3159,6 +3355,16 @@ async showProductEditModal(productId = null) {
           } catch (e) {
             console.warn('Invalid activity custom fields JSON:', e);
             if (showAlert) alert('Invalid JSON in Copper Activity Custom Fields. Please fix and try again.');
+            return false;
+          }
+        }
+        if (taskCustomFieldsJson) {
+          try {
+            const parsed = JSON.parse(taskCustomFieldsJson);
+            if (parsed && typeof parsed === 'object') payload.taskCustomFields = parsed;
+          } catch (e) {
+            console.warn('Invalid task custom fields JSON:', e);
+            if (showAlert) alert('Invalid JSON in Copper Task Custom Fields. Please fix and try again.');
             return false;
           }
         }
@@ -3471,6 +3677,8 @@ async showProductEditModal(productId = null) {
                 
                 if (data && data.connections) {
                     console.log('✅ Loaded connections data:', data.connections);
+                    // Cache all connections
+                    this.connectionData = data.connections;
                     
                     // Load GitHub credentials
                     if (data.connections.github) {
@@ -3500,6 +3708,31 @@ async showProductEditModal(productId = null) {
                     if (document.getElementById('copper-environment')) {
                         document.getElementById('copper-environment').value = copper.environment || 'production';
                     }
+                    // Advanced fields
+                    if (document.getElementById('copper-activity-type-id') && typeof copper.activityTypeId === 'number') {
+                        document.getElementById('copper-activity-type-id').value = String(copper.activityTypeId);
+                    }
+                    if (document.getElementById('copper-assign-user-id') && typeof copper.assignToUserId === 'number') {
+                        document.getElementById('copper-assign-user-id').value = String(copper.assignToUserId);
+                    }
+                    if (document.getElementById('copper-phone-strategy') && copper.phoneMatch?.strategy) {
+                        document.getElementById('copper-phone-strategy').value = copper.phoneMatch.strategy;
+                    }
+                    if (document.getElementById('copper-default-country') && copper.phoneMatch?.defaultCountry) {
+                        document.getElementById('copper-default-country').value = copper.phoneMatch.defaultCountry;
+                    }
+                    if (document.getElementById('copper-task-status') && copper.taskDefaults?.status) {
+                        document.getElementById('copper-task-status').value = copper.taskDefaults.status;
+                    }
+                    if (document.getElementById('copper-task-due-offset') && typeof copper.taskDefaults?.dueDateOffsetMinutes === 'number') {
+                        document.getElementById('copper-task-due-offset').value = String(copper.taskDefaults.dueDateOffsetMinutes);
+                    }
+                    if (document.getElementById('copper-activity-custom-fields-json') && copper.activityCustomFields) {
+                        document.getElementById('copper-activity-custom-fields-json').value = JSON.stringify(copper.activityCustomFields, null, 2);
+                    }
+                    if (document.getElementById('copper-task-custom-fields-json') && copper.taskCustomFields) {
+                        document.getElementById('copper-task-custom-fields-json').value = JSON.stringify(copper.taskCustomFields, null, 2);
+                    }
                     
                     // Update status if API key exists
                     if (copper.apiKey) {
@@ -3517,6 +3750,19 @@ async showProductEditModal(productId = null) {
                     }
                 }
                 
+                // Load RingCentral settings
+                if (data.connections.ringcentral) {
+                    const rc = data.connections.ringcentral;
+                    const envEl = document.getElementById('ringcentral-environment');
+                    if (envEl) envEl.value = rc.environment || 'production';
+                    const cidEl = document.getElementById('ringcentral-client-id');
+                    if (cidEl) cidEl.value = rc.clientId || '';
+                    const redirEl = document.getElementById('ringcentral-redirect-uri');
+                    if (redirEl) redirEl.value = rc.redirectUri || 'https://kanvaportal.web.app/rc/auth/callback';
+                    const rcStatus = document.getElementById('ringcentral-status');
+                    if (rcStatus) this.updateIntegrationStatus(rcStatus, rc.clientId ? 'ok' : 'warning', rc.clientId ? 'Configured' : 'Missing Client ID');
+                }
+
                 // Load Fishbowl credentials
                 if (data.connections.fishbowl) {
                     const fishbowl = data.connections.fishbowl;
