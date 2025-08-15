@@ -119,6 +119,153 @@ export const shipstationApi = functions.https.onRequest(async (req, res) => {
   }
 });
 
+// Queue a Copper sync job for a call session
+export const ringcentralSyncCopper = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+  try {
+    const { sessionId, from, to, direction, notes, endedAt } = req.body || {};
+    if (!sessionId) {
+      res.status(400).json({ success: false, message: 'sessionId required' });
+      return;
+    }
+    const job = {
+      sessionId: String(sessionId),
+      from: from || null,
+      to: to || null,
+      direction: direction || null,
+      notes: String(notes || ''),
+      endedAt: endedAt ? admin.firestore.Timestamp.fromDate(new Date(endedAt)) : null,
+      status: 'pending',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      attempts: 0
+    };
+    await db.collection('ringcentral_sync_queue').doc(String(sessionId)).set(job, { merge: true });
+    res.status(202).json({ success: true, queued: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// =============================
+// RingCentral (stubs, phase 1)
+// =============================
+
+// Config doc locations
+const RC_CONNECTIONS_DOC = db.collection('integrations').doc('connections');
+const RC_TOKENS_DOC = db.collection('integrations').doc('ringcentral_tokens');
+
+// Start OAuth (org-level) – placeholder redirects to RingCentral authorize URL when clientId present
+export const ringcentralAuthStart = functions.https.onRequest(async (req, res) => {
+  try {
+    const snap = await RC_CONNECTIONS_DOC.get();
+    const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
+    const clientId = cfg.clientId || process.env.RC_CLIENT_ID || '';
+    const redirectUri = cfg.redirectUri || process.env.RC_REDIRECT_URI || '';
+    const base = cfg.environment === 'sandbox' ? 'https://platform.devtest.ringcentral.com' : 'https://platform.ringcentral.com';
+    if (!clientId || !redirectUri) {
+      res.status(400).json({ success: false, message: 'RingCentral clientId/redirectUri not configured' });
+      return;
+    }
+    const authUrl = `${base}/restapi/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=kanva&prompt=login`;
+    res.redirect(authUrl);
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// OAuth callback (store tokens) – stub stores code and timestamp; real token exchange in next phase
+export const ringcentralAuthCallback = functions.https.onRequest(async (req, res) => {
+  try {
+    const { code, state, error } = req.query || {};
+    if (error) {
+      res.status(400).send(`RingCentral auth error: ${error}`);
+      return;
+    }
+    await RC_TOKENS_DOC.set({ lastAuthCode: String(code || ''), state: String(state || ''), receivedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    res.status(200).send('RingCentral authorization received. Token exchange to be completed by backend. You can close this window.');
+  } catch (e) {
+    res.status(500).send(`Callback error: ${e.message}`);
+  }
+});
+
+// Status endpoint – minimal
+export const ringcentralStatus = functions.https.onRequest(async (_req, res) => {
+  try {
+    const conn = (await RC_CONNECTIONS_DOC.get()).data() || {};
+    const tokens = (await RC_TOKENS_DOC.get()).data() || {};
+    res.status(200).json({ success: true, data: { configured: !!conn.ringcentral, tokens: !!tokens.accessToken || !!tokens.lastAuthCode } });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Webhook receiver – ack fast, write minimal event for screen-pop
+export const ringcentralWebhook = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+  try {
+    // Basic validation/echo support can be added here; keep minimal for phase 1
+    const body = req.body || {};
+    const sessionId = body?.telephonySessionId || body?.uuid || body?.eventId || null;
+    const doc = {
+      receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+      headers: req.headers,
+      body,
+      ip: req.ip,
+      sessionId,
+    };
+    const ref = await db.collection('ringcentral_events').add(doc);
+    if (sessionId) {
+      await db.collection('ringcentral_events_index').doc(String(sessionId)).set({
+        lastEventAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastRef: ref.id
+      }, { merge: true });
+    }
+    // For screen-pop: also write a lightweight doc
+    const lite = {
+      sessionId: sessionId || ref.id,
+      direction: body?.direction || body?.body?.direction || null,
+      from: body?.from || body?.body?.from || null,
+      to: body?.to || body?.body?.to || null,
+      status: body?.status || body?.body?.status || null,
+      at: admin.firestore.FieldValue.serverTimestamp()
+    };
+    await db.collection('ringcentral_screenpop').doc(String(lite.sessionId)).set(lite, { merge: true });
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: `Failed to process webhook: ${e.message}` });
+  }
+});
+
+// Notes endpoint – saves notes tied to session; Copper sync in next phase
+export const ringcentralNotes = functions.https.onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+  try {
+    const { sessionId, notes, agent, endedAt } = req.body || {};
+    if (!sessionId) {
+      res.status(400).json({ success: false, message: 'sessionId required' });
+      return;
+    }
+    await db.collection('ringcentral_notes').doc(String(sessionId)).set({
+      notes: String(notes || ''),
+      agent: agent || null,
+      endedAt: endedAt ? admin.firestore.Timestamp.fromDate(new Date(endedAt)) : admin.firestore.FieldValue.serverTimestamp(),
+      savedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    res.status(200).json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 // ShipStation webhook receiver
 export const shipstationWebhook = functions.https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {

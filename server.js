@@ -652,6 +652,10 @@ const server = http.createServer((req, res) => {
     if (filePath === './') {
         filePath = './index.html';
     }
+    // Map /rc to /rc-widget.html for RingCentral widget
+    if (pathname === '/rc') {
+        filePath = './rc-widget.html';
+    }
 
     // Get file extension
     const extname = String(path.extname(filePath)).toLowerCase();
