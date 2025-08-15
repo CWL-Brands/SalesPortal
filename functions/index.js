@@ -119,6 +119,65 @@ export const shipstationApi = functions.https.onRequest(async (req, res) => {
   }
 });
 
+// Firestore worker: process Copper sync queue jobs
+export const onRingcentralSyncJob = onDocumentCreated('ringcentral_sync_queue/{sessionId}', async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const job = snap.data() || {};
+  const sessionId = event.params.sessionId;
+  const jobRef = snap.ref;
+  try {
+    // Mark processing
+    await jobRef.set({ status: 'processing', startedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+    // Load Copper config
+    const cfgSnap = await db.collection('integrations').doc('connections').get();
+    const cfg = cfgSnap.exists ? cfgSnap.data() : {};
+    const copper = cfg?.copper || {};
+    const apiKey = copper.apiKey || process.env.COPPER_API_KEY;
+    const userEmail = copper.email || process.env.COPPER_USER_EMAIL;
+    const baseUrl = (copper.baseUrl || 'https://api.copper.com/developer_api/v1').replace(/\/$/, '');
+
+    // Validate config (soft-fail to allow queue retention)
+    if (!apiKey || !userEmail) {
+      throw new Error('Copper credentials missing (apiKey or email).');
+    }
+
+    // TODO: Implement lookup and upsert when API shapes confirmed.
+    // Placeholder: write an activity stub document we will reconcile after Copper write.
+    const placeholder = {
+      sessionId,
+      from: job.from || null,
+      to: job.to || null,
+      direction: job.direction || null,
+      notes: job.notes || '',
+      endedAt: job.endedAt || null,
+      // status markers
+      copperActivityId: null,
+      copperTaskId: null,
+      planned: {
+        // What we plan to create in Copper
+        activity: {
+          externalId: `ringcentral:${sessionId}`,
+          type: 'Phone Call',
+          subject: `Phone Call – ${job.direction || 'Unknown'} – ${job.from || ''} ⇄ ${job.to || ''}`.trim(),
+        },
+        task: {
+          type: 'Phone Call',
+          status: 'Completed'
+        }
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+    await db.collection('ringcentral_copper_activity').doc(String(sessionId)).set(placeholder, { merge: true });
+
+    // Mark done for now; will be updated once Copper integration is finalized
+    await jobRef.set({ status: 'done', finishedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  } catch (e) {
+    await jobRef.set({ status: 'error', error: String(e.message || e), lastErrorAt: admin.firestore.FieldValue.serverTimestamp(), attempts: (job.attempts || 0) + 1 }, { merge: true });
+  }
+});
+
 // Queue a Copper sync job for a call session
 export const ringcentralSyncCopper = functions.https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {

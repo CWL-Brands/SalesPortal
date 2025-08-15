@@ -10,6 +10,8 @@
   const saveBtn = document.getElementById('saveNow');
   const clearBtn = document.getElementById('clearNotes');
   const saveMsg = document.getElementById('saveMsg');
+  const openCopperBtn = document.getElementById('openCopper');
+  const autoOpenChk = document.getElementById('autoOpenCopper');
 
   const state = {
     sessionId: null,
@@ -32,6 +34,19 @@
     if (s.length === 11 && s[0] === '1') return '+' + s;
     if (s.length === 10) return '+1' + s;
     return s;
+  }
+
+  // Copper helpers
+  function copperBase() {
+    return (window.COPPER_BASE || 'https://app.copper.com').replace(/\/$/, '');
+  }
+  function copperSearchUrl(q) {
+    // Global search deep link
+    return `${copperBase()}/records?query=${encodeURIComponent(q || '')}`;
+  }
+  function openCopperForPhone(phone) {
+    const url = copperSearchUrl(phone || state.from || state.to || '');
+    window.open(url, '_blank', 'noopener');
   }
 
   async function saveNotes({ draft = false } = {}) {
@@ -92,6 +107,14 @@
 
   saveBtn?.addEventListener('click', () => saveNotes({ draft: true }));
   clearBtn?.addEventListener('click', () => { if (notesEl) { notesEl.value = ''; setText(saveMsg, ''); } });
+  openCopperBtn?.addEventListener('click', () => openCopperForPhone(state.from || state.to));
+
+  // Persist auto-open preference
+  const AUTOPEN_KEY = 'rc_auto_open_copper';
+  try { autoOpenChk && (autoOpenChk.checked = localStorage.getItem(AUTOPEN_KEY) === '1'); } catch {}
+  autoOpenChk?.addEventListener('change', (e) => {
+    try { localStorage.setItem(AUTOPEN_KEY, e.target.checked ? '1' : '0'); } catch {}
+  });
 
   // Listen to RC Embeddable events
   window.addEventListener('message', (e) => {
@@ -121,6 +144,14 @@
       setText(fromEl, state.from || '—');
       setText(toEl, state.to || '—');
       setStatus('Connected');
+
+      // Enable Open in Copper button when we have a phone number
+      if (openCopperBtn) openCopperBtn.disabled = !(state.from || state.to);
+
+      // Auto-open on inbound calls (direction = Inbound)
+      if ((state.direction || '').toLowerCase() === 'inbound' && autoOpenChk && autoOpenChk.checked && (state.from || state.to)) {
+        openCopperForPhone(state.from || state.to);
+      }
     }
 
     if (data.type === 'rc-call-hangup-notify') {
