@@ -7,6 +7,112 @@ import { onRequest } from 'firebase-functions/v2/https';
 admin.initializeApp();
 const db = admin.firestore();
 
+// =============================
+// Copper helpers
+// =============================
+
+function getCopperHeaders({ apiKey, userEmail }) {
+  return {
+    'X-PW-AccessToken': apiKey,
+    'X-PW-Application': 'developer_api',
+    'X-PW-UserEmail': userEmail,
+    'Content-Type': 'application/json'
+  };
+}
+
+function getCopperBaseUrl(cfgCopper = {}) {
+  const base = (cfgCopper.baseUrl || 'https://api.copper.com/developer_api/v1').replace(/\/$/, '');
+  return base;
+}
+
+function normalizePhone(raw, defaultCountry = 'US') {
+  if (!raw) return null;
+  // Very light normalization: keep digits, preserve leading + if present
+  let s = String(raw).trim();
+  const hasPlus = s.startsWith('+');
+  s = s.replace(/[^0-9]/g, '');
+  if (!s) return null;
+  if (hasPlus) return '+' + s;
+  // Basic US handling; extend later if needed
+  if ((defaultCountry || 'US').toUpperCase() === 'US') {
+    if (s.length === 10) return '+1' + s;
+    if (s.length === 11 && s.startsWith('1')) return '+' + s;
+  }
+  // Fallback: return as-is with plus
+  return '+' + s;
+}
+
+async function copperFetch(baseUrl, path, init) {
+  const url = new URL(baseUrl + path);
+  const resp = await fetch(url.toString(), init);
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = text; }
+  if (!resp.ok) {
+    const msg = typeof data === 'string' ? data : JSON.stringify(data);
+    throw new Error(msg || `Copper error ${resp.status}`);
+  }
+  return data;
+}
+
+async function copperFindPersonByPhone({ baseUrl, headers }, phone, strategy = 'e164') {
+  if (!phone) return null;
+  const body = { where: { phone_numbers: [{ number: phone }] }, page_size: 1 };
+  try {
+    const data = await copperFetch(baseUrl, '/people/search', { method: 'POST', headers, body: JSON.stringify(body) });
+    if (Array.isArray(data) && data.length) return data[0];
+  } catch (e) {
+    // ignore and fallback
+  }
+  if (strategy === 'any') {
+    try {
+      const body2 = { where: { phone_numbers: [{ number: phone.replace(/\D/g, '') }] }, page_size: 1 };
+      const data2 = await copperFetch(baseUrl, '/people/search', { method: 'POST', headers, body: JSON.stringify(body2) });
+      if (Array.isArray(data2) && data2.length) return data2[0];
+    } catch {}
+  }
+  return null;
+}
+
+async function copperFindCompanyByPhone({ baseUrl, headers }, phone, strategy = 'e164') {
+  if (!phone) return null;
+  const body = { where: { phone_numbers: [{ number: phone }] }, page_size: 1 };
+  try {
+    const data = await copperFetch(baseUrl, '/companies/search', { method: 'POST', headers, body: JSON.stringify(body) });
+    if (Array.isArray(data) && data.length) return data[0];
+  } catch (e) {
+    // ignore and fallback
+  }
+  if (strategy === 'any') {
+    try {
+      const body2 = { where: { phone_numbers: [{ number: phone.replace(/\D/g, '') }] }, page_size: 1 };
+      const data2 = await copperFetch(baseUrl, '/companies/search', { method: 'POST', headers, body: JSON.stringify(body2) });
+      if (Array.isArray(data2) && data2.length) return data2[0];
+    } catch {}
+  }
+  return null;
+}
+
+async function copperCreateActivity({ baseUrl, headers }, payload) {
+  return await copperFetch(baseUrl, '/activities', { method: 'POST', headers, body: JSON.stringify(payload) });
+}
+
+async function copperCreateTask({ baseUrl, headers }, payload) {
+  return await copperFetch(baseUrl, '/tasks', { method: 'POST', headers, body: JSON.stringify(payload) });
+}
+
+async function copperFindUserIdByEmail({ baseUrl, headers }, email) {
+  if (!email) return null;
+  try {
+    const body = { emails: [String(email).trim()] };
+    const data = await copperFetch(baseUrl, '/users/search', { method: 'POST', headers, body: JSON.stringify(body) });
+    if (Array.isArray(data) && data.length) return data[0]?.id || null;
+  } catch (e) {
+    // ignore; fallback to default owner
+  }
+  return null;
+}
+
 // Utility: read ShipStation credentials from Firestore
 async function loadShipStationCreds() {
   // Legacy path mapped by frontend to Firestore: data/connections.json
@@ -137,42 +243,120 @@ export const onRingcentralSyncJob = onDocumentCreated('ringcentral_sync_queue/{s
     const copper = cfg?.copper || {};
     const apiKey = copper.apiKey || process.env.COPPER_API_KEY;
     const userEmail = copper.email || process.env.COPPER_USER_EMAIL;
-    const baseUrl = (copper.baseUrl || 'https://api.copper.com/developer_api/v1').replace(/\/$/, '');
+    const baseUrl = getCopperBaseUrl(copper);
+    const activityTypeId = copper.activityTypeId || null;
+    const assignToUserId = copper.assignToUserId || null;
+    const phoneStrategy = (copper.phoneMatch?.strategy || 'e164');
+    const defaultCountry = copper.phoneMatch?.defaultCountry || 'US';
+    const activityCustomFields = copper.activityCustomFields || {};
+    const taskCustomFields = copper.taskCustomFields || {};
 
-    // Validate config (soft-fail to allow queue retention)
     if (!apiKey || !userEmail) {
       throw new Error('Copper credentials missing (apiKey or email).');
     }
+    if (!activityTypeId) {
+      throw new Error('Copper activityTypeId missing.');
+    }
 
-    // TODO: Implement lookup and upsert when API shapes confirmed.
-    // Placeholder: write an activity stub document we will reconcile after Copper write.
-    const placeholder = {
+    const headers = getCopperHeaders({ apiKey, userEmail });
+    
+    // Normalize phone numbers
+    const normFrom = normalizePhone(job.from, defaultCountry);
+    const normTo = normalizePhone(job.to, defaultCountry);
+    const primaryNumber = job.direction === 'Inbound' ? normFrom : normTo;
+
+    // Lookup person/company
+    let person = await copperFindPersonByPhone({ baseUrl, headers }, primaryNumber, phoneStrategy);
+    let company = null;
+    if (!person) {
+      company = await copperFindCompanyByPhone({ baseUrl, headers }, primaryNumber, phoneStrategy);
+    }
+
+    // Build activity payload
+    const subject = `Phone Call – ${job.direction || 'Unknown'} – ${(job.from || '')} ⇄ ${(job.to || '')}`.trim();
+    const detailsLines = [
+      `Session: ${sessionId}`,
+      `Direction: ${job.direction || ''}`,
+      `From: ${job.from || ''}`,
+      `To: ${job.to || ''}`,
+      job.notes ? `Notes: ${job.notes}` : null
+    ].filter(Boolean);
+    const details = detailsLines.join('\n');
+
+    // Resolve owner: prefer agentEmail from job if provided
+    let resolvedOwnerId = assignToUserId || undefined;
+    if (job.agentEmail) {
+      const foundId = await copperFindUserIdByEmail({ baseUrl, headers }, job.agentEmail);
+      if (foundId) resolvedOwnerId = foundId;
+    }
+
+    const activityPayload = {
+      type: activityTypeId,
+      name: subject,
+      details,
+      owner_id: resolvedOwnerId,
+      person_id: person?.id || undefined,
+      company_id: company?.id || undefined,
+      // custom fields on activity
+      custom_fields: Object.entries(activityCustomFields).map(([label, id]) => {
+        // best-effort mapping from known labels
+        let value = null;
+        if (label.toLowerCase().includes('session')) value = sessionId;
+        else if (label.toLowerCase().includes('direction')) value = job.direction || '';
+        else if (label.toLowerCase().includes('duration')) value = job.durationSec || job.duration || null;
+        else if (label.toLowerCase().includes('recording')) value = job.recordingUrl || null;
+        else if (label.toLowerCase().includes('phone')) value = primaryNumber || job.from || job.to || null;
+        return { custom_field_definition_id: Number(id), value };
+      }).filter(cf => cf.value !== null && cf.value !== undefined)
+    };
+
+    const activityResp = await copperCreateActivity({ baseUrl, headers }, activityPayload);
+
+    // Create completed task linked to the activity
+    const status = copper.taskDefaults?.status || 'Completed';
+    const dueOffset = Number(copper.taskDefaults?.dueDateOffsetMinutes || 0);
+    const dueDate = new Date();
+    if (dueOffset) dueDate.setMinutes(dueDate.getMinutes() + dueOffset);
+
+    const taskDetails = `${subject}\n\n${details}`;
+    const taskPayload = {
+      name: subject,
+      details: taskDetails,
+      status,
+      owner_id: resolvedOwnerId,
+      related_resource_type: person ? 'person' : (company ? 'company' : undefined),
+      related_resource_id: person ? person.id : (company ? company.id : undefined),
+      due_date: dueDate.toISOString().slice(0, 10), // YYYY-MM-DD
+      // custom fields on task (if provided)
+      custom_fields: Object.entries(taskCustomFields).map(([label, id]) => {
+        let value = null;
+        if (label.toLowerCase().includes('session')) value = sessionId;
+        else if (label.toLowerCase().includes('direction')) value = job.direction || '';
+        else if (label.toLowerCase().includes('duration')) value = job.durationSec || job.duration || null;
+        else if (label.toLowerCase().includes('recording')) value = job.recordingUrl || null;
+        else if (label.toLowerCase().includes('phone')) value = (person?.phone_numbers?.[0]?.number) || (company?.phone_numbers?.[0]?.number) || primaryNumber || job.from || job.to || null;
+        else if (label.toLowerCase().includes('outcome')) value = job.outcome || null;
+        return { custom_field_definition_id: Number(id), value };
+      }).filter(cf => cf.value !== null && cf.value !== undefined)
+    };
+    const taskResp = await copperCreateTask({ baseUrl, headers }, taskPayload);
+
+    // Persist results
+    const resultDoc = {
       sessionId,
       from: job.from || null,
       to: job.to || null,
       direction: job.direction || null,
       notes: job.notes || '',
       endedAt: job.endedAt || null,
-      // status markers
-      copperActivityId: null,
-      copperTaskId: null,
-      planned: {
-        // What we plan to create in Copper
-        activity: {
-          externalId: `ringcentral:${sessionId}`,
-          type: 'Phone Call',
-          subject: `Phone Call – ${job.direction || 'Unknown'} – ${job.from || ''} ⇄ ${job.to || ''}`.trim(),
-        },
-        task: {
-          type: 'Phone Call',
-          status: 'Completed'
-        }
-      },
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+      copperActivityId: activityResp?.id || null,
+      copperTaskId: taskResp?.id || null,
+      personId: person?.id || null,
+      companyId: company?.id || null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
-    await db.collection('ringcentral_copper_activity').doc(String(sessionId)).set(placeholder, { merge: true });
+    await db.collection('ringcentral_copper_activity').doc(String(sessionId)).set(resultDoc, { merge: true });
 
-    // Mark done for now; will be updated once Copper integration is finalized
     await jobRef.set({ status: 'done', finishedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   } catch (e) {
     await jobRef.set({ status: 'error', error: String(e.message || e), lastErrorAt: admin.firestore.FieldValue.serverTimestamp(), attempts: (job.attempts || 0) + 1 }, { merge: true });

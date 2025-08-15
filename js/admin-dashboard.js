@@ -3113,7 +3113,16 @@ async showProductEditModal(productId = null) {
           if (showAlert) alert('Please enter both API Key and Email');
           return false;
         }
-      
+        // Optional advanced settings (if inputs exist)
+        const activityTypeIdStr = document.getElementById('copper-activity-type-id')?.value?.trim();
+        const assignToUserIdStr = document.getElementById('copper-assign-user-id')?.value?.trim();
+        const phoneStrategy = document.getElementById('copper-phone-strategy')?.value || undefined; // 'e164' | 'any'
+        const defaultCountry = document.getElementById('copper-default-country')?.value?.trim() || undefined;
+        const taskStatus = document.getElementById('copper-task-status')?.value?.trim() || undefined; // default 'Completed'
+        const taskDueOffsetStr = document.getElementById('copper-task-due-offset')?.value?.trim(); // minutes
+        const activityCustomFieldsJson = document.getElementById('copper-activity-custom-fields-json')?.value?.trim();
+
+        // Build payload
         const payload = {
           apiKey,
           email,
@@ -3121,6 +3130,38 @@ async showProductEditModal(productId = null) {
           enabled: true,
           lastUpdated: new Date().toISOString()
         };
+
+        // Attach optional settings only if present
+        const activityTypeId = activityTypeIdStr ? Number(activityTypeIdStr) : undefined;
+        const assignToUserId = assignToUserIdStr ? Number(assignToUserIdStr) : undefined;
+        if (!isNaN(activityTypeId)) payload.activityTypeId = activityTypeId;
+        if (!isNaN(assignToUserId)) payload.assignToUserId = assignToUserId;
+
+        if (phoneStrategy || defaultCountry) {
+          payload.phoneMatch = {
+            ...(defaultCountry ? { defaultCountry } : {}),
+            ...(phoneStrategy ? { strategy: phoneStrategy } : {})
+          };
+        }
+
+        if (taskStatus || taskDueOffsetStr) {
+          const dueOffset = taskDueOffsetStr ? Number(taskDueOffsetStr) : undefined;
+          payload.taskDefaults = {
+            ...(taskStatus ? { status: taskStatus } : {}),
+            ...(typeof dueOffset === 'number' && !isNaN(dueOffset) ? { dueDateOffsetMinutes: dueOffset } : {})
+          };
+        }
+
+        if (activityCustomFieldsJson) {
+          try {
+            const parsed = JSON.parse(activityCustomFieldsJson);
+            if (parsed && typeof parsed === 'object') payload.activityCustomFields = parsed;
+          } catch (e) {
+            console.warn('Invalid activity custom fields JSON:', e);
+            if (showAlert) alert('Invalid JSON in Copper Activity Custom Fields. Please fix and try again.');
+            return false;
+          }
+        }
       
         try {
           // 1) Secure handler → Firestore (global credentials)
