@@ -364,7 +364,7 @@ export const onRingcentralSyncJob = onDocumentCreated('ringcentral_sync_queue/{s
 });
 
 // Queue a Copper sync job for a call session
-export const ringcentralSyncCopper = onRequest({ invoker: 'public' }, async (req, res) => {
+export const ringcentralSyncCopper = onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -402,7 +402,7 @@ const RC_CONNECTIONS_DOC = db.collection('integrations').doc('connections');
 const RC_TOKENS_DOC = db.collection('integrations').doc('ringcentral_tokens');
 
 // Start OAuth (org-level) – placeholder redirects to RingCentral authorize URL when clientId present
-export const ringcentralAuthStart = onRequest({ invoker: 'public' }, async (req, res) => {
+export const ringcentralAuthStart = onRequest(async (req, res) => {
   try {
     const snap = await RC_CONNECTIONS_DOC.get();
     const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
@@ -421,7 +421,7 @@ export const ringcentralAuthStart = onRequest({ invoker: 'public' }, async (req,
 });
 
 // OAuth callback (store tokens) – stub stores code and timestamp; real token exchange in next phase
-export const ringcentralAuthCallback = onRequest({ invoker: 'public' }, async (req, res) => {
+export const ringcentralAuthCallback = onRequest(async (req, res) => {
   try {
     const { code, state, error } = req.query || {};
     if (error) {
@@ -436,7 +436,7 @@ export const ringcentralAuthCallback = onRequest({ invoker: 'public' }, async (r
 });
 
 // Status endpoint – minimal
-export const ringcentralStatus = onRequest({ invoker: 'public' }, async (_req, res) => {
+export const ringcentralStatus = onRequest(async (_req, res) => {
   try {
     const conn = (await RC_CONNECTIONS_DOC.get()).data() || {};
     const tokens = (await RC_TOKENS_DOC.get()).data() || {};
@@ -447,7 +447,7 @@ export const ringcentralStatus = onRequest({ invoker: 'public' }, async (_req, r
 });
 
 // Webhook receiver – ack fast, write minimal event for screen-pop
-export const ringcentralWebhook = onRequest({ invoker: 'public' }, async (req, res) => {
+export const ringcentralWebhook = onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -487,7 +487,7 @@ export const ringcentralWebhook = onRequest({ invoker: 'public' }, async (req, r
 });
 
 // Notes endpoint – saves notes tied to session; Copper sync in next phase
-export const ringcentralNotes = onRequest({ invoker: 'public' }, async (req, res) => {
+export const ringcentralNotes = onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
