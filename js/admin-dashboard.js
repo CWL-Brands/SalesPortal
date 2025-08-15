@@ -97,7 +97,8 @@ class AdminDashboard {
      * Start RingCentral OAuth via Hosting rewrite
      */
     startRingCentralOAuth() {
-        window.open('https://kanvaportal.web.app/rc/auth/start', '_blank');
+        const rcBase = 'https://kanvaportal.web.app';
+        window.open(`${rcBase}/rc/auth/start`, '_blank', 'noopener');
     }
 
     /**
@@ -107,13 +108,14 @@ class AdminDashboard {
         const statusEl = document.getElementById('ringcentral-status');
         this.updateIntegrationStatus(statusEl, 'testing', 'Checking...');
         try {
-            const resp = await fetch('/rc/status');
+            const rcBase = 'https://kanvaportal.web.app';
+            const resp = await fetch(`${rcBase}/rc/status`);
             const text = await resp.text();
             this.updateIntegrationStatus(statusEl, resp.ok ? 'ok' : 'warning', resp.ok ? 'OK' : `HTTP ${resp.status}`);
             alert(`RingCentral Status:\n${text.substring(0, 2000)}`);
         } catch (e) {
             this.updateIntegrationStatus(statusEl, 'error', 'Error');
-            alert(`Failed to fetch status: ${e.message}`);
+            alert(`Error fetching RingCentral status: ${e.message}`);
         }
     }
 
@@ -122,7 +124,8 @@ class AdminDashboard {
      */
     async sendRingCentralTestWebhook() {
         try {
-            const resp = await fetch('/rc/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'test', ts: new Date().toISOString() }) });
+            const rcBase = 'https://kanvaportal.web.app';
+            const resp = await fetch(`${rcBase}/rc/webhook`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'test', ts: new Date().toISOString() }) });
             alert(resp.ok ? 'Webhook test sent successfully' : `Webhook test failed: HTTP ${resp.status}`);
         } catch (e) {
             alert(`Webhook test error: ${e.message}`);
@@ -2199,7 +2202,7 @@ async showProductEditModal(productId = null) {
                                 </div>
                                 <div class="form-group">
                                     <label>Redirect URI:</label>
-                                    <input type="text" id="ringcentral-redirect-uri" placeholder="https://kanvaportal.web.app/rc/auth/callback" class="form-control">
+                                    <input type="text" id="ringcentral-redirect-uri" placeholder="${window.location.origin}/rc/auth/callback" class="form-control">
                                 </div>
                                 <div class="card" style="margin:8px 0;">
                                     <div class="card-body" style="font-size:13px; line-height:1.6;">
