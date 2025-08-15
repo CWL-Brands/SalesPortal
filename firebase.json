@@ -50,12 +50,12 @@
           "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com"
         }
       },
-      { "source": "/rc/auth/start",    "run": { "serviceId": "ringcentralauthstart",    "region": "us-central1", "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com" } },
-      { "source": "/rc/auth/callback", "run": { "serviceId": "ringcentralauthcallback", "region": "us-central1", "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com" } },
-      { "source": "/rc/notes",         "run": { "serviceId": "ringcentralnotes",        "region": "us-central1", "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com" } },
-      { "source": "/rc/status",        "run": { "serviceId": "ringcentralstatus",       "region": "us-central1", "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com" } },
-      { "source": "/rc/sync",          "run": { "serviceId": "ringcentralsynccopper",   "region": "us-central1", "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com" } },
-      { "source": "/rc/webhook",       "run": { "serviceId": "ringcentralwebhook",      "region": "us-central1", "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com" } },
+      { "source": "/rc/auth/start",    "run": { "serviceId": "ringcentralauthstart",    "region": "us-central1" } },
+      { "source": "/rc/auth/callback", "run": { "serviceId": "ringcentralauthcallback", "region": "us-central1" } },
+      { "source": "/rc/notes",         "run": { "serviceId": "ringcentralnotes",        "region": "us-central1" } },
+      { "source": "/rc/status",        "run": { "serviceId": "ringcentralstatus",       "region": "us-central1" } },
+      { "source": "/rc/sync",          "run": { "serviceId": "ringcentralsynccopper",   "region": "us-central1" } },
+      { "source": "/rc/webhook",       "run": { "serviceId": "ringcentralwebhook",      "region": "us-central1" } },
       {
         "source": "**",
         "destination": "/index.html"
