@@ -9,6 +9,41 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // =============================
+// CORS helper
+// =============================
+const ALLOWED_ORIGINS = new Set([
+  'https://kanvaportal.web.app',
+  'https://kanvaportal.firebaseapp.com',
+  // Firebase Hosting preview channel domain for this project
+  'https://salesportal--kanvaportal.us-central1.hosted.app',
+  // Copper app host (if embedding makes cross-origin calls)
+  'https://app.copper.com',
+  // Local dev convenience
+  'http://localhost:5000',
+  'http://localhost:3000'
+]);
+
+function applyCors(req, res) {
+  const origin = req.get('origin');
+  if (origin && (ALLOWED_ORIGINS.has(origin))) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Vary', 'Origin');
+    res.set('Access-Control-Allow-Credentials', 'true');
+  }
+  res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+}
+
+const withCors = (handler) => async (req, res) => {
+  applyCors(req, res);
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+  return handler(req, res);
+};
+
+// =============================
 // Copper helpers
 // =============================
 
@@ -390,7 +425,7 @@ export const onRingcentralSyncJob = onDocumentCreated('ringcentral_sync_queue/{s
 });
 
 // Queue a Copper sync job for a call session
-export const ringcentralSyncCopper = onRequest(async (req, res) => {
+export const ringcentralSyncCopper = onRequest(withCors(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -417,7 +452,7 @@ export const ringcentralSyncCopper = onRequest(async (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
-});
+}));
 
 // =============================
 // RingCentral (stubs, phase 1)
@@ -428,7 +463,7 @@ const RC_CONNECTIONS_DOC = db.collection('integrations').doc('connections');
 const RC_TOKENS_DOC = db.collection('integrations').doc('ringcentral_tokens');
 
 // Start OAuth (org-level) – placeholder redirects to RingCentral authorize URL when clientId present
-export const ringcentralAuthStart = onRequest(async (req, res) => {
+export const ringcentralAuthStart = onRequest(withCors(async (req, res) => {
   try {
     const snap = await RC_CONNECTIONS_DOC.get();
     const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
@@ -444,10 +479,10 @@ export const ringcentralAuthStart = onRequest(async (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
-});
+}));
 
 // OAuth callback (store tokens) – stub stores code and timestamp; real token exchange in next phase
-export const ringcentralAuthCallback = onRequest(async (req, res) => {
+export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
   try {
     const { code, state, error } = req.query || {};
     if (error) {
@@ -459,10 +494,10 @@ export const ringcentralAuthCallback = onRequest(async (req, res) => {
   } catch (e) {
     res.status(500).send(`Callback error: ${e.message}`);
   }
-});
+}));
 
 // Status endpoint – minimal
-export const ringcentralStatus = onRequest(async (_req, res) => {
+export const ringcentralStatus = onRequest(withCors(async (req, res) => {
   try {
     const conn = (await RC_CONNECTIONS_DOC.get()).data() || {};
     const tokens = (await RC_TOKENS_DOC.get()).data() || {};
@@ -470,10 +505,10 @@ export const ringcentralStatus = onRequest(async (_req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
-});
+}));
 
 // Webhook receiver – ack fast, write minimal event for screen-pop
-export const ringcentralWebhook = onRequest(async (req, res) => {
+export const ringcentralWebhook = onRequest(withCors(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -510,10 +545,10 @@ export const ringcentralWebhook = onRequest(async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: `Failed to process webhook: ${e.message}` });
   }
-});
+}));
 
 // Notes endpoint – saves notes tied to session; Copper sync in next phase
-export const ringcentralNotes = onRequest(async (req, res) => {
+export const ringcentralNotes = onRequest(withCors(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -558,7 +593,7 @@ function verifyHmacSignature(rawBodyBuffer, secret, provided, algo = 'sha256') {
   }
 }
 
-export const ringcentralRingSense = onRequest(async (req, res) => {
+export const ringcentralRingSense = onRequest(withCors(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -660,7 +695,7 @@ export const ringcentralRingSense = onRequest(async (req, res) => {
     } catch {}
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
-});
+}));
 
 // ShipStation webhook receiver
 export const shipstationWebhook = functions.https.onRequest(async (req, res) => {
