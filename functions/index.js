@@ -179,7 +179,7 @@ export const onRingcentralSyncJob = onDocumentCreated('ringcentral_sync_queue/{s
 });
 
 // Queue a Copper sync job for a call session
-export const ringcentralSyncCopper = functions.https.onRequest(async (req, res) => {
+export const ringcentralSyncCopper = functions.runWith({ invoker: 'public' }).https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -217,7 +217,7 @@ const RC_CONNECTIONS_DOC = db.collection('integrations').doc('connections');
 const RC_TOKENS_DOC = db.collection('integrations').doc('ringcentral_tokens');
 
 // Start OAuth (org-level) – placeholder redirects to RingCentral authorize URL when clientId present
-export const ringcentralAuthStart = functions.https.onRequest(async (req, res) => {
+export const ringcentralAuthStart = functions.runWith({ invoker: 'public' }).https.onRequest(async (req, res) => {
   try {
     const snap = await RC_CONNECTIONS_DOC.get();
     const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
@@ -236,7 +236,7 @@ export const ringcentralAuthStart = functions.https.onRequest(async (req, res) =
 });
 
 // OAuth callback (store tokens) – stub stores code and timestamp; real token exchange in next phase
-export const ringcentralAuthCallback = functions.https.onRequest(async (req, res) => {
+export const ringcentralAuthCallback = functions.runWith({ invoker: 'public' }).https.onRequest(async (req, res) => {
   try {
     const { code, state, error } = req.query || {};
     if (error) {
@@ -251,7 +251,7 @@ export const ringcentralAuthCallback = functions.https.onRequest(async (req, res
 });
 
 // Status endpoint – minimal
-export const ringcentralStatus = functions.https.onRequest(async (_req, res) => {
+export const ringcentralStatus = functions.runWith({ invoker: 'public' }).https.onRequest(async (_req, res) => {
   try {
     const conn = (await RC_CONNECTIONS_DOC.get()).data() || {};
     const tokens = (await RC_TOKENS_DOC.get()).data() || {};
@@ -262,7 +262,7 @@ export const ringcentralStatus = functions.https.onRequest(async (_req, res) => 
 });
 
 // Webhook receiver – ack fast, write minimal event for screen-pop
-export const ringcentralWebhook = functions.https.onRequest(async (req, res) => {
+export const ringcentralWebhook = functions.runWith({ invoker: 'public' }).https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -302,7 +302,7 @@ export const ringcentralWebhook = functions.https.onRequest(async (req, res) => 
 });
 
 // Notes endpoint – saves notes tied to session; Copper sync in next phase
-export const ringcentralNotes = functions.https.onRequest(async (req, res) => {
+export const ringcentralNotes = functions.runWith({ invoker: 'public' }).https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
