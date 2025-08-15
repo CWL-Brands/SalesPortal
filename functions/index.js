@@ -1,6 +1,7 @@
 import functions from 'firebase-functions';
 import admin from 'firebase-admin';
 import fetch from 'node-fetch';
+import crypto from 'crypto';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 
@@ -99,6 +100,11 @@ async function copperCreateActivity({ baseUrl, headers }, payload) {
 
 async function copperCreateTask({ baseUrl, headers }, payload) {
   return await copperFetch(baseUrl, '/tasks', { method: 'POST', headers, body: JSON.stringify(payload) });
+}
+
+// Update an existing Copper activity by ID
+async function copperUpdateActivity({ baseUrl, headers }, id, payload) {
+  return await copperFetch(baseUrl, `/activities/${encodeURIComponent(id)}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
 }
 
 async function copperFindUserIdByEmail({ baseUrl, headers }, email) {
@@ -341,6 +347,26 @@ export const onRingcentralSyncJob = onDocumentCreated('ringcentral_sync_queue/{s
     };
     const taskResp = await copperCreateTask({ baseUrl, headers }, taskPayload);
 
+    // Reconcile any pending RingSense summary for this session
+    try {
+      const pending = await db.collection('ringsense_pending').doc(String(sessionId)).get();
+      if (pending.exists) {
+        const detailsBlock = pending.data()?.detailsBlock || '';
+        if (detailsBlock) {
+          // Append to activity details
+          let currentDetails = '';
+          try {
+            const existing = await copperFetch(baseUrl, `/activities/${encodeURIComponent(activityResp?.id)}`, { method: 'GET', headers });
+            currentDetails = existing?.details || '';
+          } catch {}
+          const updatePayload = { details: `${currentDetails || ''}${detailsBlock}` };
+          try { await copperUpdateActivity({ baseUrl, headers }, activityResp?.id, updatePayload); } catch {}
+        }
+        // Cleanup pending doc
+        try { await db.collection('ringsense_pending').doc(String(sessionId)).delete(); } catch {}
+      }
+    } catch {}
+
     // Persist results
     const resultDoc = {
       sessionId,
@@ -507,6 +533,132 @@ export const ringcentralNotes = onRequest(async (req, res) => {
     res.status(200).json({ success: true });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// =============================
+// RingSense AI webhook (post-call summary)
+// =============================
+
+function safeJsonParse(text) {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function verifyHmacSignature(rawBodyBuffer, secret, provided, algo = 'sha256') {
+  if (!secret || !provided) return false;
+  try {
+    const h = crypto.createHmac(algo, Buffer.from(String(secret)));
+    h.update(rawBodyBuffer);
+    const digest = h.digest('hex');
+    // Accept formats like "sha256=..." or plain hex
+    const normProvided = String(provided).toLowerCase().replace(/^sha256=/, '');
+    return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(normProvided));
+  } catch {
+    return false;
+  }
+}
+
+export const ringcentralRingSense = onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+  const receivedAt = admin.firestore.FieldValue.serverTimestamp();
+  try {
+    // Load RingSense secret and Copper config
+    const connSnap = await db.collection('integrations').doc('connections').get();
+    const conn = connSnap.exists ? (connSnap.data() || {}) : {};
+    const rcCfg = conn.ringcentral || {};
+    const ringsenseSecret = rcCfg.ringsenseSecret || process.env.RINGSENSE_SIGNING_SECRET || '';
+
+    // Signature validation (HMAC-SHA256 over raw body)
+    const signature = req.get('x-ringsense-signature') || req.get('x-ringcentral-signature') || req.get('x-signature') || '';
+    const raw = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+    const sigValid = verifyHmacSignature(raw, ringsenseSecret, signature, 'sha256');
+
+    // Persist full event for telemetry
+    const eventDoc = {
+      receivedAt,
+      headers: req.headers,
+      signature: signature || null,
+      signatureValid: !!sigValid,
+      ip: req.ip,
+      url: req.originalUrl || req.url,
+      body: req.body || safeJsonParse(raw.toString('utf8')) || null
+    };
+    const ref = await db.collection('ringsense_events').add(eventDoc);
+
+    if (!sigValid) {
+      await db.collection('ringsense_events').doc(ref.id).set({ error: 'invalid_signature' }, { merge: true });
+      res.status(401).json({ ok: false, error: 'invalid_signature' });
+      return;
+    }
+
+    const body = eventDoc.body || {};
+    const sessionId = body.sessionId || body.telephonySessionId || body.callSessionId || null;
+    const summary = body.summary || body.aiSummary || body.notes || null;
+    const sentiment = body.sentiment || null;
+    const actionItems = body.actionItems || body.actions || null;
+
+    // Attach summary to Copper activity if we have one
+    if (sessionId && (summary || actionItems)) {
+      // Find previously created activity by sessionId
+      const prior = await db.collection('ringcentral_copper_activity').doc(String(sessionId)).get();
+      const priorData = prior.exists ? prior.data() : null;
+      const activityId = priorData?.copperActivityId || null;
+
+      // Load Copper config
+      const copper = (conn.copper || {});
+      const apiKey = copper.apiKey || process.env.COPPER_API_KEY;
+      const userEmail = copper.email || process.env.COPPER_USER_EMAIL;
+      const baseUrl = getCopperBaseUrl(copper);
+      if (!apiKey || !userEmail) {
+        throw new Error('Copper credentials missing for RingSense update');
+      }
+      const headers = getCopperHeaders({ apiKey, userEmail });
+
+      const detailsBlock = [
+        '\n--- RingSense Summary ---',
+        summary ? `Summary: ${summary}` : null,
+        sentiment ? `Sentiment: ${sentiment}` : null,
+        Array.isArray(actionItems) ? `Action Items: ${actionItems.map(a => (a.title || a.text || a)).join('; ')}` : null
+      ].filter(Boolean).join('\n');
+
+      if (activityId) {
+        try {
+          // Fetch current activity to append details (best-effort)
+          let currentDetails = '';
+          try {
+            const existing = await copperFetch(baseUrl, `/activities/${encodeURIComponent(activityId)}`, { method: 'GET', headers });
+            currentDetails = existing?.details || '';
+          } catch {}
+          const updatePayload = { details: `${currentDetails || ''}${detailsBlock}` };
+          await copperUpdateActivity({ baseUrl, headers }, activityId, updatePayload);
+        } catch (e) {
+          await db.collection('ringsense_failed_updates').add({ sessionId, activityId, error: String(e?.message || e), when: receivedAt, detailsBlock });
+        }
+      } else {
+        // If activity not found yet, persist for later reconciliation
+        await db.collection('ringsense_pending').doc(String(sessionId)).set({
+          sessionId,
+          detailsBlock,
+          createdAt: receivedAt
+        }, { merge: true });
+      }
+    }
+
+    res.status(200).json({ ok: true, id: ref.id });
+  } catch (e) {
+    // Telemetry on error
+    try {
+      await db.collection('rc_webhook_errors').add({
+        source: 'ringsense',
+        error: String(e?.message || e),
+        at: admin.firestore.FieldValue.serverTimestamp(),
+        headers: req.headers
+      });
+    } catch {}
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 
