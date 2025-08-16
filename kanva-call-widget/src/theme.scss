@@ -1,0 +1,326 @@
+// Kanva Botanicals Theme for RingCentral Widget
+// Designed for modal display within Copper CRM
+
+// Kanva Brand Colors
+$kanva-primary: #2d5a2d;
+$kanva-secondary: #4a7c59;
+$kanva-accent: #6b8e6b;
+$kanva-light: #f8fdf8;
+$kanva-text: #1f2937;
+$kanva-text-light: #6b7280;
+
+// Modal-specific styling
+.rc-widget-container {
+  max-width: 420px;
+  max-height: 600px;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  
+  // Header styling
+  .rc-widget-header {
+    background: linear-gradient(135deg, $kanva-primary, $kanva-secondary);
+    color: white;
+    padding: 16px 20px;
+    
+    .rc-widget-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .rc-widget-logo {
+      height: 32px;
+      width: auto;
+    }
+  }
+  
+  // Main content area
+  .rc-widget-content {
+    background: white;
+    
+    // Call controls
+    .rc-call-controls {
+      padding: 20px;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      
+      button {
+        border-radius: 12px;
+        padding: 16px;
+        font-weight: 500;
+        transition: all 0.2s;
+        min-width: 80px;
+        
+        &.answer {
+          background: #10b981;
+          color: white;
+          
+          &:hover {
+            background: #059669;
+            transform: translateY(-2px);
+          }
+        }
+        
+        &.hangup {
+          background: #ef4444;
+          color: white;
+          
+          &:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+          }
+        }
+        
+        &.voicemail {
+          background: #f3f4f6;
+          color: #374151;
+          
+          &:hover {
+            background: #e5e7eb;
+            transform: translateY(-2px);
+          }
+        }
+      }
+    }
+    
+    // Caller information
+    .rc-caller-info {
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid #e5e7eb;
+      
+      .caller-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: $kanva-light;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+      }
+      
+      .caller-details {
+        .caller-name {
+          font-size: 18px;
+          font-weight: 600;
+          color: $kanva-text;
+        }
+        
+        .caller-phone {
+          font-size: 14px;
+          color: $kanva-text-light;
+          font-family: monospace;
+        }
+        
+        .caller-company {
+          font-size: 12px;
+          color: $kanva-primary;
+          font-weight: 500;
+        }
+      }
+    }
+    
+    // Dialer
+    .rc-dialer {
+      padding: 20px;
+      
+      .dial-input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 18px;
+        text-align: center;
+        margin-bottom: 16px;
+        font-family: monospace;
+        
+        &:focus {
+          outline: none;
+          border-color: $kanva-primary;
+        }
+      }
+      
+      .dial-pad {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 16px;
+        
+        button {
+          padding: 12px;
+          border: 1px solid #e5e7eb;
+          background: white;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 14px;
+          transition: all 0.2s;
+          
+          &:hover {
+            background: #f9fafb;
+            border-color: $kanva-primary;
+          }
+        }
+      }
+      
+      .call-button {
+        width: 100%;
+        padding: 12px;
+        background: $kanva-primary;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: background 0.2s;
+        
+        &:hover {
+          background: darken($kanva-primary, 10%);
+        }
+      }
+    }
+    
+    // Notes section
+    .rc-notes {
+      padding: 20px;
+      border-top: 1px solid #e5e7eb;
+      
+      .notes-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        
+        h4 {
+          margin: 0;
+          color: $kanva-text;
+          font-size: 16px;
+        }
+      }
+      
+      textarea {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        resize: vertical;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        
+        &:focus {
+          outline: none;
+          border-color: $kanva-primary;
+        }
+      }
+      
+      .notes-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 12px;
+        
+        button {
+          background: $kanva-primary;
+          color: white;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          
+          &:hover {
+            background: darken($kanva-primary, 10%);
+          }
+        }
+        
+        .status {
+          font-size: 12px;
+          color: $kanva-text-light;
+        }
+      }
+    }
+    
+    // AI Summary section
+    .rc-ai-summary {
+      padding: 20px;
+      background: $kanva-light;
+      border-top: 1px solid #e5e7eb;
+      
+      h4 {
+        margin: 0 0 12px 0;
+        color: $kanva-text;
+        font-size: 16px;
+      }
+      
+      .summary-content {
+        background: white;
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        margin-bottom: 16px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      
+      .add-to-copper {
+        background: #f97316;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        width: 100%;
+        
+        &:hover {
+          background: #ea580c;
+        }
+      }
+    }
+  }
+}
+
+// Override RingCentral default styles for modal display
+.rc-app {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  
+  // Hide unnecessary elements for modal mode
+  .rc-navigation,
+  .rc-sidebar {
+    display: none !important;
+  }
+  
+  // Compact layout for modal
+  .rc-main-view {
+    padding: 0;
+    margin: 0;
+  }
+}
+
+// Responsive adjustments for small modal
+@media (max-width: 480px) {
+  .rc-widget-container {
+    max-width: 90vw;
+    max-height: 90vh;
+    
+    .rc-call-controls {
+      flex-direction: column;
+      gap: 8px;
+      
+      button {
+        min-width: auto;
+      }
+    }
+    
+    .rc-dialer .dial-pad {
+      gap: 4px;
+    }
+  }
+}

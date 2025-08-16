@@ -148,8 +148,13 @@
       // Enable Open in Copper button when we have a phone number
       if (openCopperBtn) openCopperBtn.disabled = !(state.from || state.to);
 
-      // Auto-open on inbound calls (direction = Inbound)
-      if ((state.direction || '').toLowerCase() === 'inbound' && autoOpenChk && autoOpenChk.checked && (state.from || state.to)) {
+      // Use custom Kanva modal for incoming calls instead of auto-opening Copper
+      if ((state.direction || '').toLowerCase() === 'inbound' && window.kanvaCallModal) {
+        // Let the custom modal handle the incoming call display
+        // The modal will handle auto-opening Copper if the preference is set
+        console.log('🔔 Incoming call detected - custom modal will handle display');
+      } else if ((state.direction || '').toLowerCase() === 'inbound' && autoOpenChk && autoOpenChk.checked && (state.from || state.to)) {
+        // Fallback to old behavior if custom modal not available
         openCopperForPhone(state.from || state.to);
       }
     }
@@ -162,4 +167,69 @@
       saveNotes({ draft: false }).then(() => queueCopperSync());
     }
   });
+
+  // Add phone icon click handler for Copper activity bar
+  function addPhoneIconHandler() {
+    // Look for phone icons in Copper's activity bar
+    const phoneIcons = document.querySelectorAll('[data-testid*="phone"], .phone-icon, [title*="phone" i], [aria-label*="phone" i]');
+    
+    phoneIcons.forEach(icon => {
+      if (!icon.hasAttribute('data-kanva-handler')) {
+        icon.setAttribute('data-kanva-handler', 'true');
+        icon.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Show custom Kanva modal in dialer mode
+          if (window.kanvaCallModal) {
+            window.kanvaCallModal.show('dialer');
+          } else {
+            console.warn('Kanva call modal not available');
+          }
+        });
+      }
+    });
+  }
+
+  // Observe DOM changes to catch dynamically added phone icons
+  function observeForPhoneIcons() {
+    const observer = new MutationObserver((mutations) => {
+      let shouldCheck = false;
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          shouldCheck = true;
+        }
+      });
+      
+      if (shouldCheck) {
+        setTimeout(addPhoneIconHandler, 100); // Small delay to ensure DOM is ready
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    // Initial check
+    setTimeout(addPhoneIconHandler, 1000);
+  }
+
+  // Initialize phone icon handlers when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', observeForPhoneIcons);
+  } else {
+    observeForPhoneIcons();
+  }
+
+  // Expose utility functions for the custom modal to use
+  window.rcWidgetUtils = {
+    normalizePhone,
+    copperSearchUrl,
+    openCopperForPhone,
+    saveNotes,
+    queueCopperSync,
+    getState: () => ({ ...state })
+  };
+
 })();

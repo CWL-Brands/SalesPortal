@@ -569,7 +569,7 @@ export const ringcentralNotes = onRequest(withCors(async (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
-});
+}));
 
 // =============================
 // RingSense AI webhook (post-call summary)
@@ -831,3 +831,275 @@ export const shipstationWorker = onDocumentCreated('shipstationRequests/{id}', a
     console.log(`[shipstationWorker] 🏁 Finished ${requestId}`);
   }
 });
+
+// =============================
+// RingCentral AI Summary Processing
+// =============================
+
+export const aiSummary = onRequest(withCors(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { sessionId, notes } = req.body;
+    
+    if (!sessionId) {
+      res.status(400).json({ error: 'Session ID required' });
+      return;
+    }
+
+    // For now, create a simple summary from notes
+    // TODO: Integrate with RingSense AI API for actual call transcription and summary
+    const summary = notes ? 
+      `Call summary: ${notes.substring(0, 200)}${notes.length > 200 ? '...' : ''}` :
+      'Call completed - no notes provided';
+
+    // Store summary in Firestore
+    await db.collection('call_summaries').doc(sessionId).set({
+      sessionId,
+      summary,
+      notes,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      processed: true
+    });
+
+    res.json({ 
+      sessionId,
+      summary,
+      success: true 
+    });
+
+  } catch (error) {
+    console.error('AI summary error:', error);
+    res.status(500).json({ error: 'Failed to process AI summary' });
+  }
+}));
+
+// =============================
+// Copper CRM Integration Endpoints
+// =============================
+
+async function loadCopperConfig() {
+  try {
+    const doc = await db.collection('integrations').doc('connections').get();
+    const data = doc.exists ? doc.data() : null;
+    const copper = data?.copper || {};
+    
+    if (!copper.apiKey || !copper.userEmail) {
+      throw new Error('Missing Copper CRM credentials');
+    }
+    
+    return {
+      apiKey: copper.apiKey,
+      userEmail: copper.userEmail,
+      baseUrl: copper.baseUrl || 'https://api.copper.com/developer_api/v1'
+    };
+  } catch (error) {
+    throw new Error(`Failed to load Copper config: ${error.message}`);
+  }
+}
+
+export const copperLookup = onRequest(withCors(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { phone } = req.body;
+    
+    if (!phone) {
+      res.status(400).json({ error: 'Phone number required' });
+      return;
+    }
+
+    const copperConfig = await loadCopperConfig();
+    const headers = getCopperHeaders(copperConfig);
+    const baseUrl = getCopperBaseUrl(copperConfig);
+
+    // Try to find person by phone
+    const person = await copperFindPersonByPhone({ baseUrl, headers }, phone, 'any');
+    
+    if (person) {
+      res.json({
+        name: person.name,
+        company: person.company_name,
+        email: person.emails?.[0]?.email,
+        phone: phone,
+        copperId: person.id,
+        type: 'person'
+      });
+      return;
+    }
+
+    // Try to find company by phone
+    const company = await copperFindCompanyByPhone({ baseUrl, headers }, phone, 'any');
+    
+    if (company) {
+      res.json({
+        name: company.name,
+        company: company.name,
+        phone: phone,
+        copperId: company.id,
+        type: 'company'
+      });
+      return;
+    }
+
+    // No match found
+    res.json({
+      name: null,
+      company: null,
+      phone: phone,
+      copperId: null,
+      type: null
+    });
+
+  } catch (error) {
+    console.error('Copper lookup error:', error);
+    res.status(500).json({ error: 'Failed to lookup customer in Copper' });
+  }
+}));
+
+export const copperLogCall = onRequest(withCors(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { sessionId, from, to, direction, notes, aiSummary, startTime, endTime } = req.body;
+    
+    if (!sessionId || !from) {
+      res.status(400).json({ error: 'Session ID and phone number required' });
+      return;
+    }
+
+    const copperConfig = await loadCopperConfig();
+    const headers = getCopperHeaders(copperConfig);
+    const baseUrl = getCopperBaseUrl(copperConfig);
+
+    // Find the customer in Copper
+    const phoneToSearch = direction === 'Inbound' ? from : to;
+    const person = await copperFindPersonByPhone({ baseUrl, headers }, phoneToSearch, 'any');
+    const company = person ? null : await copperFindCompanyByPhone({ baseUrl, headers }, phoneToSearch, 'any');
+    
+    const relatedEntity = person || company;
+    
+    // Calculate call duration
+    let duration = null;
+    if (startTime && endTime) {
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      duration = Math.floor((end - start) / 1000); // Duration in seconds
+    }
+
+    // Create activity payload
+    const activityPayload = {
+      type: 'phone_call',
+      details: `${direction} call ${duration ? `(${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})` : ''}`,
+      activity_date: startTime ? new Date(startTime).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      old_activity_type_id: null, // Let Copper assign default phone call type
+      notes: [notes, aiSummary].filter(Boolean).join('\n\n'),
+      parent: relatedEntity ? {
+        id: relatedEntity.id,
+        type: person ? 'person' : 'company'
+      } : null
+    };
+
+    // Create the activity in Copper
+    const activity = await copperCreateActivity({ baseUrl, headers }, activityPayload);
+
+    // Store call log in Firestore for our records
+    await db.collection('call_logs').doc(sessionId).set({
+      sessionId,
+      from,
+      to,
+      direction,
+      notes,
+      aiSummary,
+      startTime,
+      endTime,
+      duration,
+      copperActivityId: activity.id,
+      copperEntityId: relatedEntity?.id,
+      copperEntityType: relatedEntity ? (person ? 'person' : 'company') : null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    res.json({ 
+      success: true,
+      copperActivityId: activity.id,
+      relatedEntity: relatedEntity ? {
+        id: relatedEntity.id,
+        name: relatedEntity.name,
+        type: person ? 'person' : 'company'
+      } : null
+    });
+
+  } catch (error) {
+    console.error('Copper call logging error:', error);
+    res.status(500).json({ error: 'Failed to log call to Copper' });
+  }
+}));
+
+export const copperAddSummary = onRequest(withCors(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { phone, summary, notes } = req.body;
+    
+    if (!phone || !summary) {
+      res.status(400).json({ error: 'Phone number and summary required' });
+      return;
+    }
+
+    const copperConfig = await loadCopperConfig();
+    const headers = getCopperHeaders(copperConfig);
+    const baseUrl = getCopperBaseUrl(copperConfig);
+
+    // Find the customer in Copper
+    const person = await copperFindPersonByPhone({ baseUrl, headers }, phone, 'any');
+    const company = person ? null : await copperFindCompanyByPhone({ baseUrl, headers }, phone, 'any');
+    
+    const relatedEntity = person || company;
+    
+    if (!relatedEntity) {
+      res.status(404).json({ error: 'Customer not found in Copper' });
+      return;
+    }
+
+    // Create a note/activity with the AI summary
+    const activityPayload = {
+      type: 'note',
+      details: 'AI Call Summary',
+      activity_date: new Date().toISOString().split('T')[0],
+      notes: `AI Generated Call Summary:\n\n${summary}${notes ? `\n\nOriginal Notes:\n${notes}` : ''}`,
+      parent: {
+        id: relatedEntity.id,
+        type: person ? 'person' : 'company'
+      }
+    };
+
+    const activity = await copperCreateActivity({ baseUrl, headers }, activityPayload);
+
+    res.json({ 
+      success: true,
+      copperActivityId: activity.id,
+      addedTo: {
+        id: relatedEntity.id,
+        name: relatedEntity.name,
+        type: person ? 'person' : 'company'
+      }
+    });
+
+  } catch (error) {
+    console.error('Copper add summary error:', error);
+    res.status(500).json({ error: 'Failed to add summary to Copper profile' });
+  }
+}));
