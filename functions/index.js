@@ -458,7 +458,6 @@ export const ringcentralSyncCopper = onRequest(withCors(async (req, res) => {
 // RingCentral (stubs, phase 1)
 // =============================
 
-// Config doc locations
 const RC_CONNECTIONS_DOC = db.collection('integrations').doc('connections');
 const RC_TOKENS_DOC = db.collection('integrations').doc('ringcentral_tokens');
 
@@ -474,7 +473,10 @@ export const ringcentralAuthStart = onRequest(withCors(async (req, res) => {
       res.status(400).json({ success: false, message: 'RingCentral clientId/redirectUri not configured' });
       return;
     }
-    const authUrl = `${base}/restapi/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=kanva&prompt=login`;
+    // Capture optional ownerId to support per-user token storage
+    const ownerId = (req.query?.ownerId && String(req.query.ownerId)) || '';
+    const state = ownerId ? encodeURIComponent(JSON.stringify({ ownerId })) : 'kanva';
+    const authUrl = `${base}/restapi/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&prompt=login`;
     res.redirect(authUrl);
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
@@ -485,17 +487,22 @@ export const ringcentralAuthStart = onRequest(withCors(async (req, res) => {
 export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
   try {
     const { code, state, error } = req.query || {};
+
     if (error) {
       res.status(400).send(`RingCentral auth error: ${error}`);
       return;
     }
 
-    if (!code) {
-      res.status(400).send('Authorization code missing');
-      return;
+    // Determine ownerId from state (if provided)
+    let ownerId = '';
+    if (state && typeof state === 'string' && state !== 'kanva') {
+      try {
+        const parsed = JSON.parse(decodeURIComponent(String(state)));
+        if (parsed && typeof parsed === 'object' && parsed.ownerId) ownerId = String(parsed.ownerId);
+      } catch {}
     }
 
-    // Load RingCentral config
+    // Exchange code for access token
     const snap = await RC_CONNECTIONS_DOC.get();
     const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
     const clientId = cfg.clientId || process.env.RC_CLIENT_ID || '';
@@ -545,7 +552,7 @@ export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
       return;
     }
 
-    // Store tokens securely
+    // Store tokens securely (org-level + per-user map if ownerId)
     const tokenDoc = {
       accessToken: tokenResult.access_token,
       refreshToken: tokenResult.refresh_token,
@@ -555,10 +562,16 @@ export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
       scope: tokenResult.scope,
       receivedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastAuthCode: String(code),
-      state: String(state || '')
+      state: String(state || ''),
+      ownerId: ownerId || null
     };
 
+    // Save to org-level fields for backward compatibility
     await RC_TOKENS_DOC.set(tokenDoc, { merge: true });
+    // Also save to per-user map if ownerId provided
+    if (ownerId) {
+      await RC_TOKENS_DOC.set({ users: { [ownerId]: tokenDoc } }, { merge: true });
+    }
     
     res.status(200).send('RingCentral authentication successful! You can close this window.');
   } catch (e) {
@@ -571,7 +584,10 @@ export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
 export const ringcentralStatus = onRequest(withCors(async (req, res) => {
   try {
     const conn = (await RC_CONNECTIONS_DOC.get()).data() || {};
-    const tokens = (await RC_TOKENS_DOC.get()).data() || {};
+    const ownerId = req.query?.ownerId ? String(req.query.ownerId) : '';
+    const tokensAll = (await RC_TOKENS_DOC.get()).data() || {};
+    const userTokens = ownerId && tokensAll.users && tokensAll.users[ownerId] ? tokensAll.users[ownerId] : null;
+    const tokens = userTokens || tokensAll;
     
     const isConfigured = !!(conn.ringcentral?.clientId && conn.ringcentral?.clientSecret);
     const hasValidToken = !!(tokens.accessToken && tokens.expiresAt && tokens.expiresAt.toDate() > new Date());
@@ -582,7 +598,8 @@ export const ringcentralStatus = onRequest(withCors(async (req, res) => {
         configured: isConfigured,
         tokens: hasValidToken,
         authenticated: isConfigured && hasValidToken,
-        expiresAt: tokens.expiresAt ? tokens.expiresAt.toDate().toISOString() : null
+        expiresAt: tokens.expiresAt ? tokens.expiresAt.toDate().toISOString() : null,
+        ownerScoped: !!ownerId
       } 
     });
   } catch (e) {
@@ -1194,7 +1211,9 @@ export const copperAddSummary = onRequest(withCors(async (req, res) => {
 // Get access token for WebPhone initialization
 export const ringcentralToken = onRequest(withCors(async (req, res) => {
   try {
-    const tokens = (await RC_TOKENS_DOC.get()).data() || {};
+    const ownerId = req.query?.ownerId ? String(req.query.ownerId) : '';
+    const all = (await RC_TOKENS_DOC.get()).data() || {};
+    let tokens = ownerId && all.users && all.users[ownerId] ? all.users[ownerId] : all;
     
     if (!tokens.accessToken) {
       res.status(401).json({ success: false, message: 'No access token available' });
@@ -1206,7 +1225,7 @@ export const ringcentralToken = onRequest(withCors(async (req, res) => {
       // Try to refresh token
       if (tokens.refreshToken) {
         try {
-          const refreshed = await refreshRingCentralToken(tokens.refreshToken);
+          const refreshed = await refreshRingCentralToken(tokens.refreshToken, ownerId);
           if (refreshed) {
             res.status(200).json({ 
               success: true, 
@@ -1235,7 +1254,7 @@ export const ringcentralToken = onRequest(withCors(async (req, res) => {
 }));
 
 // Helper function to refresh RingCentral token
-async function refreshRingCentralToken(refreshToken) {
+async function refreshRingCentralToken(refreshToken, ownerId = '') {
   try {
     const snap = await RC_CONNECTIONS_DOC.get();
     const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
@@ -1281,7 +1300,11 @@ async function refreshRingCentralToken(refreshToken) {
       refreshedAt: admin.firestore.FieldValue.serverTimestamp()
     };
 
+    // Write back to org-level and optionally user-scoped map
     await RC_TOKENS_DOC.set(tokenDoc, { merge: true });
+    if (ownerId) {
+      await RC_TOKENS_DOC.set({ users: { [ownerId]: tokenDoc } }, { merge: true });
+    }
     
     return {
       accessToken: tokenResult.access_token,
@@ -1364,3 +1387,5 @@ export const rcSync = onRequest(withCors(async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 }));
+
+// Removed alias exports to avoid Cloud Run service name collisions.

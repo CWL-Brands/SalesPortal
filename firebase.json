@@ -112,7 +112,7 @@
       },
       {
         "source": "/api/config",
-        "run": { "serviceId": "loadconfigurations", "region": "us-central1" }
+        "run": { "serviceId": "loadConfigurations", "region": "us-central1" }
       },
       {
         "source": "/api/shipstation/**",
