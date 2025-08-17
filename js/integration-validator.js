@@ -413,15 +413,38 @@ class IntegrationValidator {
             const configStart = Date.now();
             try {
                 // Check if admin dashboard has RingCentral config
-                const hasConfig = document.getElementById('ringcentral-client-id')?.value?.trim();
+                const envVal = document.getElementById('ringcentral-environment')?.value?.trim();
+                const clientIdVal = document.getElementById('ringcentral-client-id')?.value?.trim();
+                const redirectUriVal = document.getElementById('ringcentral-redirect-uri')?.value?.trim();
+                const hasSecretField = !!document.getElementById('ringcentral-client-secret');
                 configTest.duration = Date.now() - configStart;
-                
-                if (hasConfig) {
-                    configTest.status = 'success';
-                    configTest.message = 'RingCentral configuration found in admin UI';
+
+                const missing = [];
+                if (!clientIdVal) missing.push('clientId');
+                if (!redirectUriVal) missing.push('redirectUri');
+                // environment can default; treat missing as info not error
+                const hasCore = !!clientIdVal && !!redirectUriVal;
+
+                if (hasCore) {
+                    configTest.status = hasSecretField ? 'success' : 'warning';
+                    configTest.message = hasSecretField
+                        ? 'RingCentral config present (clientId, redirectUri). Client Secret field detected.'
+                        : 'RingCentral config present, but Client Secret input field not found in UI.';
+                    configTest.details = {
+                        environment: envVal || '(default)',
+                        hasClientId: !!clientIdVal,
+                        hasRedirectUri: !!redirectUriVal,
+                        hasClientSecretField: hasSecretField
+                    };
                 } else {
                     configTest.status = 'warning';
-                    configTest.message = 'RingCentral configuration not found in admin UI';
+                    configTest.message = `RingCentral configuration incomplete: missing ${missing.join(', ')}`;
+                    configTest.details = {
+                        environment: envVal || '(default)',
+                        hasClientId: !!clientIdVal,
+                        hasRedirectUri: !!redirectUriVal,
+                        hasClientSecretField: hasSecretField
+                    };
                 }
             } catch (error) {
                 configTest.duration = Date.now() - configStart;

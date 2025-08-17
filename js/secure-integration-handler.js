@@ -15,7 +15,8 @@ class SecureIntegrationHandler {
             github: ['token'],
             copper: ['apiKey'],
             fishbowl: ['password'],
-            shipstation: ['apiKey', 'apiSecret', 'webhookSecret']
+            shipstation: ['apiKey', 'apiSecret', 'webhookSecret'],
+            ringcentral: ['clientSecret']
         };
     }
     

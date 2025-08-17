@@ -63,6 +63,8 @@ class AdminDashboard {
         const environment = document.getElementById('ringcentral-environment')?.value || 'production';
         const clientId = document.getElementById('ringcentral-client-id')?.value?.trim();
         const redirectUri = document.getElementById('ringcentral-redirect-uri')?.value?.trim() || 'https://kanvaportal.web.app/rc/auth/callback';
+        const clientSecretInput = document.getElementById('ringcentral-client-secret');
+        const clientSecret = clientSecretInput?.value?.trim();
         if (!clientId) {
             if (showAlert) alert('Please enter RingCentral Client ID');
             return false;
@@ -79,6 +81,20 @@ class AdminDashboard {
                 });
                 const result = await resp.json().catch(() => ({}));
                 saved = resp.ok && result?.success !== false;
+            }
+            // Securely persist the clientSecret to .env via PHP endpoint if provided
+            if (clientSecret) {
+                try {
+                    await fetch('/api/save-connections.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ringcentral: { clientSecret } })
+                    });
+                    // Clear the sensitive input after attempting save
+                    if (clientSecretInput) clientSecretInput.value = '';
+                } catch (e) {
+                    console.warn('Failed saving RingCentral clientSecret via PHP endpoint:', e);
+                }
             }
             if (!saved) { if (showAlert) alert('Failed to save RingCentral settings'); return false; }
             this.connectionData = this.connectionData || {}; this.connectionData.ringcentral = payload;
@@ -2203,6 +2219,11 @@ async showProductEditModal(productId = null) {
                                         <label>Client ID:</label>
                                         <input type="text" id="ringcentral-client-id" placeholder="RC App Client ID" class="form-control">
                                     </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Client Secret:</label>
+                                    <input type="password" id="ringcentral-client-secret" placeholder="RC App Client Secret (stored securely)" class="form-control">
+                                    <small style="color:#6c757d;">Stored only in server .env. Not displayed once saved.</small>
                                 </div>
                                 <div class="form-group">
                                     <label>Redirect URI:</label>
