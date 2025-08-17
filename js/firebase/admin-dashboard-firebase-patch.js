@@ -346,7 +346,11 @@
         // Handle image selection
         const handleImageSelection = (file) => {
             if (!file.type.startsWith('image/')) {
-                alert('Please select an image file (JPG, PNG, etc.)');
+                if (typeof window.showNotification === 'function') {
+                    window.showNotification('Please select an image file (JPG, PNG, etc.)', 'warning');
+                } else {
+                    console.warn('Please select an image file (JPG, PNG, etc.)');
+                }
                 return;
             }
             
@@ -1311,18 +1315,5 @@
     };
 
     console.log('🔥 ENHANCED AdminDashboard Firebase patch loaded successfully!');
-    console.log('🔧 Key enhancements applied:');
-    console.log('  ✅ Beautiful fancy product edit modal restored');
-    console.log('  ✅ Fixed delete confirmation dialogs');
-    console.log('  ✅ Fixed edit functionality with Firebase data loading');
-    console.log('  ✅ Fixed function binding and event handlers');
-    console.log('  ✅ Enhanced error handling and user feedback');
-    console.log('  ✅ Proper Firebase service initialization');
-    console.log('  ✅ Complete image upload functionality');
-    console.log('  ✅ Form validation and data processing');
-    console.log('  ✅ FIXED: Shipping zone inline editing');
-    console.log('  ✅ FIXED: Real-time UI refresh after CRUD operations');
-    console.log('  ✅ FIXED: Product image updates in edit modal');
-    console.log('  ✅ FIXED: Metadata fields filtered out from UI display');
 
 })();

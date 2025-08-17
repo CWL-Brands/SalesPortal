@@ -114,9 +114,97 @@ class SecureIntegrationHandler {
      */
     async saveConnections() {
         try {
+            // Check if we have sensitive keys that need PHP endpoint handling
+            const hasSensitiveKeys = this.hasSensitiveKeys();
+            
+            if (hasSensitiveKeys) {
+                // Use PHP endpoint for sensitive keys (clientSecret, apiKey, etc.)
+                return await this.saveViaPHPEndpoint();
+            } else {
+                // Use Firebase for non-sensitive data
+                return await this.saveViaFirestore();
+            }
+        } catch (error) {
+            console.error('❌ Error saving connections:', error);
+            // As a last resort, cache locally so UI persists this session
+            try { localStorage.setItem('connections', JSON.stringify(this.connections)); } catch (e) {}
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('Failed to save integration settings to cloud. Cached locally.', 'warning');
+            }
+            return false;
+        }
+    }
+    
+    /**
+     * Check if current connections contain sensitive keys
+     * @returns {boolean} True if sensitive keys are present
+     */
+    hasSensitiveKeys() {
+        const sensitiveKeys = {
+            'github': ['token'],
+            'copper': ['apiKey'],
+            'fishbowl': ['password'],
+            'shipstation': ['apiKey', 'apiSecret', 'webhookSecret'],
+            'ringcentral': ['clientSecret']
+        };
+        
+        for (const [section, keys] of Object.entries(sensitiveKeys)) {
+            if (this.connections[section]) {
+                for (const key of keys) {
+                    if (this.connections[section][key]) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Save via PHP endpoint for sensitive keys
+     * @returns {Promise<boolean>}
+     */
+    async saveViaPHPEndpoint() {
+        try {
+            const response = await fetch('/api/save-connections.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(this.connections)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || 'Failed to save via PHP endpoint');
+            }
+            
+            console.log('✅ Saved connections via PHP endpoint (with sensitive keys)');
+            
+            // Also save to Firestore for Firebase Functions access
+            await this.saveViaFirestore();
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Error saving via PHP endpoint:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Save via Firestore for non-sensitive data
+     * @returns {Promise<boolean>}
+     */
+    async saveViaFirestore() {
+        try {
             if (!window.firebaseDataService) {
                 throw new Error('Firebase Data Service not available');
             }
+            
             // Ensure we never pass functions (e.g., lingering Response.json()) into Firestore
             // Convert to a plain JSON structure, dropping any functions/undefined/symbols
             let plain;
@@ -137,13 +225,8 @@ class SecureIntegrationHandler {
             console.log('✅ Saved connections to Firestore');
             return true;
         } catch (error) {
-            console.error('❌ Error saving connections to Firestore:', error);
-            // As a last resort, cache locally so UI persists this session
-            try { localStorage.setItem('connections', JSON.stringify(this.connections)); } catch (e) {}
-            if (typeof window.showNotification === 'function') {
-                window.showNotification('Failed to save integration settings to cloud. Cached locally.', 'warning');
-            }
-            return false;
+            console.error('❌ Error saving to Firestore:', error);
+            throw error;
         }
     }
     

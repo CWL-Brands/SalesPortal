@@ -1208,50 +1208,7 @@ export const copperAddSummary = onRequest(withCors(async (req, res) => {
 // RingCentral Token Endpoint
 // =============================
 
-// Get access token for WebPhone initialization
-export const ringcentralToken = onRequest(withCors(async (req, res) => {
-  try {
-    const ownerId = req.query?.ownerId ? String(req.query.ownerId) : '';
-    const all = (await RC_TOKENS_DOC.get()).data() || {};
-    let tokens = ownerId && all.users && all.users[ownerId] ? all.users[ownerId] : all;
-    
-    if (!tokens.accessToken) {
-      res.status(401).json({ success: false, message: 'No access token available' });
-      return;
-    }
-
-    // Check if token is expired
-    if (tokens.expiresAt && tokens.expiresAt.toDate() <= new Date()) {
-      // Try to refresh token
-      if (tokens.refreshToken) {
-        try {
-          const refreshed = await refreshRingCentralToken(tokens.refreshToken, ownerId);
-          if (refreshed) {
-            res.status(200).json({ 
-              success: true, 
-              accessToken: refreshed.accessToken,
-              expiresAt: refreshed.expiresAt
-            });
-            return;
-          }
-        } catch (e) {
-          console.error('Token refresh failed:', e);
-        }
-      }
-      
-      res.status(401).json({ success: false, message: 'Token expired and refresh failed' });
-      return;
-    }
-
-    res.status(200).json({ 
-      success: true, 
-      accessToken: tokens.accessToken,
-      expiresAt: tokens.expiresAt ? tokens.expiresAt.toDate().toISOString() : null
-    });
-  } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
-  }
-}));
+// Removed duplicate - using the one below
 
 // Helper function to refresh RingCentral token
 async function refreshRingCentralToken(refreshToken, ownerId = '') {
@@ -1387,5 +1344,85 @@ export const rcSync = onRequest(withCors(async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 }));
+// =============================
+// AI Summary Endpoint
+// =============================
+
+export const aiSummary = onRequest(withCors(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { transcript, callDuration, participants } = req.body || {};
+    
+    if (!transcript) {
+      res.status(400).json({ success: false, message: 'transcript required' });
+      return;
+    }
+    
+    // Simple AI summary generation (you can enhance with actual AI service)
+    const summary = generateCallSummary(transcript, callDuration, participants);
+    
+    res.status(200).json({ 
+      success: true, 
+      summary,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('AI summary error:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+}));
+
+// Helper function for AI summary generation
+function generateCallSummary(transcript, duration, participants) {
+  // Basic summary generation - enhance with actual AI service integration
+  const words = transcript.split(' ').length;
+  const estimatedDuration = duration ? `${Math.round(duration/60)} minutes` : 'unknown duration';
+  
+  return {
+    overview: `Call summary generated from ${words} words of transcript over ${estimatedDuration}.`,
+    keyPoints: extractKeyPoints(transcript),
+    actionItems: extractActionItems(transcript),
+    sentiment: analyzeSentiment(transcript),
+    participants: participants || ['Unknown']
+  };
+}
+
+function extractKeyPoints(transcript) {
+  // Simple keyword extraction - enhance with NLP
+  const keywords = ['quote', 'price', 'order', 'product', 'shipping', 'payment', 'follow up'];
+  const found = keywords.filter(keyword => 
+    transcript.toLowerCase().includes(keyword)
+  );
+  return found.length ? found : ['General discussion'];
+}
+
+function extractActionItems(transcript) {
+  // Simple action item detection - enhance with NLP
+  const actionWords = ['will send', 'follow up', 'call back', 'email', 'quote'];
+  const sentences = transcript.split(/[.!?]+/);
+  const actions = sentences.filter(sentence =>
+    actionWords.some(action => sentence.toLowerCase().includes(action))
+  ).slice(0, 3);
+  
+  return actions.length ? actions.map(s => s.trim()) : ['No specific action items identified'];
+}
+
+function analyzeSentiment(transcript) {
+  // Basic sentiment analysis - enhance with actual sentiment service
+  const positiveWords = ['great', 'excellent', 'good', 'happy', 'satisfied', 'perfect'];
+  const negativeWords = ['bad', 'terrible', 'unhappy', 'problem', 'issue', 'concern'];
+  
+  const text = transcript.toLowerCase();
+  const positiveCount = positiveWords.filter(word => text.includes(word)).length;
+  const negativeCount = negativeWords.filter(word => text.includes(word)).length;
+  
+  if (positiveCount > negativeCount) return 'positive';
+  if (negativeCount > positiveCount) return 'negative';
+  return 'neutral';
+}
 
 // Removed alias exports to avoid Cloud Run service name collisions.
