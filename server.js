@@ -654,9 +654,9 @@ const server = http.createServer((req, res) => {
     if (filePath === './') {
         filePath = './index.html';
     }
-    // Map /rc to /rc-widget.html for RingCentral widget
+    // Map /rc to /standalone-dialer.html for RingCentral widget
     if (pathname === '/rc') {
-        filePath = './rc-widget.html';
+        filePath = './standalone-dialer.html';
     }
 
     // Get file extension

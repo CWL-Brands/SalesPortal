@@ -2234,7 +2234,7 @@ async showProductEditModal(productId = null) {
                                         <div><strong>Auth Start:</strong> <code>https://kanvaportal.web.app/rc/auth/start</code></div>
                                         <div><strong>Status:</strong> <code>https://kanvaportal.web.app/rc/status</code></div>
                                         <div><strong>Webhook:</strong> <code>https://kanvaportal.web.app/rc/webhook</code></div>
-                                        <div><strong>Widget URL:</strong> <code>https://kanvaportal.web.app/rc-widget.html</code></div>
+                                        <div><strong>Widget URL:</strong> <code>https://kanvaportal.web.app/standalone-dialer.html</code></div>
                                     </div>
                                 </div>
                                 <div class="integration-actions">

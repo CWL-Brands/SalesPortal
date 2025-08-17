@@ -145,7 +145,7 @@
                 showSuccess();
                 
                 setTimeout(() => {
-                    window.location.href = '/dialer.html';
+                    window.location.href = '/standalone-dialer.html';
                 }, 2000);
                 
             } catch (error) {
@@ -228,7 +228,7 @@
             localStorage.removeItem('rc_token_expires');
             
             // Redirect back to dialer for new auth flow
-            window.location.href = '/dialer.html';
+            window.location.href = '/standalone-dialer.html';
         }
 
         // Start the OAuth flow when page loads

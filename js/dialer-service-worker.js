@@ -4,7 +4,7 @@
  */
 
 const CACHE_NAME = 'kanva-dialer-v1';
-const DIALER_URL = '/dialer.html';
+const DIALER_URL = '/standalone-dialer.html';
 
 // Install event
 self.addEventListener('install', (event) => {
@@ -14,7 +14,7 @@ self.addEventListener('install', (event) => {
         caches.open(CACHE_NAME).then((cache) => {
             return cache.addAll([
                 DIALER_URL,
-                '/js/kanva-dialer.js',
+                '/js/unified-dialer.js',
                 '/assets/logo/kanva-logo.png'
             ]).catch(err => {
                 console.warn('⚠️ Failed to cache some resources:', err);
@@ -47,8 +47,8 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - serve cached resources when offline
 self.addEventListener('fetch', (event) => {
-    if (event.request.url.includes('/dialer.html') || 
-        event.request.url.includes('/js/kanva-dialer.js')) {
+    if (event.request.url.includes('/standalone-dialer.html') || 
+        event.request.url.includes('/js/unified-dialer.js')) {
         
         event.respondWith(
             caches.match(event.request).then((response) => {
@@ -168,7 +168,7 @@ async function openDialerWindow() {
         });
         
         const dialerClient = clients.find(client => 
-            client.url.includes('/dialer.html') || client.url.includes('/dialer')
+            client.url.includes('/standalone-dialer.html') || client.url.includes('/dialer')
         );
         
         if (dialerClient) {

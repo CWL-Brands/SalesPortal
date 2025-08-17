@@ -39,6 +39,14 @@
         "destination": "/dialer.html"
       },
       {
+        "source": "/standalone-dialer.html",
+        "destination": "/standalone-dialer.html"
+      },
+      {
+        "source": "/copper-dialer.html",
+        "destination": "/standalone-dialer.html"
+      },
+      {
         "source": "/dialer-service-worker.js",
         "destination": "/dialer-service-worker.js"
       },
