@@ -62,6 +62,18 @@
         "function": "shipstationApi"
       },
       {
+        "source": "/copper-dialer.html",
+        "destination": "/copper-dialer.html"
+      },
+      {
+        "source": "/dialer.html",
+        "destination": "/dialer.html"
+      },
+      {
+        "source": "/dialer-service-worker.js",
+        "destination": "/dialer-service-worker.js"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
