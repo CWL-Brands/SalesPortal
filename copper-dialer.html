@@ -399,6 +399,9 @@
                 console.log('🚀 Initializing Copper Dialer...');
                 
                 try {
+                    // Check for incoming call parameters
+                    this.handleURLParameters();
+                    
                     // Initialize Copper SDK
                     await this.initializeCopperSDK();
                     
@@ -416,6 +419,54 @@
                     console.error('❌ Failed to initialize Copper Dialer:', error);
                     this.updateStatus('error', 'Initialization failed');
                 }
+            }
+
+            handleURLParameters() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const incomingNumber = urlParams.get('incoming');
+                const callId = urlParams.get('callId');
+                
+                if (incomingNumber) {
+                    console.log('📞 Handling incoming call popup for:', incomingNumber);
+                    
+                    // Pre-fill phone number
+                    document.getElementById('phoneInput').value = this.formatPhoneNumber(incomingNumber);
+                    
+                    // Show incoming call UI
+                    this.showIncomingCallUI(incomingNumber, callId);
+                    
+                    // Lookup customer immediately
+                    this.lookupCustomer(incomingNumber);
+                }
+            }
+
+            showIncomingCallUI(number, callId) {
+                // Update status to show incoming call
+                this.updateStatus('ringing', `Incoming call from ${this.formatPhoneNumber(number)}`);
+                
+                // Show call controls
+                this.showCallControls();
+                
+                // Focus the window
+                window.focus();
+                
+                // Flash the window title to get attention
+                this.flashWindowTitle(`Incoming Call - ${this.formatPhoneNumber(number)}`);
+            }
+
+            flashWindowTitle(newTitle) {
+                const originalTitle = document.title;
+                let flashCount = 0;
+                
+                const flashInterval = setInterval(() => {
+                    document.title = flashCount % 2 === 0 ? newTitle : originalTitle;
+                    flashCount++;
+                    
+                    if (flashCount > 10) {
+                        clearInterval(flashInterval);
+                        document.title = newTitle;
+                    }
+                }, 500);
             }
 
             async initializeCopperSDK() {
@@ -595,12 +646,54 @@
                 this.currentCall = session;
                 const callerNumber = this.extractPhoneNumber(session.request.from.uri.user);
                 
+                // Auto-popup window for incoming call
+                this.autoPopupForIncomingCall(callerNumber);
+                
                 // Show call controls
                 this.showCallControls();
                 this.updateStatus('ringing', `Incoming call from ${this.formatPhoneNumber(callerNumber)}`);
                 
                 // Lookup caller in Copper
                 this.lookupCustomer(callerNumber);
+            }
+
+            autoPopupForIncomingCall(callerNumber) {
+                // If running in background or minimized, open popup window
+                if (document.hidden || !document.hasFocus()) {
+                    const popupUrl = `${window.location.origin}/copper-dialer.html?incoming=${callerNumber}`;
+                    const popup = window.open(
+                        popupUrl, 
+                        'kanva-incoming-call',
+                        'width=420,height=600,resizable=yes,scrollbars=yes,status=yes'
+                    );
+                    
+                    if (popup) {
+                        popup.focus();
+                        // Pass call session to popup
+                        popup.addEventListener('load', () => {
+                            popup.copperDialer.receiveIncomingCall(this.currentCall, callerNumber);
+                        });
+                    }
+                }
+                
+                // Browser notification as backup
+                if (Notification.permission === 'granted') {
+                    new Notification('Incoming Call', {
+                        body: `Call from ${this.formatPhoneNumber(callerNumber)}`,
+                        icon: '/assets/logo/kanva-logo.png',
+                        tag: 'incoming-call',
+                        actions: [
+                            { action: 'answer', title: 'Answer' },
+                            { action: 'decline', title: 'Decline' }
+                        ]
+                    });
+                }
+            }
+
+            receiveIncomingCall(session, callerNumber) {
+                // Method for popup window to receive call session
+                this.currentCall = session;
+                this.handleIncomingCall(session);
             }
 
             handleCallConnected(session) {
@@ -898,6 +991,24 @@
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             window.copperDialer = new CopperDialer();
+            
+            // Register service worker for background call detection
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/dialer-service-worker.js')
+                    .then(registration => {
+                        console.log('✅ Service Worker registered:', registration);
+                        
+                        // Request notification permission
+                        if (Notification.permission === 'default') {
+                            Notification.requestPermission().then(permission => {
+                                console.log('📱 Notification permission:', permission);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('❌ Service Worker registration failed:', error);
+                    });
+            }
         });
     </script>
 </body>
