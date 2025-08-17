@@ -4,7 +4,7 @@
  */
 
 const CACHE_NAME = 'kanva-dialer-v1';
-const DIALER_URL = '/copper-dialer.html';
+const DIALER_URL = '/dialer.html';
 
 // Install service worker
 self.addEventListener('install', (event) => {
@@ -147,7 +147,7 @@ self.addEventListener('message', (event) => {
         // Try to open popup if no active window
         clients.matchAll({ type: 'window' }).then(clientList => {
             const hasActiveWindow = clientList.some(client => 
-                client.url.includes('copper-dialer.html') && client.focused
+                client.url.includes('dialer.html') && client.focused
             );
             
             if (!hasActiveWindow) {
