@@ -49,7 +49,7 @@
       { "source": "/rc/status",        "run": { "serviceId": "ringcentralstatus",       "region": "us-central1" } },
       { "source": "/rc/webhook",       "run": { "serviceId": "ringcentralwebhook",      "region": "us-central1" } },
       { "source": "/rc/ringsense",     "run": { "serviceId": "ringcentralringsense",    "region": "us-central1" } },
-      { "source": "/rc",               "destination": "/rc-widget.html" },
+      { "source": "/rc",               "destination": "/dialer.html" },
       {
         "source": "/rc/sync",
         "function": "rcSync"
