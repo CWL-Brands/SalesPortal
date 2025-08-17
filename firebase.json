@@ -35,33 +35,6 @@
     ],
     "rewrites": [
       {
-        "source": "/api/shipstation/webhook",
-        "run": {
-          "serviceId": "shipstationwebhook",
-          "region": "us-central1",
-          "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com"
-        }
-      },
-      {
-        "source": "/rc/auth/start",    "run": { "serviceId": "ringcentralauthstart",    "region": "us-central1" } },
-      { "source": "/rc/auth/callback", "run": { "serviceId": "ringcentralauthcallback", "region": "us-central1" } },
-      { "source": "/rc/notes",         "run": { "serviceId": "ringcentralnotes",        "region": "us-central1" } },
-      { "source": "/rc/status",        "run": { "serviceId": "ringcentralstatus",       "region": "us-central1" } },
-      { "source": "/rc/token",         "run": { "serviceId": "ringcentraltoken",        "region": "us-central1" } },
-      { "source": "/rc/webhook",       "run": { "serviceId": "ringcentralwebhook",      "region": "us-central1" } },
-      { "source": "/rc/ringsense",     "run": { "serviceId": "ringcentralringsense",    "region": "us-central1" } },
-      { "source": "/rc",               "destination": "/dialer.html" },
-      { "source": "/rc/sync",                 "run": { "serviceId": "rcsync",                  "region": "us-central1" } },
-      { "source": "/rc/copper/lookup",       "run": { "serviceId": "copperlookup",            "region": "us-central1" } },
-      { "source": "/rc/copper/log-call",     "run": { "serviceId": "copperlogcall",           "region": "us-central1" } },
-      { "source": "/rc/copper/add-summary",  "run": { "serviceId": "copperaddsummary",        "region": "us-central1" } },
-      { "source": "/rc/ai/summary",          "run": { "serviceId": "aisummary",               "region": "us-central1" } },
-      { "source": "/api/config",             "run": { "serviceId": "loadconfigurations",     "region": "us-central1" } },
-      {
-        "source": "/api/shipstation/**",
-        "function": "shipstationApi"
-      },
-      {
         "source": "/copper-dialer.html",
         "destination": "/copper-dialer.html"
       },
@@ -72,6 +45,78 @@
       {
         "source": "/dialer-service-worker.js",
         "destination": "/dialer-service-worker.js"
+      },
+      {
+        "source": "/redirect.html",
+        "destination": "/redirect.html"
+      },
+      {
+        "source": "/api/shipstation/webhook",
+        "run": {
+          "serviceId": "shipstationwebhook",
+          "region": "us-central1",
+          "serviceAccountEmail": "hosting-invoker@kanvaportal.iam.gserviceaccount.com"
+        }
+      },
+      {
+        "source": "/rc/auth/start",
+        "run": { "serviceId": "ringcentralauthstart", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/auth/callback",
+        "run": { "serviceId": "ringcentralauthcallback", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/notes",
+        "run": { "serviceId": "ringcentralnotes", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/status",
+        "run": { "serviceId": "ringcentralstatus", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/token",
+        "run": { "serviceId": "ringcentraltoken", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/webhook",
+        "run": { "serviceId": "ringcentralwebhook", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/ringsense",
+        "run": { "serviceId": "ringcentralringsense", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/sync",
+        "run": { "serviceId": "rcsync", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/copper/lookup",
+        "run": { "serviceId": "copperlookup", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/copper/log-call",
+        "run": { "serviceId": "copperlogcall", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/copper/add-summary",
+        "run": { "serviceId": "copperaddsummary", "region": "us-central1" }
+      },
+      {
+        "source": "/rc/ai/summary",
+        "run": { "serviceId": "aisummary", "region": "us-central1" }
+      },
+      {
+        "source": "/api/config",
+        "run": { "serviceId": "loadconfigurations", "region": "us-central1" }
+      },
+      {
+        "source": "/api/shipstation/**",
+        "function": "shipstationApi"
+      },
+      {
+        "source": "/rc",
+        "destination": "/dialer.html"
       },
       {
         "source": "**",
