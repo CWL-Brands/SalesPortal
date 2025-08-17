@@ -42,7 +42,7 @@ class KanvaDialer {
         
         try {
             this.bindEvents();
-            await this.checkAuthentication();
+            await this.checkAuthStatus();
             this.updateConnectionStatus();
             this.loadCallHistory();
             
@@ -79,7 +79,7 @@ class KanvaDialer {
         // Action buttons
         document.getElementById('callButton')?.addEventListener('click', () => this.makeCall());
         document.getElementById('clearButton')?.addEventListener('click', () => this.clearNumber());
-        document.getElementById('loginButton')?.addEventListener('click', () => this.login());
+        document.getElementById('loginButton')?.addEventListener('click', () => this.startOAuth());
 
         // Call controls
         document.getElementById('answerButton')?.addEventListener('click', () => this.answerCall());
@@ -123,20 +123,57 @@ class KanvaDialer {
     /**
      * Check authentication status
      */
-    async checkAuthentication() {
-        const accessToken = localStorage.getItem('rc_access_token');
-        const refreshToken = localStorage.getItem('rc_refresh_token');
-        
-        if (accessToken) {
-            try {
-                await this.initializeWebPhone(accessToken);
-                this.hideAuthSection();
-            } catch (error) {
-                console.warn('⚠️ Stored token invalid, requiring re-authentication');
+    async checkAuthStatus() {
+        try {
+            console.log('🔍 Checking authentication status...');
+            
+            // Check Firebase Functions for token status
+            const response = await fetch(`${this.config.functions.baseUrl}/status`);
+            
+            if (response.ok) {
+                const status = await response.json();
+                this.isAuthenticated = status.data?.tokens || false;
+                
+                console.log('🔐 Auth status:', this.isAuthenticated ? 'Authenticated' : 'Not authenticated');
+                
+                // Update UI based on auth status
+                if (this.isAuthenticated) {
+                    this.showConnectedStatus();
+                    this.hideAuthSection();
+                } else {
+                    this.showDisconnectedStatus();
+                    this.showAuthSection();
+                }
+                
+                return this.isAuthenticated;
+            } else {
+                console.warn('⚠️ Could not check auth status');
+                this.isAuthenticated = false;
                 this.showAuthSection();
+                return false;
             }
-        } else {
+            
+        } catch (error) {
+            console.error('❌ Error checking auth status:', error);
+            this.isAuthenticated = false;
             this.showAuthSection();
+            return false;
+        }
+    }
+
+    showConnectedStatus() {
+        const statusElement = document.getElementById('connectionStatus');
+        if (statusElement) {
+            statusElement.textContent = 'Connected';
+            statusElement.className = 'text-green-600 font-medium';
+        }
+    }
+
+    showDisconnectedStatus() {
+        const statusElement = document.getElementById('connectionStatus');
+        if (statusElement) {
+            statusElement.textContent = 'Not Connected';
+            statusElement.className = 'text-red-600 font-medium';
         }
     }
 
@@ -598,14 +635,37 @@ class KanvaDialer {
     /**
      * Authentication methods
      */
-    login() {
-        const authUrl = `${this.config.ringcentral.server}/restapi/oauth/authorize?` +
-            `response_type=code&` +
-            `client_id=${this.config.ringcentral.clientId}&` +
-            `redirect_uri=${encodeURIComponent(this.config.ringcentral.redirectUri)}&` +
-            `state=${this.generateUUID()}`;
-        
-        window.location.href = authUrl;
+    startOAuth() {
+        try {
+            console.log('🔐 Starting OAuth flow...');
+            
+            // Use existing Firebase Functions OAuth flow
+            const authUrl = `${window.location.origin}/rc/auth/start`;
+            
+            // Open OAuth in popup window
+            const popup = window.open(
+                authUrl,
+                'ringcentral-oauth',
+                'width=500,height=600,scrollbars=yes,resizable=yes'
+            );
+            
+            // Monitor popup for completion
+            const checkClosed = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(checkClosed);
+                    console.log('✅ OAuth popup closed, checking for tokens...');
+                    
+                    // Check for tokens after popup closes
+                    setTimeout(() => {
+                        this.checkAuthStatus();
+                    }, 1000);
+                }
+            }, 1000);
+            
+        } catch (error) {
+            console.error('❌ OAuth start error:', error);
+            this.showError('Failed to start authentication');
+        }
     }
 
     showAuthSection() {
