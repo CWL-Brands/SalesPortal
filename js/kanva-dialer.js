@@ -16,10 +16,9 @@ class KanvaDialer {
         // Configuration
         this.config = {
             ringcentral: {
-                clientId: localStorage.getItem('rc_client_id') || 'your_ringcentral_client_id',
-                clientSecret: localStorage.getItem('rc_client_secret') || 'your_ringcentral_client_secret',
+                clientId: localStorage.getItem('rc_client_id') || '',
                 server: 'https://platform.ringcentral.com',
-                redirectUri: window.location.origin + '/redirect.html'
+                redirectUri: `${window.location.origin}/rc/auth/callback`
             },
             copper: {
                 apiUrl: 'https://api.copper.com/developer_api/v1',
@@ -27,7 +26,7 @@ class KanvaDialer {
                 userEmail: localStorage.getItem('copper_user_email') || ''
             },
             functions: {
-                baseUrl: window.RC_CONFIG?.functionsBase || 'https://kanvaportal.web.app/rc'
+                baseUrl: `${window.location.origin}/rc`
             }
         };
 
@@ -118,6 +117,25 @@ class KanvaDialer {
         document.getElementById('activeOpenLeadButton')?.addEventListener('click', () => this.openCopperRecord('lead'));
         document.getElementById('activeOpenCompanyButton')?.addEventListener('click', () => this.openCopperRecord('company'));
         document.getElementById('activeOpenPersonButton')?.addEventListener('click', () => this.openCopperRecord('person'));
+
+        // Click-to-dial support from Copper embedded app via postMessage
+        // Accepts messages like { type: 'phoneNumberClicked', phone: '5551234567' }
+        window.addEventListener('message', (event) => {
+            try {
+                const data = event?.data || {};
+                const type = data.type || data.event || '';
+                if (type === 'phoneNumberClicked' || type === 'kanva:copper:clickToDial') {
+                    const num = this.extractPhoneNumber(data.phone || data.number || data.value || '');
+                    if (num && num.length >= 10) {
+                        const input = document.getElementById('phoneNumber');
+                        if (input) input.value = this.formatPhoneNumber(num);
+                        if (this.isAuthenticated) this.makeCall();
+                    }
+                }
+            } catch (e) {
+                console.warn('click-to-dial message ignored', e);
+            }
+        }, false);
     }
 
     /**
@@ -186,7 +204,6 @@ class KanvaDialer {
             
             const sdk = new RingCentral({
                 clientId: this.config.ringcentral.clientId,
-                clientSecret: this.config.ringcentral.clientSecret,
                 server: this.config.ringcentral.server
             });
 
