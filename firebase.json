@@ -64,55 +64,55 @@
       },
       {
         "source": "/rc/auth/start",
-        "run": { "serviceId": "ringcentralauthstart", "region": "us-central1" }
+        "function": "ringcentralAuthStart"
       },
       {
         "source": "/rc/auth/callback",
-        "run": { "serviceId": "ringcentralauthcallback", "region": "us-central1" }
+        "function": "ringcentralAuthCallback"
       },
       {
         "source": "/rc/notes",
-        "run": { "serviceId": "ringcentralnotes", "region": "us-central1" }
+        "function": "ringcentralNotes"
       },
       {
         "source": "/rc/status",
-        "run": { "serviceId": "ringcentralstatus", "region": "us-central1" }
+        "function": "ringcentralStatus"
       },
       {
         "source": "/rc/token",
-        "run": { "serviceId": "ringcentraltoken", "region": "us-central1" }
+        "function": "ringcentralToken"
       },
       {
         "source": "/rc/webhook",
-        "run": { "serviceId": "ringcentralwebhook", "region": "us-central1" }
+        "function": "ringcentralWebhook"
       },
       {
         "source": "/rc/ringsense",
-        "run": { "serviceId": "ringcentralringsense", "region": "us-central1" }
+        "function": "ringcentralRingSense"
       },
       {
         "source": "/rc/sync",
-        "run": { "serviceId": "rcsync", "region": "us-central1" }
+        "function": "rcSync"
       },
       {
         "source": "/rc/copper/lookup",
-        "run": { "serviceId": "copperlookup", "region": "us-central1" }
+        "function": "copperLookup"
       },
       {
         "source": "/rc/copper/log-call",
-        "run": { "serviceId": "copperlogcall", "region": "us-central1" }
+        "function": "copperLogCall"
       },
       {
         "source": "/rc/copper/add-summary",
-        "run": { "serviceId": "copperaddsummary", "region": "us-central1" }
+        "function": "copperAddSummary"
       },
       {
         "source": "/rc/ai/summary",
-        "run": { "serviceId": "aisummary", "region": "us-central1" }
+        "function": "aiSummary"
       },
       {
         "source": "/api/config",
-        "run": { "serviceId": "loadConfigurations", "region": "us-central1" }
+        "function": "loadConfigurations"
       },
       {
         "source": "/api/shipstation/**",
