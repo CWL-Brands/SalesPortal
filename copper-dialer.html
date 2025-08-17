@@ -473,27 +473,30 @@
                 try {
                     this.sdk = await Copper.init();
                     
-                    // Get current context
-                    this.copperContext = await this.sdk.getContext();
-                    console.log('📋 Copper context:', this.copperContext);
+                    // Try to get context, but handle gracefully if no valid entity
+                    try {
+                        this.copperContext = await this.sdk.getContext();
+                        console.log('📋 Copper context:', this.copperContext);
+                        this.loadContextCustomer();
+                    } catch (contextError) {
+                        console.warn('⚠️ No Copper context available (likely in action bar):', contextError.detail || contextError.message);
+                        // This is normal for action bar location - no entity context
+                        this.copperContext = null;
+                    }
                     
-                    // Set up Copper event listeners
+                    // Set up event listeners
                     this.sdk.on('phoneNumberClicked', ({ number }) => {
-                        console.log('📞 Phone number clicked:', number);
                         this.dialNumber(number);
                     });
                     
                     this.sdk.on('contextUpdated', (context) => {
-                        console.log('🔄 Context updated:', context);
                         this.copperContext = context;
                         this.loadContextCustomer();
                     });
                     
-                    // Load customer from current context
-                    this.loadContextCustomer();
-                    
                 } catch (error) {
                     console.error('❌ Failed to initialize Copper SDK:', error);
+                    throw error;
                 }
             }
 
@@ -976,31 +979,54 @@
                     return;
                 }
                 
-                // Use parent window for OAuth in iframe context
                 const authUrl = `${window.location.origin}/rc/auth/start`;
                 
                 try {
-                    // Try to open in parent window if in iframe
+                    let popup;
+                    
+                    // Try different popup strategies for iframe context
                     if (window.parent && window.parent !== window) {
-                        window.parent.open(authUrl, 'ringcentral-oauth', 'width=500,height=600');
-                    } else {
-                        const popup = window.open(authUrl, 'ringcentral-oauth', 'width=500,height=600');
-                        if (!popup) {
-                            console.error('Popup blocked. Please allow popups and try again.');
-                            this.updateStatus('error', 'Popup blocked');
-                            return;
+                        // In iframe - try parent window first
+                        try {
+                            popup = window.parent.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
+                        } catch (parentError) {
+                            console.warn('Parent window popup failed, trying top window:', parentError);
+                            try {
+                                popup = window.top.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
+                            } catch (topError) {
+                                console.warn('Top window popup failed, using current window:', topError);
+                                popup = window.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
+                            }
                         }
-                        
-                        const checkClosed = setInterval(() => {
+                    } else {
+                        popup = window.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
+                    }
+                    
+                    if (!popup) {
+                        console.error('All popup attempts failed. Please allow popups and try again.');
+                        this.updateStatus('error', 'Popup blocked - please allow popups');
+                        return;
+                    }
+                    
+                    // Monitor popup closure
+                    const checkClosed = setInterval(() => {
+                        try {
                             if (popup.closed) {
                                 clearInterval(checkClosed);
                                 setTimeout(() => this.checkAuthStatus(), 2000);
                             }
-                        }, 1000);
-                    }
+                        } catch (e) {
+                            // Popup may be cross-origin, just continue checking
+                            clearInterval(checkClosed);
+                            setTimeout(() => this.checkAuthStatus(), 5000);
+                        }
+                    }, 1000);
+                    
+                    this.updateStatus('authenticating', 'Opening authentication window...');
+                    
                 } catch (error) {
                     console.error('OAuth popup failed:', error);
-                    this.updateStatus('error', 'OAuth failed');
+                    this.updateStatus('error', `OAuth failed: ${error.message}`);
                 }
             }
 
