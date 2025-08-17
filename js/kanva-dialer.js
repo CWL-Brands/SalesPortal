@@ -13,17 +13,18 @@ class KanvaDialer {
         this.customerData = null;
         this.callNotes = '';
         
-        // Configuration
+        // Configuration - will be loaded from Firestore
         this.config = {
             ringcentral: {
-                clientId: localStorage.getItem('rc_client_id') || '',
+                clientId: '',
                 server: 'https://platform.ringcentral.com',
-                redirectUri: `${window.location.origin}/rc/auth/callback`
+                redirectUri: `${window.location.origin}/rc/auth/callback`,
+                environment: 'production'
             },
             copper: {
                 apiUrl: 'https://api.copper.com/developer_api/v1',
-                apiKey: localStorage.getItem('copper_api_key') || '',
-                userEmail: localStorage.getItem('copper_user_email') || ''
+                configured: false,
+                userEmail: ''
             },
             functions: {
                 baseUrl: `${window.location.origin}/rc`
@@ -40,6 +41,9 @@ class KanvaDialer {
         console.log('🚀 Initializing Kanva Dialer...');
         
         try {
+            // Load configurations from Firestore first
+            await this.loadConfigurations();
+            
             this.bindEvents();
             await this.checkAuthStatus();
             this.updateConnectionStatus();
@@ -139,6 +143,46 @@ class KanvaDialer {
     }
 
     /**
+     * Load configurations from Firestore
+     */
+    async loadConfigurations() {
+        try {
+            console.log('⚙️ Loading configurations from Firestore...');
+            
+            const response = await fetch('/api/config');
+            if (response.ok) {
+                const result = await response.json();
+                const config = result.config;
+                
+                // Update RingCentral config
+                if (config.ringcentral) {
+                    this.config.ringcentral.clientId = config.ringcentral.clientId || '';
+                    this.config.ringcentral.environment = config.ringcentral.environment || 'production';
+                    this.config.ringcentral.server = config.ringcentral.environment === 'sandbox' 
+                        ? 'https://platform.devtest.ringcentral.com' 
+                        : 'https://platform.ringcentral.com';
+                    this.config.ringcentral.redirectUri = config.ringcentral.redirectUri || `${window.location.origin}/rc/auth/callback`;
+                }
+                
+                // Update Copper config
+                if (config.copper) {
+                    this.config.copper.configured = config.copper.configured;
+                    this.config.copper.userEmail = config.copper.userEmail || '';
+                }
+                
+                console.log('✅ Configurations loaded:', {
+                    ringcentral: !!this.config.ringcentral.clientId,
+                    copper: this.config.copper.configured
+                });
+            } else {
+                console.warn('⚠️ Could not load configurations');
+            }
+        } catch (error) {
+            console.error('❌ Error loading configurations:', error);
+        }
+    }
+
+    /**
      * Check authentication status
      */
     async checkAuthStatus() {
@@ -150,12 +194,13 @@ class KanvaDialer {
             
             if (response.ok) {
                 const status = await response.json();
-                this.isAuthenticated = status.data?.tokens || false;
+                this.isAuthenticated = status.data?.authenticated || false;
                 
                 console.log('🔐 Auth status:', this.isAuthenticated ? 'Authenticated' : 'Not authenticated');
                 
-                // Update UI based on auth status
+                // If authenticated, initialize WebPhone
                 if (this.isAuthenticated) {
+                    await this.initializeWebPhoneFromToken();
                     this.showConnectedStatus();
                     this.hideAuthSection();
                 } else {
@@ -196,11 +241,42 @@ class KanvaDialer {
     }
 
     /**
+     * Initialize WebPhone from stored token
+     */
+    async initializeWebPhoneFromToken() {
+        try {
+            console.log('📞 Getting access token and initializing WebPhone...');
+            
+            const tokenResponse = await fetch(`${this.config.functions.baseUrl}/token`);
+            if (!tokenResponse.ok) {
+                throw new Error('Failed to get access token');
+            }
+            
+            const tokenData = await tokenResponse.json();
+            if (!tokenData.success || !tokenData.accessToken) {
+                throw new Error('Invalid token response');
+            }
+            
+            await this.initializeWebPhone(tokenData.accessToken);
+            
+        } catch (error) {
+            console.error('❌ Failed to initialize WebPhone from token:', error);
+            this.isAuthenticated = false;
+            this.showAuthSection();
+            throw error;
+        }
+    }
+
+    /**
      * Initialize RingCentral WebPhone
      */
     async initializeWebPhone(accessToken) {
         try {
-            console.log('📞 Initializing WebPhone...');
+            console.log('📞 Initializing WebPhone with access token...');
+            
+            if (!this.config.ringcentral.clientId) {
+                throw new Error('RingCentral client ID not configured');
+            }
             
             const sdk = new RingCentral({
                 clientId: this.config.ringcentral.clientId,
@@ -471,7 +547,7 @@ class KanvaDialer {
      * Lookup customer in Copper CRM
      */
     async lookupCustomerInCopper(phoneNumber) {
-        if (!this.config.copper.apiKey || !this.config.copper.userEmail) {
+        if (!this.config.copper.configured) {
             console.warn('⚠️ Copper CRM not configured');
             return null;
         }
@@ -491,9 +567,16 @@ class KanvaDialer {
             });
             
             if (response.ok) {
-                this.customerData = await response.json();
-                this.displayCustomerInfo();
-                console.log('📋 Customer found:', this.customerData);
+                const result = await response.json();
+                if (result.copperId) {
+                    this.customerData = result;
+                    this.displayCustomerInfo();
+                    console.log('📋 Customer found:', this.customerData);
+                } else {
+                    console.log('👤 No customer found for:', phoneNumber);
+                    this.customerData = null;
+                    this.hideCustomerInfo();
+                }
             } else {
                 console.log('👤 No customer found for:', phoneNumber);
                 this.customerData = null;
@@ -624,25 +707,35 @@ class KanvaDialer {
      * Log call to Copper CRM
      */
     async logCallToCopper() {
-        if (!this.customerData || !this.currentCall) return;
+        if (!this.config.copper.configured || !this.currentCall) return;
         
         try {
-            await fetch(`${this.config.functions.baseUrl}/copper/log-call`, {
+            const phoneNumber = this.extractPhoneNumber(
+                this.currentCall.request?.from?.uri?.user || 
+                this.currentCall.request?.to?.uri?.user || ''
+            );
+            
+            const response = await fetch(`${this.config.functions.baseUrl}/copper/log-call`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    sessionId: this.currentCall.id,
-                    customerData: this.customerData,
+                    sessionId: this.currentCall.id || `call-${Date.now()}`,
+                    from: this.currentCall.direction === 'Inbound' ? phoneNumber : this.config.copper.userEmail,
+                    to: this.currentCall.direction === 'Outbound' ? phoneNumber : this.config.copper.userEmail,
+                    direction: this.currentCall.direction || 'Outbound',
                     notes: this.callNotes,
                     startTime: this.callStartTime?.toISOString(),
-                    endTime: new Date().toISOString(),
-                    direction: this.currentCall.direction || 'outbound'
+                    endTime: new Date().toISOString()
                 })
             });
             
-            console.log('✅ Call logged to Copper');
+            if (response.ok) {
+                console.log('✅ Call logged to Copper');
+            } else {
+                console.warn('⚠️ Failed to log call to Copper:', await response.text());
+            }
             
         } catch (error) {
             console.error('❌ Failed to log call to Copper:', error);
@@ -656,6 +749,11 @@ class KanvaDialer {
         try {
             console.log('🔐 Starting OAuth flow...');
             
+            if (!this.config.ringcentral.clientId) {
+                this.showError('RingCentral not configured. Please contact administrator.');
+                return;
+            }
+            
             // Use existing Firebase Functions OAuth flow
             const authUrl = `${window.location.origin}/rc/auth/start`;
             
@@ -666,6 +764,11 @@ class KanvaDialer {
                 'width=500,height=600,scrollbars=yes,resizable=yes'
             );
             
+            if (!popup) {
+                this.showError('Popup blocked. Please allow popups and try again.');
+                return;
+            }
+            
             // Monitor popup for completion
             const checkClosed = setInterval(() => {
                 if (popup.closed) {
@@ -675,7 +778,7 @@ class KanvaDialer {
                     // Check for tokens after popup closes
                     setTimeout(() => {
                         this.checkAuthStatus();
-                    }, 1000);
+                    }, 2000);
                 }
             }, 1000);
             
@@ -888,8 +991,7 @@ class KanvaDialer {
 
     generateUUID() {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0;
-            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
     }

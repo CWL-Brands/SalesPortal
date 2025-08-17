@@ -481,7 +481,7 @@ export const ringcentralAuthStart = onRequest(withCors(async (req, res) => {
   }
 }));
 
-// OAuth callback (store tokens) – stub stores code and timestamp; real token exchange in next phase
+// OAuth callback - exchange code for access token
 export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
   try {
     const { code, state, error } = req.query || {};
@@ -489,19 +489,92 @@ export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
       res.status(400).send(`RingCentral auth error: ${error}`);
       return;
     }
-    await RC_TOKENS_DOC.set({ lastAuthCode: String(code || ''), state: String(state || ''), receivedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-    res.status(200).send('RingCentral authorization received. Token exchange to be completed by backend. You can close this window.');
+
+    if (!code) {
+      res.status(400).send('Authorization code missing');
+      return;
+    }
+
+    // Load RingCentral config
+    const snap = await RC_CONNECTIONS_DOC.get();
+    const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
+    const clientId = cfg.clientId || process.env.RC_CLIENT_ID || '';
+    const clientSecret = cfg.clientSecret || process.env.RC_CLIENT_SECRET || '';
+    const redirectUri = cfg.redirectUri || process.env.RC_REDIRECT_URI || '';
+    const base = cfg.environment === 'sandbox' ? 'https://platform.devtest.ringcentral.com' : 'https://platform.ringcentral.com';
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      res.status(500).send('RingCentral configuration incomplete');
+      return;
+    }
+
+    // Exchange code for access token
+    const tokenUrl = `${base}/restapi/oauth/token`;
+    const tokenData = {
+      grant_type: 'authorization_code',
+      code: code,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      client_secret: clientSecret
+    };
+
+    const tokenResponse = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: new URLSearchParams(tokenData).toString()
+    });
+
+    const tokenResult = await tokenResponse.json();
+
+    if (!tokenResponse.ok) {
+      console.error('Token exchange failed:', tokenResult);
+      res.status(400).send(`Token exchange failed: ${tokenResult.error_description || tokenResult.error}`);
+      return;
+    }
+
+    // Store tokens securely
+    const tokenDoc = {
+      accessToken: tokenResult.access_token,
+      refreshToken: tokenResult.refresh_token,
+      tokenType: tokenResult.token_type || 'Bearer',
+      expiresIn: tokenResult.expires_in,
+      expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + (tokenResult.expires_in * 1000))),
+      scope: tokenResult.scope,
+      receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastAuthCode: String(code),
+      state: String(state || '')
+    };
+
+    await RC_TOKENS_DOC.set(tokenDoc, { merge: true });
+    
+    res.status(200).send('RingCentral authentication successful! You can close this window.');
   } catch (e) {
+    console.error('OAuth callback error:', e);
     res.status(500).send(`Callback error: ${e.message}`);
   }
 }));
 
-// Status endpoint – minimal
+// Status endpoint - check if authenticated with valid token
 export const ringcentralStatus = onRequest(withCors(async (req, res) => {
   try {
     const conn = (await RC_CONNECTIONS_DOC.get()).data() || {};
     const tokens = (await RC_TOKENS_DOC.get()).data() || {};
-    res.status(200).json({ success: true, data: { configured: !!conn.ringcentral, tokens: !!tokens.accessToken || !!tokens.lastAuthCode } });
+    
+    const isConfigured = !!(conn.ringcentral?.clientId && conn.ringcentral?.clientSecret);
+    const hasValidToken = !!(tokens.accessToken && tokens.expiresAt && tokens.expiresAt.toDate() > new Date());
+    
+    res.status(200).json({ 
+      success: true, 
+      data: { 
+        configured: isConfigured,
+        tokens: hasValidToken,
+        authenticated: isConfigured && hasValidToken,
+        expiresAt: tokens.expiresAt ? tokens.expiresAt.toDate().toISOString() : null
+      } 
+    });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
@@ -1101,5 +1174,183 @@ export const copperAddSummary = onRequest(withCors(async (req, res) => {
   } catch (error) {
     console.error('Copper add summary error:', error);
     res.status(500).json({ error: 'Failed to add summary to Copper profile' });
+  }
+}));
+
+// =============================
+// RingCentral Token Endpoint
+// =============================
+
+// Get access token for WebPhone initialization
+export const ringcentralToken = onRequest(withCors(async (req, res) => {
+  try {
+    const tokens = (await RC_TOKENS_DOC.get()).data() || {};
+    
+    if (!tokens.accessToken) {
+      res.status(401).json({ success: false, message: 'No access token available' });
+      return;
+    }
+
+    // Check if token is expired
+    if (tokens.expiresAt && tokens.expiresAt.toDate() <= new Date()) {
+      // Try to refresh token
+      if (tokens.refreshToken) {
+        try {
+          const refreshed = await refreshRingCentralToken(tokens.refreshToken);
+          if (refreshed) {
+            res.status(200).json({ 
+              success: true, 
+              accessToken: refreshed.accessToken,
+              expiresAt: refreshed.expiresAt
+            });
+            return;
+          }
+        } catch (e) {
+          console.error('Token refresh failed:', e);
+        }
+      }
+      
+      res.status(401).json({ success: false, message: 'Token expired and refresh failed' });
+      return;
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      accessToken: tokens.accessToken,
+      expiresAt: tokens.expiresAt ? tokens.expiresAt.toDate().toISOString() : null
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+}));
+
+// Helper function to refresh RingCentral token
+async function refreshRingCentralToken(refreshToken) {
+  try {
+    const snap = await RC_CONNECTIONS_DOC.get();
+    const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
+    const clientId = cfg.clientId || process.env.RC_CLIENT_ID || '';
+    const clientSecret = cfg.clientSecret || process.env.RC_CLIENT_SECRET || '';
+    const base = cfg.environment === 'sandbox' ? 'https://platform.devtest.ringcentral.com' : 'https://platform.ringcentral.com';
+
+    if (!clientId || !clientSecret) {
+      throw new Error('RingCentral configuration incomplete');
+    }
+
+    const tokenUrl = `${base}/restapi/oauth/token`;
+    const tokenData = {
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret
+    };
+
+    const tokenResponse = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
+      body: new URLSearchParams(tokenData).toString()
+    });
+
+    const tokenResult = await tokenResponse.json();
+
+    if (!tokenResponse.ok) {
+      throw new Error(`Token refresh failed: ${tokenResult.error_description || tokenResult.error}`);
+    }
+
+    // Update stored tokens
+    const tokenDoc = {
+      accessToken: tokenResult.access_token,
+      refreshToken: tokenResult.refresh_token || refreshToken, // Keep old refresh token if new one not provided
+      tokenType: tokenResult.token_type || 'Bearer',
+      expiresIn: tokenResult.expires_in,
+      expiresAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + (tokenResult.expires_in * 1000))),
+      scope: tokenResult.scope,
+      refreshedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    await RC_TOKENS_DOC.set(tokenDoc, { merge: true });
+    
+    return {
+      accessToken: tokenResult.access_token,
+      expiresAt: tokenDoc.expiresAt.toDate().toISOString()
+    };
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    throw error;
+  }
+}
+
+// =============================
+// Configuration Loading Endpoint
+// =============================
+
+// Load all integration configurations for the app
+export const loadConfigurations = onRequest(withCors(async (req, res) => {
+  try {
+    const connectionsDoc = await db.collection('integrations').doc('connections').get();
+    const connections = connectionsDoc.exists ? connectionsDoc.data() : {};
+    
+    // Return sanitized configuration (no secrets)
+    const config = {
+      ringcentral: {
+        configured: !!(connections.ringcentral?.clientId),
+        environment: connections.ringcentral?.environment || 'production',
+        redirectUri: connections.ringcentral?.redirectUri
+      },
+      copper: {
+        configured: !!(connections.copper?.apiKey && connections.copper?.userEmail),
+        userEmail: connections.copper?.userEmail
+      },
+      shipstation: {
+        configured: !!(connections.shipstation?.apiKey && connections.shipstation?.apiSecret)
+      }
+    };
+    
+    res.status(200).json({ success: true, config });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+}));
+
+// =============================
+// RingCentral Sync Endpoint
+// =============================
+
+export const rcSync = onRequest(withCors(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { sessionId, from, to, direction, notes, endedAt, agentEmail } = req.body || {};
+    
+    if (!sessionId) {
+      res.status(400).json({ success: false, message: 'sessionId required' });
+      return;
+    }
+
+    // Queue the sync job (reuse existing sync infrastructure)
+    const job = {
+      sessionId: String(sessionId),
+      from: from || null,
+      to: to || null,
+      direction: direction || null,
+      notes: String(notes || ''),
+      endedAt: endedAt ? admin.firestore.Timestamp.fromDate(new Date(endedAt)) : null,
+      agentEmail: agentEmail || null,
+      status: 'pending',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      attempts: 0
+    };
+    
+    await db.collection('ringcentral_sync_queue').doc(String(sessionId)).set(job, { merge: true });
+    
+    res.status(202).json({ success: true, queued: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
 }));

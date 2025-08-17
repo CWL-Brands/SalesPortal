@@ -47,29 +47,16 @@
       { "source": "/rc/auth/callback", "run": { "serviceId": "ringcentralauthcallback", "region": "us-central1" } },
       { "source": "/rc/notes",         "run": { "serviceId": "ringcentralnotes",        "region": "us-central1" } },
       { "source": "/rc/status",        "run": { "serviceId": "ringcentralstatus",       "region": "us-central1" } },
+      { "source": "/rc/token",         "run": { "serviceId": "ringcentraltoken",        "region": "us-central1" } },
       { "source": "/rc/webhook",       "run": { "serviceId": "ringcentralwebhook",      "region": "us-central1" } },
       { "source": "/rc/ringsense",     "run": { "serviceId": "ringcentralringsense",    "region": "us-central1" } },
       { "source": "/rc",               "destination": "/dialer.html" },
-      {
-        "source": "/rc/sync",
-        "function": "rcSync"
-      },
-      {
-        "source": "/rc/copper/lookup",
-        "function": "copperLookup"
-      },
-      {
-        "source": "/rc/copper/log-call", 
-        "function": "copperLogCall"
-      },
-      {
-        "source": "/rc/copper/add-summary",
-        "function": "copperAddSummary"
-      },
-      {
-        "source": "/rc/ai/summary",
-        "function": "aiSummary"
-      },
+      { "source": "/rc/sync",                 "run": { "serviceId": "rcsync",                  "region": "us-central1" } },
+      { "source": "/rc/copper/lookup",       "run": { "serviceId": "copperlookup",            "region": "us-central1" } },
+      { "source": "/rc/copper/log-call",     "run": { "serviceId": "copperlogcall",           "region": "us-central1" } },
+      { "source": "/rc/copper/add-summary",  "run": { "serviceId": "copperaddsummary",        "region": "us-central1" } },
+      { "source": "/rc/ai/summary",          "run": { "serviceId": "aisummary",               "region": "us-central1" } },
+      { "source": "/api/config",             "run": { "serviceId": "loadconfigurations",     "region": "us-central1" } },
       {
         "source": "/api/shipstation/**",
         "function": "shipstationApi"
