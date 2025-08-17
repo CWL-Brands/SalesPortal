@@ -58,7 +58,7 @@ class UnifiedDialer {
             
             this.bindEvents();
             await this.checkAuthStatus();
-            this.updateConnectionStatus();
+            this.updateConnectionStatus('connecting', 'Initializing...', 'Setting up dialer');
             this.registerServiceWorker();
             this.adaptUIToContext();
             
@@ -74,7 +74,7 @@ class UnifiedDialer {
             console.log('✅ Unified Dialer initialized successfully');
         } catch (error) {
             console.error('❌ Failed to initialize Unified Dialer:', error);
-            this.updateConnectionStatus('error', 'Initialization failed');
+            this.updateConnectionStatus('error', 'Initialization failed', 'Please refresh and try again');
         }
     }
 
@@ -373,7 +373,7 @@ class UnifiedDialer {
             
         } catch (error) {
             console.error('❌ Failed to initialize WebPhone:', error);
-            this.updateConnectionStatus('error', 'Connection failed');
+            this.updateConnectionStatus('error', 'Connection failed', 'Check your internet connection');
             this.showAuthSection();
             throw error;
         }
@@ -412,12 +412,12 @@ class UnifiedDialer {
 
         this.webPhone.on('unregistered', () => {
             console.log('📴 WebPhone unregistered');
-            this.updateConnectionStatus('disconnected', 'Disconnected');
+            this.updateConnectionStatus('disconnected', 'Disconnected', 'Connection lost');
         });
 
         this.webPhone.on('registrationFailed', (error) => {
             console.error('❌ WebPhone registration failed:', error);
-            this.updateConnectionStatus('disconnected', 'Registration failed');
+            this.updateConnectionStatus('disconnected', 'Registration failed', 'Authentication error');
         });
     }
 
@@ -978,9 +978,11 @@ class UnifiedDialer {
     /**
      * Update connection status
      */
-    updateConnectionStatus(status = 'connecting', message = 'Connecting...') {
+    updateConnectionStatus(status = 'connecting', message = 'Connecting...', subtext = '') {
         const statusEl = document.getElementById('connectionStatus');
         const textEl = document.getElementById('statusText');
+        const subtextEl = document.getElementById('statusSubtext');
+        const loginBtn = document.getElementById('loginButton');
         
         if (statusEl) {
             statusEl.className = `status-indicator status-${status}`;
@@ -988,6 +990,20 @@ class UnifiedDialer {
         
         if (textEl) {
             textEl.textContent = message;
+        }
+        
+        if (subtextEl) {
+            subtextEl.textContent = subtext;
+        }
+        
+        // Show/hide login button based on status
+        if (loginBtn) {
+            if (status === 'disconnected' && message.includes('Authentication')) {
+                loginBtn.classList.remove('hidden');
+                loginBtn.onclick = () => this.startOAuth();
+            } else {
+                loginBtn.classList.add('hidden');
+            }
         }
     }
 
@@ -1013,7 +1029,7 @@ class UnifiedDialer {
     showAuthSection() {
         document.getElementById('authSection')?.classList.remove('hidden');
         document.getElementById('callButton').disabled = true;
-        this.updateConnectionStatus('disconnected', 'Authentication required');
+        this.updateConnectionStatus('disconnected', 'Authentication required', 'Click Login to connect');
     }
 
     hideAuthSection() {
