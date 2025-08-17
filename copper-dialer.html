@@ -6,7 +6,7 @@
     <title>Kanva Dialer - Copper Integration</title>
     <script src="https://unpkg.com/@ringcentral/sdk@5.0.0/dist/ringcentral.min.js"></script>
     <script src="https://unpkg.com/ringcentral-web-phone@2.0.0/dist/ringcentral-web-phone.min.js"></script>
-    <script src="https://unpkg.com/@copper/sdk@1.0.0/dist/copper-sdk.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/copper-sdk@latest/dist/copper-sdk.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -529,10 +529,21 @@
                                 ? 'https://platform.devtest.ringcentral.com' 
                                 : 'https://platform.ringcentral.com';
                         }
+                    } else {
+                        console.warn('⚠️ Config endpoint returned:', response.status, 'Using fallback config');
+                        this.loadFallbackConfig();
                     }
                 } catch (error) {
-                    console.error('❌ Error loading configurations:', error);
+                    console.warn('⚠️ Config endpoint failed:', error.message, 'Using fallback config');
+                    this.loadFallbackConfig();
                 }
+            }
+
+            loadFallbackConfig() {
+                // Fallback configuration when Cloud Functions are not accessible
+                this.config.ringcentral.clientId = '2nFqvUT38Sjctdhqtrhnbn'; // Your confirmed client ID
+                this.config.ringcentral.server = 'https://platform.ringcentral.com';
+                console.log('📋 Using fallback RingCentral configuration');
             }
 
             bindEvents() {
@@ -960,24 +971,37 @@
 
             startOAuth() {
                 if (!this.config.ringcentral.clientId) {
-                    alert('RingCentral not configured. Please contact administrator.');
+                    console.error('RingCentral not configured. Please contact administrator.');
+                    this.updateStatus('error', 'RingCentral not configured');
                     return;
                 }
                 
+                // Use parent window for OAuth in iframe context
                 const authUrl = `${window.location.origin}/rc/auth/start`;
-                const popup = window.open(authUrl, 'ringcentral-oauth', 'width=500,height=600');
                 
-                if (!popup) {
-                    alert('Popup blocked. Please allow popups and try again.');
-                    return;
-                }
-                
-                const checkClosed = setInterval(() => {
-                    if (popup.closed) {
-                        clearInterval(checkClosed);
-                        setTimeout(() => this.checkAuthStatus(), 2000);
+                try {
+                    // Try to open in parent window if in iframe
+                    if (window.parent && window.parent !== window) {
+                        window.parent.open(authUrl, 'ringcentral-oauth', 'width=500,height=600');
+                    } else {
+                        const popup = window.open(authUrl, 'ringcentral-oauth', 'width=500,height=600');
+                        if (!popup) {
+                            console.error('Popup blocked. Please allow popups and try again.');
+                            this.updateStatus('error', 'Popup blocked');
+                            return;
+                        }
+                        
+                        const checkClosed = setInterval(() => {
+                            if (popup.closed) {
+                                clearInterval(checkClosed);
+                                setTimeout(() => this.checkAuthStatus(), 2000);
+                            }
+                        }, 1000);
                     }
-                }, 1000);
+                } catch (error) {
+                    console.error('OAuth popup failed:', error);
+                    this.updateStatus('error', 'OAuth failed');
+                }
             }
 
             generateUUID() {
