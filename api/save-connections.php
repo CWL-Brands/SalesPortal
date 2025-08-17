@@ -98,8 +98,10 @@ if (file_put_contents($connectionsPath, json_encode($currentConnections, JSON_PR
 function updateEnvFile($section, $key, $value) {
     $envPath = '../.env';
     
+    // Ensure .env exists; if not, create it so sensitive values can be stored securely
     if (!file_exists($envPath)) {
-        return;
+        $bootstrap = "# Auto-created .env for SalesPortal secure settings\n";
+        file_put_contents($envPath, $bootstrap);
     }
     
     $envContent = file_get_contents($envPath);

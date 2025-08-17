@@ -35,10 +35,6 @@
     ],
     "rewrites": [
       {
-        "source": "/copper-dialer.html",
-        "destination": "/copper-dialer.html"
-      },
-      {
         "source": "/dialer.html",
         "destination": "/dialer.html"
       },
