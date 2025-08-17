@@ -914,6 +914,20 @@
             // FIXED: Properly bind functions to global admin dashboard instance
             window.adminDashboard = this;
             
+            // Ensure RingCentral methods are bound to global instance
+            if (this.viewRingCentralStatus) {
+                window.adminDashboard.viewRingCentralStatus = this.viewRingCentralStatus.bind(this);
+            }
+            if (this.sendRingCentralTestWebhook) {
+                window.adminDashboard.sendRingCentralTestWebhook = this.sendRingCentralTestWebhook.bind(this);
+            }
+            if (this.startRingCentralOAuth) {
+                window.adminDashboard.startRingCentralOAuth = this.startRingCentralOAuth.bind(this);
+            }
+            if (this.saveRingCentralSettings) {
+                window.adminDashboard.saveRingCentralSettings = this.saveRingCentralSettings.bind(this);
+            }
+            
             console.log('✅ AdminDashboard initialized with ENHANCED Firebase integration');
         } catch (error) {
             console.error('❌ Error initializing AdminDashboard with Firebase:', error);

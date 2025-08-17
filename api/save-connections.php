@@ -32,7 +32,8 @@ $sensitiveKeys = [
     'github' => ['token'],
     'copper' => ['apiKey'],
     'fishbowl' => ['password'],
-    'shipstation' => ['apiKey', 'apiSecret', 'webhookSecret']
+    'shipstation' => ['apiKey', 'apiSecret', 'webhookSecret'],
+    'ringcentral' => ['clientSecret']
 ];
 
 // Load the current connections file
@@ -72,6 +73,9 @@ if (isset($currentConnections['fishbowl'])) {
 }
 if (isset($currentConnections['shipstation'])) {
     $currentConnections['shipstation']['lastUpdated'] = date('c');
+}
+if (isset($currentConnections['ringcentral'])) {
+    $currentConnections['ringcentral']['lastUpdated'] = date('c');
 }
 
 // Write the updated connections back to the file
@@ -116,6 +120,8 @@ function updateEnvFile($section, $key, $value) {
         } else if ($key === 'webhookSecret') {
             $envVar = 'SHIPSTATION_WEBHOOK_SECRET';
         }
+    } else if ($section === 'ringcentral' && $key === 'clientSecret') {
+        $envVar = 'RC_CLIENT_SECRET';
     }
     
     if (!$envVar) {

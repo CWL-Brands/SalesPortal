@@ -6924,6 +6924,12 @@ if (typeof window !== 'undefined') {
                 adminManager: window.adminManager
             });
             window.adminDashboard.init();
+            
+            // Ensure RingCentral methods are bound to global instance
+            window.adminDashboard.viewRingCentralStatus = window.adminDashboard.viewRingCentralStatus.bind(window.adminDashboard);
+            window.adminDashboard.sendRingCentralTestWebhook = window.adminDashboard.sendRingCentralTestWebhook.bind(window.adminDashboard);
+            window.adminDashboard.startRingCentralOAuth = window.adminDashboard.startRingCentralOAuth.bind(window.adminDashboard);
+            window.adminDashboard.saveRingCentralSettings = window.adminDashboard.saveRingCentralSettings.bind(window.adminDashboard);
         });
     } else {
         // DOM already loaded
@@ -6931,5 +6937,11 @@ if (typeof window !== 'undefined') {
             adminManager: window.adminManager
         });
         window.adminDashboard.init();
+        
+        // Ensure RingCentral methods are bound to global instance
+        window.adminDashboard.viewRingCentralStatus = window.adminDashboard.viewRingCentralStatus.bind(window.adminDashboard);
+        window.adminDashboard.sendRingCentralTestWebhook = window.adminDashboard.sendRingCentralTestWebhook.bind(window.adminDashboard);
+        window.adminDashboard.startRingCentralOAuth = window.adminDashboard.startRingCentralOAuth.bind(window.adminDashboard);
+        window.adminDashboard.saveRingCentralSettings = window.adminDashboard.saveRingCentralSettings.bind(window.adminDashboard);
     }
 }

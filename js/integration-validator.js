@@ -40,6 +40,9 @@ class IntegrationValidator {
             // Test Fishbowl ERP integration (placeholder)
             results.integrations.fishbowl = await this.validateFishbowlIntegration();
             
+            // Test RingCentral integration
+            results.integrations.ringcentral = await this.validateRingCentralIntegration();
+            
             // Determine overall status
             const allPassed = Object.values(results.integrations).every(result => result.status === 'success');
             const anyFailed = Object.values(results.integrations).some(result => result.status === 'error');
@@ -327,6 +330,133 @@ class IntegrationValidator {
     }
 
     /**
+     * Validate RingCentral integration
+     * @returns {Promise<Object>} - Validation result
+     */
+    async validateRingCentralIntegration() {
+        console.log('📞 Validating RingCentral integration...');
+        
+        const result = {
+            name: 'RingCentral Integration',
+            status: 'success',
+            tests: [],
+            startTime: Date.now(),
+            message: 'RingCentral integration validation complete'
+        };
+
+        try {
+            // Test 1: Check hosting endpoints
+            const baseUrl = 'https://kanvaportal.web.app';
+            
+            const statusTest = {
+                name: 'RingCentral Status Endpoint',
+                status: 'pending',
+                message: 'Testing /rc/status endpoint...',
+                duration: 0
+            };
+            
+            const statusStart = Date.now();
+            try {
+                const response = await fetch(`${baseUrl}/rc/status`);
+                statusTest.duration = Date.now() - statusStart;
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    statusTest.status = 'success';
+                    statusTest.message = `Status endpoint accessible (${response.status})`;
+                } else {
+                    statusTest.status = 'warning';
+                    statusTest.message = `Status endpoint returned ${response.status}`;
+                }
+            } catch (error) {
+                statusTest.duration = Date.now() - statusStart;
+                statusTest.status = 'error';
+                statusTest.message = `Status endpoint failed: ${error.message}`;
+            }
+            result.tests.push(statusTest);
+
+            // Test 2: Check OAuth start endpoint
+            const oauthTest = {
+                name: 'OAuth Start Endpoint',
+                status: 'pending',
+                message: 'Testing /rc/auth/start endpoint...',
+                duration: 0
+            };
+            
+            const oauthStart = Date.now();
+            try {
+                const response = await fetch(`${baseUrl}/rc/auth/start`, { method: 'HEAD' });
+                oauthTest.duration = Date.now() - oauthStart;
+                
+                if (response.ok || response.status === 302) {
+                    oauthTest.status = 'success';
+                    oauthTest.message = `OAuth endpoint accessible (${response.status})`;
+                } else {
+                    oauthTest.status = 'warning';
+                    oauthTest.message = `OAuth endpoint returned ${response.status}`;
+                }
+            } catch (error) {
+                oauthTest.duration = Date.now() - oauthStart;
+                oauthTest.status = 'warning';
+                oauthTest.message = `OAuth endpoint check failed: ${error.message}`;
+            }
+            result.tests.push(oauthTest);
+
+            // Test 3: Check configuration
+            const configTest = {
+                name: 'Configuration Check',
+                status: 'pending',
+                message: 'Checking RingCentral configuration...',
+                duration: 0
+            };
+            
+            const configStart = Date.now();
+            try {
+                // Check if admin dashboard has RingCentral config
+                const hasConfig = document.getElementById('ringcentral-client-id')?.value?.trim();
+                configTest.duration = Date.now() - configStart;
+                
+                if (hasConfig) {
+                    configTest.status = 'success';
+                    configTest.message = 'RingCentral configuration found in admin UI';
+                } else {
+                    configTest.status = 'warning';
+                    configTest.message = 'RingCentral configuration not found in admin UI';
+                }
+            } catch (error) {
+                configTest.duration = Date.now() - configStart;
+                configTest.status = 'info';
+                configTest.message = 'Configuration check skipped (admin UI not available)';
+            }
+            result.tests.push(configTest);
+
+            // Determine overall status
+            const hasErrors = result.tests.some(test => test.status === 'error');
+            const hasWarnings = result.tests.some(test => test.status === 'warning');
+            
+            if (hasErrors) {
+                result.status = 'error';
+                result.message = 'RingCentral integration has errors';
+            } else if (hasWarnings) {
+                result.status = 'warning';
+                result.message = 'RingCentral integration has warnings';
+            } else {
+                result.status = 'success';
+                result.message = 'RingCentral integration validation passed';
+            }
+
+        } catch (error) {
+            console.error('❌ RingCentral validation error:', error);
+            result.status = 'error';
+            result.message = `RingCentral validation failed: ${error.message}`;
+        }
+
+        result.endTime = Date.now();
+        result.totalDuration = result.endTime - result.startTime;
+        return result;
+    }
+
+    /**
      * Get validation results summary
      * @returns {Object} - Summary of validation results
      */
@@ -489,6 +619,8 @@ class IntegrationValidator {
                 return await this.validateCopperIntegration();
             case 'fishbowl':
                 return await this.validateFishbowlIntegration();
+            case 'ringcentral':
+                return await this.validateRingCentralIntegration();
             default:
                 throw new Error(`Unknown integration: ${integration}`);
         }
