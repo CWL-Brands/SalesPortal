@@ -47,6 +47,10 @@
         "destination": "/dialer-service-worker.js"
       },
       {
+        "source": "/oauth-popup-handler.js",
+        "destination": "/oauth-popup-handler.js"
+      },
+      {
         "source": "/redirect.html",
         "destination": "/redirect.html"
       },

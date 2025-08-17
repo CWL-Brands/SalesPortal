@@ -504,7 +504,17 @@ export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
     const base = cfg.environment === 'sandbox' ? 'https://platform.devtest.ringcentral.com' : 'https://platform.ringcentral.com';
 
     if (!clientId || !clientSecret || !redirectUri) {
-      res.status(500).send('RingCentral configuration incomplete');
+      console.error('❌ RingCentral config missing:', { 
+        hasClientId: !!clientId, 
+        hasClientSecret: !!clientSecret, 
+        hasRedirectUri: !!redirectUri,
+        configData: cfg 
+      });
+      res.status(500).send(`RingCentral configuration incomplete. Missing: ${[
+        !clientId ? 'clientId' : null,
+        !clientSecret ? 'clientSecret' : null, 
+        !redirectUri ? 'redirectUri' : null
+      ].filter(Boolean).join(', ')}`);
       return;
     }
 

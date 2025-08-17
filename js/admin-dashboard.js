@@ -126,9 +126,13 @@ class AdminDashboard {
         try {
             const rcBase = 'https://kanvaportal.web.app';
             const resp = await fetch(`${rcBase}/rc/webhook`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'test', ts: new Date().toISOString() }) });
-            alert(resp.ok ? 'Webhook test sent successfully' : `Webhook test failed: HTTP ${resp.status}`);
+            const message = resp.ok ? 'Webhook test sent successfully' : `Webhook test failed: HTTP ${resp.status}`;
+            console.log('🔔 Webhook Test:', message);
+            this.showNotification(message, resp.ok ? 'success' : 'error');
         } catch (e) {
-            alert(`Webhook test error: ${e.message}`);
+            const message = `Webhook test error: ${e.message}`;
+            console.error('❌ Webhook Test Error:', message);
+            this.showNotification(message, 'error');
         }
     }
     

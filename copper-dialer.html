@@ -982,47 +982,60 @@
                 const authUrl = `${window.location.origin}/rc/auth/start`;
                 
                 try {
-                    let popup;
-                    
-                    // Try different popup strategies for iframe context
+                    // For iframe context, use postMessage to request parent to open popup
                     if (window.parent && window.parent !== window) {
-                        // In iframe - try parent window first
-                        try {
-                            popup = window.parent.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
-                        } catch (parentError) {
-                            console.warn('Parent window popup failed, trying top window:', parentError);
-                            try {
-                                popup = window.top.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
-                            } catch (topError) {
-                                console.warn('Top window popup failed, using current window:', topError);
-                                popup = window.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
-                            }
-                        }
-                    } else {
-                        popup = window.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
-                    }
-                    
-                    if (!popup) {
-                        console.error('All popup attempts failed. Please allow popups and try again.');
-                        this.updateStatus('error', 'Popup blocked - please allow popups');
-                        return;
-                    }
-                    
-                    // Monitor popup closure
-                    const checkClosed = setInterval(() => {
-                        try {
-                            if (popup.closed) {
-                                clearInterval(checkClosed);
+                        console.log('🔄 Requesting parent window to open OAuth popup...');
+                        
+                        // Send message to parent to open popup
+                        window.parent.postMessage({
+                            type: 'OPEN_OAUTH_POPUP',
+                            url: authUrl,
+                            windowName: 'ringcentral-oauth',
+                            features: 'width=500,height=600,resizable=yes,scrollbars=yes'
+                        }, '*');
+                        
+                        this.updateStatus('authenticating', 'Opening authentication window...');
+                        
+                        // Listen for auth completion message
+                        const messageHandler = (event) => {
+                            if (event.data && event.data.type === 'OAUTH_COMPLETE') {
+                                window.removeEventListener('message', messageHandler);
                                 setTimeout(() => this.checkAuthStatus(), 2000);
                             }
-                        } catch (e) {
-                            // Popup may be cross-origin, just continue checking
-                            clearInterval(checkClosed);
-                            setTimeout(() => this.checkAuthStatus(), 5000);
+                        };
+                        window.addEventListener('message', messageHandler);
+                        
+                        // Fallback timeout
+                        setTimeout(() => {
+                            window.removeEventListener('message', messageHandler);
+                            this.checkAuthStatus();
+                        }, 30000);
+                        
+                    } else {
+                        // Direct popup for non-iframe context
+                        const popup = window.open(authUrl, 'ringcentral-oauth', 'width=500,height=600,resizable=yes,scrollbars=yes');
+                        
+                        if (!popup) {
+                            console.error('Popup blocked. Please allow popups and try again.');
+                            this.updateStatus('error', 'Popup blocked - please allow popups');
+                            return;
                         }
-                    }, 1000);
-                    
-                    this.updateStatus('authenticating', 'Opening authentication window...');
+                        
+                        this.updateStatus('authenticating', 'Opening authentication window...');
+                        
+                        // Monitor popup closure
+                        const checkClosed = setInterval(() => {
+                            try {
+                                if (popup.closed) {
+                                    clearInterval(checkClosed);
+                                    setTimeout(() => this.checkAuthStatus(), 2000);
+                                }
+                            } catch (e) {
+                                clearInterval(checkClosed);
+                                setTimeout(() => this.checkAuthStatus(), 5000);
+                            }
+                        }, 1000);
+                    }
                     
                 } catch (error) {
                     console.error('OAuth popup failed:', error);
