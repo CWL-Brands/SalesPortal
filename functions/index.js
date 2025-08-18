@@ -496,10 +496,12 @@ export const ringcentralAuthStart = onRequest(withCors(async (req, res) => {
       codeVerifier,
       timestamp: new Date()
     });
-    
-    const redirectUri = 'https://kanvaportal.web.app/rc/auth/callback';
-    const state = 'kanva';
-    const authUrl = `${base}/restapi/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+    // Use configured redirectUri; allow optional ownerId to be carried in state for per-user tokens
+    const redirectUri = cfg.redirectUri || process.env.RC_REDIRECT_URI || 'https://kanvaportal.web.app/rc/auth/callback';
+    const ownerId = req.query?.ownerId ? String(req.query.ownerId) : '';
+    const stateObj = ownerId ? { ownerId } : 'kanva';
+    const stateParam = typeof stateObj === 'string' ? stateObj : encodeURIComponent(JSON.stringify(stateObj));
+    const authUrl = `${base}/restapi/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${stateParam}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
     
     res.redirect(authUrl);
   } catch (e) {
@@ -1389,6 +1391,7 @@ export const loadConfigurations = onRequest(withCors(async (req, res) => {
     const config = {
       ringcentral: {
         configured: !!(connections.ringcentral?.clientId),
+        clientId: connections.ringcentral?.clientId || null,
         environment: connections.ringcentral?.environment || 'production',
         redirectUri: connections.ringcentral?.redirectUri
       },

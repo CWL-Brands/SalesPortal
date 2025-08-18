@@ -38,6 +38,22 @@ class UnifiedDialer {
         this.init();
     }
 
+    // Resolve an owner identifier to support per-user RingCentral tokens
+    getOwnerId() {
+        try {
+            const url = new URL(window.location.href);
+            const qpOwner = url.searchParams.get('ownerId') || url.searchParams.get('email');
+            if (qpOwner) {
+                localStorage.setItem('kanva.ownerId', qpOwner);
+                return qpOwner;
+            }
+            const stored = localStorage.getItem('kanva.ownerId');
+            if (stored) return stored;
+        } catch {}
+        // Fallback: try configured Copper user email if available
+        return this?.config?.copper?.userEmail || '';
+    }
+
     /**
      * Initialize the unified dialer
      */
@@ -49,12 +65,9 @@ class UnifiedDialer {
         });
         
         try {
-            // Skip config loading if in modal to avoid 403 errors
-            if (!this.isModal) {
-                await this.loadConfigurations();
-            } else {
-                console.log('📱 Modal mode: skipping config load, using defaults');
-            }
+            // Always attempt to load config so clientId/server are available in all contexts
+            // If it fails (e.g., sandboxed iframe restrictions), we'll continue with defaults
+            await this.loadConfigurations();
             
             this.bindEvents();
             await this.checkAuthStatus();
@@ -274,7 +287,8 @@ class UnifiedDialer {
         try {
             console.log('🔍 Checking authentication status...');
             
-            const response = await fetch('/rc/status');
+            const ownerId = this.getOwnerId();
+            const response = await fetch(`/rc/status${ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : ''}`);
             if (response.ok) {
                 const data = await response.json();
                 console.log('🔐 Auth status:', data.success && data.data.authenticated ? 'Authenticated' : 'Not authenticated');
@@ -321,7 +335,8 @@ class UnifiedDialer {
         try {
             console.log('📞 Getting access token and initializing WebPhone...');
             
-            const tokenResponse = await fetch('/rc/token');
+            const ownerId = this.getOwnerId();
+            const tokenResponse = await fetch(`/rc/token${ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : ''}`);
             if (!tokenResponse.ok) {
                 throw new Error('Failed to get access token');
             }
@@ -349,14 +364,16 @@ class UnifiedDialer {
             console.log('🔐 Starting RingCentral OAuth flow...');
             
             // Open OAuth popup
-            const popup = window.open('/rc/auth/start', 'ringcentral-auth',
+            const ownerId = this.getOwnerId();
+            const authUrl = `/rc/auth/start${ownerId ? `?ownerId=${encodeURIComponent(ownerId)}` : ''}`;
+            const popup = window.open(authUrl, 'ringcentral-auth',
                 'width=500,height=650,noopener,noreferrer,scrollbars=yes,resizable=yes');
             
             if (!popup) {
                 // Fallback for sandboxed iframes or popup blockers: navigate current tab
                 console.warn('Popup not opened (blocked or sandboxed). Falling back to same-window navigation.');
                 this.showInfo('Redirecting to RingCentral login...');
-                window.location.href = '/rc/auth/start';
+                window.location.href = authUrl;
                 return;
             }
             
