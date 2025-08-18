@@ -1381,6 +1381,21 @@ async function refreshRingCentralToken(refreshToken, ownerId = '') {
 // Configuration Loading Endpoint
 // =============================
 
+// Simple auth endpoint for dialer compatibility
+export const authUser = onRequest(withCors(async (req, res) => {
+  try {
+    // Return anonymous user for now - can be enhanced later with proper auth
+    res.json({
+      id: 'anonymous',
+      authenticated: false,
+      email: null
+    });
+  } catch (error) {
+    console.error('Auth user error:', error);
+    res.status(500).json({ error: 'Authentication check failed' });
+  }
+}));
+
 // Load all integration configurations for the app
 export const loadConfigurations = onRequest(withCors(async (req, res) => {
   try {

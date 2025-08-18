@@ -263,7 +263,10 @@ class NetworkRecoveryManager {
     constructor(webPhone) {
         this.webPhone = webPhone;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 10;
+        this.maxReconnectAttempts = 15; // Increased from 10 to 15 attempts
+        this.reconnectTimer = null;
+        this.isReconnecting = false;
+        this.lastConnectionState = null;
         this.setupNetworkMonitoring();
     }
     
@@ -272,31 +275,74 @@ class NetworkRecoveryManager {
         window.addEventListener('online', () => this.handleNetworkRestore());
         window.addEventListener('offline', () => this.handleNetworkLoss());
         
-        // Monitor WebSocket connection
+        // Monitor WebSocket connection if available
         if (this.webPhone.sipClient && this.webPhone.sipClient.wsc) {
-            this.webPhone.sipClient.wsc.addEventListener('close', (event) => {
+            const wsc = this.webPhone.sipClient.wsc;
+            
+            wsc.addEventListener('open', () => {
+                console.log('WebSocket connection established');
+                this.reconnectAttempts = 0;
+                this.isReconnecting = false;
+                this.updateConnectionUI('connected');
+            });
+            
+            wsc.addEventListener('close', (event) => {
+                console.log(`WebSocket closed: ${event.code} ${event.reason || 'No reason provided'}`);
                 if (!event.wasClean) {
-                    this.handleWebSocketDisconnect();
+                    this.handleWebSocketDisconnect(event);
+                } else {
+                    this.updateConnectionUI('disconnected');
+                }
+            });
+            
+            wsc.addEventListener('error', (error) => {
+                console.error('WebSocket error:', error);
+                this.handleWebSocketDisconnect({ code: 1006, reason: 'WebSocket error' });
+            });
+        }
+        
+        // Monitor connection state changes
+        if (this.webPhone.sipClient) {
+            this.webPhone.sipClient.on('connectionState', (state) => {
+                if (state !== this.lastConnectionState) {
+                    console.log(`Connection state changed to: ${state}`);
+                    this.lastConnectionState = state;
+                    this.updateConnectionUI(state);
                 }
             });
         }
     }
     
     async handleNetworkRestore() {
+        if (this.isReconnecting) {
+            console.log('Already attempting to reconnect...');
+            return;
+        }
+        
         console.log('Network restored, reconnecting WebPhone...');
+        this.isReconnecting = true;
+        this.updateConnectionUI('reconnecting');
         
         try {
             await this.webPhone.start();
             
-            // Re-invite active calls
-            this.webPhone.callSessions.forEach((callSession) => {
-                if (callSession.state === 'answered') {
-                    callSession.reInvite();
-                }
-            });
+            // Re-invite active calls if any were active
+            if (this.webPhone.callSessions) {
+                this.webPhone.callSessions.forEach((callSession) => {
+                    if (callSession.state === 'answered') {
+                        console.log('Re-inviting active call after reconnection');
+                        callSession.reInvite().catch(err => {
+                            console.warn('Failed to re-invite call:', err);
+                        });
+                    }
+                });
+            }
             
             this.reconnectAttempts = 0;
+            this.isReconnecting = false;
             console.log('WebPhone reconnected successfully');
+            this.updateConnectionUI('connected');
+            
         } catch (error) {
             console.error('Failed to restore WebPhone:', error);
             this.scheduleReconnect();
@@ -305,25 +351,88 @@ class NetworkRecoveryManager {
     
     handleNetworkLoss() {
         console.log('Network connection lost');
+        this.updateConnectionUI('disconnected');
+        
+        // Clear any pending reconnection attempts
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
     }
     
-    handleWebSocketDisconnect() {
-        console.log('WebSocket disconnected unexpectedly');
+    handleWebSocketDisconnect(event) {
+        console.log(`WebSocket disconnected: ${event.code} - ${event.reason || 'No reason provided'}`);
+        
+        // Don't try to reconnect if this was a normal closure
+        if (event.code === 1000) {
+            console.log('Normal WebSocket closure, not reconnecting');
+            return;
+        }
+        
         this.scheduleReconnect();
     }
     
     scheduleReconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
+            this.updateConnectionUI('disconnected');
+            this.isReconnecting = false;
             return;
         }
         
-        const delay = Math.min(Math.pow(2, this.reconnectAttempts) * 1000, 30000);
+        // Exponential backoff with jitter
+        const baseDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+        const jitter = Math.random() * 1000;
+        const delay = baseDelay + jitter;
         
-        setTimeout(() => {
-            this.reconnectAttempts++;
+        this.reconnectAttempts++;
+        console.log(`Scheduling reconnection attempt ${this.reconnectAttempts} in ${Math.round(delay/1000)}s`);
+        
+        this.updateConnectionUI('reconnecting', {
+            attempt: this.reconnectAttempts,
+            maxAttempts: this.maxReconnectAttempts,
+            nextAttemptIn: Math.round(delay/1000)
+        });
+        
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+        }
+        
+        this.reconnectTimer = setTimeout(() => {
             this.handleNetworkRestore();
         }, delay);
+    }
+    
+    updateConnectionUI(state, data = {}) {
+        // Dispatch a custom event that the UI can listen to
+        const event = new CustomEvent('kanva-dialer-connection-state', {
+            detail: { state, ...data }
+        });
+        window.dispatchEvent(event);
+        
+        // Update UI elements if they exist
+        const statusElement = document.getElementById('connection-status');
+        if (statusElement) {
+            const statusMap = {
+                'connected': { text: 'Connected', class: 'status-connected' },
+                'disconnected': { text: 'Disconnected', class: 'status-disconnected' },
+                'reconnecting': { 
+                    text: `Reconnecting (${data.attempt || 1}/${data.maxAttempts || '?'})`,
+                    class: 'status-reconnecting' 
+                },
+                'connecting': { text: 'Connecting...', class: 'status-connecting' }
+            };
+            
+            const status = statusMap[state] || { text: 'Unknown', class: 'status-unknown' };
+            
+            statusElement.textContent = status.text;
+            statusElement.className = `connection-status ${status.class}`;
+            
+            // Update tooltip with additional info if available
+            if (data.nextAttemptIn) {
+                statusElement.title = `Next attempt in ${data.nextAttemptIn}s`;
+            }
+        }
     }
 }
 

@@ -195,15 +195,106 @@
     background: #2563eb;
 }
 
-@keyframes slideInRight {
-    from {
-        opacity: 0;
-        transform: translateX(100%);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+/* Connection Status */
+.connection-status {
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    margin: 10px 0;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.connection-status:before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+    transition: all 0.3s ease;
+}
+
+.status-connected {
+    background-color: #e6f7ee;
+    color: #10b981;
+    border: 1px solid #a7f3d0;
+}
+
+.status-connected:before {
+    background-color: #10b981;
+    animation: pulse 2s infinite;
+}
+
+.status-disconnected {
+    background-color: #fee2e2;
+    color: #ef4444;
+    border: 1px solid #fecaca;
+}
+
+.status-disconnected:before {
+    background-color: #ef4444;
+}
+
+.status-reconnecting {
+    background-color: #fef3c7;
+    color: #f59e0b;
+    border: 1px solid #fde68a;
+}
+
+.status-reconnecting:before {
+    background-color: #f59e0b;
+    animation: pulse 1.5s infinite;
+}
+
+.status-connecting {
+    background-color: #e0f2fe;
+    color: #0ea5e9;
+    border: 1px solid #bae6fd;
+}
+
+.status-connecting:before {
+    background-color: #0ea5e9;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Connection status in dialer header */
+.dialer-header .connection-status {
+    margin: 0;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* Tooltip styles for connection status */
+.connection-status[title] {
+    position: relative;
+    cursor: help;
+}
+
+.connection-status[title]:hover:after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
 @keyframes slideUp {
@@ -316,3 +407,4 @@
         transform: none;
     }
 }
+

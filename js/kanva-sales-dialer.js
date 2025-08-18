@@ -41,13 +41,27 @@ class KanvaSalesDialer {
             
             // Initialize WebPhone with comprehensive configuration
             const WebPhone = window.WebPhone || window.RingCentralWebPhone;
+            
+            // Configure WebSocket server URL based on environment
+            const wsServer = this.config.ringcentral.server === 'https://platform.ringcentral.com' 
+                ? 'wss://ws.ringcentral.com/ws' 
+                : 'wss://ws.dev.ringcentral.com/ws';
+            
             this.webPhone = new WebPhone({ 
                 sipInfo: sipData.sipInfo,
                 instanceId: `${this.config.userId}_${Date.now()}`,
                 debug: this.config.debug || false,
                 autoAnswer: false,
                 enableQos: true,
-                enableMediaReportLogging: this.config.enableMediaReportLogging || false
+                enableMediaReportLogging: this.config.enableMediaReportLogging || false,
+                // Add WebSocket configuration
+                server: wsServer,
+                // Add ICE servers for better connectivity
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    // Add your TURN servers here if available
+                ]
             });
             
             await this.webPhone.start();
