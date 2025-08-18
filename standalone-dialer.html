@@ -459,9 +459,9 @@
                 ];
 
                 const webphoneUrls = [
-                    // Prefer local copy
+                    // Prefer local copy (UMD v1)
                     '/lib/ringcentral-web-phone.min.js',
-                    // CDNs
+                    // Legacy CDNs (UMD v1)
                     'https://unpkg.com/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js',
                     'https://cdn.jsdelivr.net/npm/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js'
                 ];
@@ -479,8 +479,8 @@
                     this.sdkStatus.ringcentral = await this.loadScriptWithFallbacks('RingCentral', sdkUrls);
                     
                     if (this.sdkStatus.ringcentral) {
-                        // Try to load WebPhone SDK
-                        this.sdkStatus.webphone = await this.loadScriptWithFallbacks('RingCentralWebPhone', webphoneUrls);
+                        // Try to load WebPhone SDK v2 (ESM) first, then fallback to v1 UMD
+                        this.sdkStatus.webphone = await this.loadWebPhoneV2ThenFallback(webphoneUrls);
                     }
 
                     if (this.sdkStatus.ringcentral && this.sdkStatus.webphone) {
@@ -494,6 +494,57 @@
                     this.sdkStatus.ringcentral = false;
                     this.sdkStatus.webphone = false;
                 }
+            }
+
+            async loadWebPhoneV2ThenFallback(umdFallbackUrls) {
+                // Already available?
+                if (typeof window.RingCentralWebPhone !== 'undefined') return true;
+
+                // Try ESM v2.2.7
+                try {
+                    await this.loadESMAsGlobal(
+                        'https://cdn.jsdelivr.net/npm/ringcentral-web-phone@2.2.7/dist/esm/index.min.js',
+                        'RingCentralWebPhone',
+                        'default'
+                    );
+                    if (typeof window.RingCentralWebPhone !== 'undefined') {
+                        console.log('✅ Loaded RingCentral WebPhone v2 (ESM)');
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn('⚠️ ESM WebPhone v2 load failed, falling back to UMD v1:', e);
+                }
+
+                // Fallback to legacy UMD v1
+                const ok = await this.loadScriptWithFallbacks('RingCentralWebPhone', umdFallbackUrls);
+                if (ok) console.log('✅ Loaded RingCentral WebPhone v1 (UMD)');
+                return ok;
+            }
+
+            loadESMAsGlobal(importUrl, globalName, exportName = 'default') {
+                return new Promise((resolve, reject) => {
+                    if (typeof window[globalName] !== 'undefined') return resolve();
+
+                    const script = document.createElement('script');
+                    script.type = 'module';
+                    script.textContent = `import * as m from "${importUrl}";\n` +
+                        `window['${globalName}'] = m['${exportName}'] ?? m.default ?? m;`;
+
+                    const timeout = setTimeout(() => {
+                        reject(new Error(`ESM import timeout: ${importUrl}`));
+                    }, 10000);
+
+                    script.onload = () => {
+                        clearTimeout(timeout);
+                        if (typeof window[globalName] !== 'undefined') return resolve();
+                        reject(new Error(`ESM script loaded but global ${globalName} not set`));
+                    };
+                    script.onerror = () => {
+                        clearTimeout(timeout);
+                        reject(new Error(`ESM script load failed: ${importUrl}`));
+                    };
+                    document.head.appendChild(script);
+                });
             }
 
             async loadScriptWithFallbacks(globalName, urls) {
