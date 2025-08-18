@@ -481,69 +481,350 @@
         </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://unpkg.com/@ringcentral/sdk@4.2.0/build/ringcentral.js"></script>
-    <script src="https://unpkg.com/ringcentral-web-phone@0.8.6/build/ringcentral-web-phone.js"></script>
-    <script src="js/unified-dialer.js"></script>
-    
+    <!-- RingCentral SDKs with multiple fallback sources -->
+    <!-- Load RingCentral SDKs with fallbacks -->
     <script>
-        // Detect context and initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            // Check if we're in an iframe (Copper modal context)
-            const isModal = window.self !== window.top;
-            const viewport = {
-                width: window.innerWidth,
-                height: window.innerHeight
-            };
+        // Global dialer instance
+        let dialer = null;
+        
+        // Function to initialize the dialer
+        function initializeDialer() {
+            if (window.dialer) return;
             
-            // Detect Copper context and sizing
-            let contextMode = 'standalone-mode';
+            console.log('Initializing Kanva Dialer...');
             
-            if (isModal) {
-                // Determine Copper panel type based on viewport size
-                if (viewport.width <= 280) {
-                    contextMode = 'sidebar-mode';
-                } else if (viewport.width <= 300) {
-                    contextMode = 'activity-bar-mode';
-                } else if (viewport.width <= 320) {
-                    contextMode = 'activity-panel-mode';
-                } else if (viewport.width <= 500) {
-                    contextMode = 'modal-mode';
-                } else {
-                    contextMode = 'main-view-mode';
-                }
-                
-                document.body.style.background = 'transparent';
-                document.body.style.margin = '0';
-                document.body.style.padding = '0';
-            } else {
-                // Apply gradient background for standalone mode
-                document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-            }
-            
-            document.getElementById('dialerApp').className = contextMode;
-            console.log('🎯 Detected context:', contextMode, viewport);
-            
-            // Initialize unified dialer
-            window.unifiedDialer = new UnifiedDialer({
-                isModal: isModal,
-                contextMode: contextMode,
-                viewport: viewport,
-                parentOrigin: isModal ? document.referrer : null
-            });
-            
-            // Handle viewport changes
-            window.addEventListener('resize', function() {
-                const newViewport = {
+            try {
+                // Check if we're in an iframe
+                const isModal = window.self !== window.top;
+                let contextMode = 'standalone-mode';
+                const viewport = {
                     width: window.innerWidth,
                     height: window.innerHeight
                 };
                 
-                if (isModal && Math.abs(newViewport.width - viewport.width) > 20) {
-                    location.reload(); // Reload to recalculate context
+                // Set context based on viewport size if in iframe
+                if (isModal) {
+                    if (viewport.width <= 250) {
+                        contextMode = 'sidebar-mode';
+                    } else if (viewport.width <= 300) {
+                        contextMode = 'activity-bar-mode';
+                    } else if (viewport.width <= 320) {
+                        contextMode = 'activity-panel-mode';
+                    } else if (viewport.width <= 500) {
+                        contextMode = 'modal-mode';
+                    } else {
+                        contextMode = 'main-view-mode';
+                    }
+                    
+                    document.body.style.background = 'transparent';
+                    document.body.style.margin = '0';
+                    document.body.style.padding = '0';
+                } else {
+                    // Apply gradient background for standalone mode
+                    document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                }
+                
+                document.getElementById('dialerApp').className = contextMode;
+                console.log('🎯 Detected context:', contextMode, viewport);
+                
+                // Initialize unified dialer
+                window.dialer = new UnifiedDialer({
+                    isModal: isModal,
+                    contextMode: contextMode,
+                    viewport: viewport,
+                    parentOrigin: isModal ? document.referrer : null
+                });
+                
+                // Handle viewport changes
+                window.addEventListener('resize', function() {
+                    const newViewport = {
+                        width: window.innerWidth,
+                        height: window.innerHeight
+                    };
+                    
+                    if (isModal && Math.abs(newViewport.width - viewport.width) > 20) {
+                        location.reload(); // Reload to recalculate context
+                    }
+                });
+                
+                console.log('✅ Kanva Dialer initialized successfully');
+            } catch (error) {
+                console.error('❌ Failed to initialize dialer:', error);
+                showError('Failed to initialize dialer: ' + error.message);
+            }
+        }
+        
+        // Function to load a script with retries
+        function loadScript(src, onSuccess, onError, maxRetries = 3, retryDelay = 1000) {
+            let retries = 0;
+            
+            function attemptLoad() {
+                const script = document.createElement('script');
+                script.src = src;
+                
+                script.onload = function() {
+                    console.log('Successfully loaded:', src);
+                    if (onSuccess) onSuccess();
+                };
+                
+                script.onerror = function() {
+                    retries++;
+                    console.warn(`Failed to load ${src}, retry ${retries}/${maxRetries}`);
+                    
+                    if (retries < maxRetries) {
+                        setTimeout(attemptLoad, retryDelay);
+                    } else if (onError) {
+                        onError(`Failed to load ${src} after ${maxRetries} attempts`);
+                    }
+                };
+                
+                document.head.appendChild(script);
+            }
+            
+            attemptLoad();
+        }
+        
+        // Function to show error message
+        function showError(message) {
+            console.error(message);
+            const errorDiv = document.createElement('div');
+            errorDiv.style.position = 'fixed';
+            errorDiv.style.top = '0';
+            errorDiv.style.left = '0';
+            errorDiv.style.right = '0';
+            errorDiv.style.padding = '10px';
+            errorDiv.style.backgroundColor = '#f8d7da';
+            errorDiv.style.color = '#721c24';
+            errorDiv.style.textAlign = 'center';
+            errorDiv.style.zIndex = '9999';
+            errorDiv.textContent = message;
+            document.body.prepend(errorDiv);
+        }
+        
+        // Start loading process when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load RingCentral SDK
+            loadScript(
+                'https://unpkg.com/@ringcentral/sdk@4.6.0/build/ringcentral.min.js',
+                function() {
+                    // After RingCentral SDK loads, load WebPhone
+                    loadScript(
+                        'https://unpkg.com/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js',
+                        function() {
+                            console.log('All RingCentral SDKs loaded successfully');
+                            // Load unified-dialer.js
+                            loadScript(
+                                'js/unified-dialer.js',
+                                function() {
+                                    console.log('Unified dialer loaded, initializing...');
+                                    initializeDialer();
+                                },
+                                function(error) {
+                                    showError('Failed to load dialer component: ' + error);
+                                }
+                            );
+                        },
+                        function(error) {
+                            showError('Failed to load RingCentral WebPhone: ' + error);
+                        }
+                    );
+                },
+                function(error) {
+                    showError('Failed to load RingCentral SDK: ' + error);
+                }
+            );
+        });
+    </script>
+    <script>
+        // Handle dial pad buttons
+        document.querySelectorAll('.number-pad button').forEach(button => {
+            button.addEventListener('click', () => {
+                const number = button.getAttribute('data-number');
+                if (number) {
+                    const display = document.getElementById('phoneNumber');
+                    display.value += number;
                 }
             });
         });
+
+        // Handle call button
+        document.getElementById('callButton').addEventListener('click', () => {
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            if (phoneNumber && window.dialer) {
+                window.dialer.makeCall(phoneNumber);
+            }
+        });
+
+        // Handle end call button
+        document.getElementById('endCallButton').addEventListener('click', () => {
+            if (window.dialer && window.dialer.currentCall) {
+                window.dialer.endCall();
+            }
+        });
+
+        // Handle answer call button
+        document.getElementById('answerCallButton').addEventListener('click', () => {
+            if (window.dialer && window.dialer.currentCall) {
+                window.dialer.answerCall();
+                document.getElementById('incomingCallOverlay').classList.add('hidden');
+            }
+        });
+
+        // Handle decline call button
+        document.getElementById('declineCallButton').addEventListener('click', () => {
+            if (window.dialer && window.dialer.currentCall) {
+                window.dialer.declineCall();
+                document.getElementById('incomingCallOverlay').classList.add('hidden');
+            }
+        });
+
+        // Handle mute toggle
+        document.getElementById('muteButton')?.addEventListener('click', () => {
+            if (window.dialer) {
+                window.dialer.toggleMute();
+            }
+        });
+
+        // Handle hold toggle
+        document.getElementById('holdButton')?.addEventListener('click', () => {
+            if (window.dialer) {
+                window.dialer.toggleHold();
+            }
+        });
+
+        // Handle keypad toggle
+        document.getElementById('keypadButton')?.addEventListener('click', () => {
+            const keypad = document.getElementById('keypadContainer');
+            if (keypad) {
+                keypad.classList.toggle('hidden');
+            }
+        });
+
+        // Handle transfer button
+        document.getElementById('transferButton')?.addEventListener('click', () => {
+            if (window.dialer) {
+                const number = prompt('Enter number to transfer to:');
+                if (number) {
+                    window.dialer.transferCall(number);
+                }
+            }
+        });
+
+        // Handle conference button
+        document.getElementById('conferenceButton')?.addEventListener('click', () => {
+            if (window.dialer) {
+                const number = prompt('Enter number to add to conference:');
+                if (number) {
+                    window.dialer.addToConference(number);
+                }
+            }
+        });
+
+        // Handle speaker toggle
+        document.getElementById('speakerButton')?.addEventListener('click', () => {
+            if (window.dialer) {
+                window.dialer.toggleSpeaker();
+            }
+        });
+
+        // Set up call timer functionality
+        function startCallTimer(call) {
+            const callTimerElement = document.getElementById('callTimer');
+            if (!callTimerElement) return;
+            
+            // Clear any existing timer
+            if (window.callTimer) {
+                clearInterval(window.callTimer);
+            }
+            
+            let seconds = 0;
+            window.callTimer = setInterval(() => {
+                seconds++;
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                callTimerElement.textContent = `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+            }, 1000);
+            
+            // Handle call end
+            call.on('disconnected', () => {
+                if (window.callTimer) {
+                    clearInterval(window.callTimer);
+                    window.callTimer = null;
+                }
+                const incomingCallOverlay = document.getElementById('incomingCallOverlay');
+                if (incomingCallOverlay) {
+                    incomingCallOverlay.classList.add('hidden');
+                }
+            });
+        }
+
+        // Set up event listeners for call controls
+        function setupCallControls(dialer) {
+            const answerCallBtn = document.getElementById('answerCall');
+            const hangupCallBtn = document.getElementById('hangupCall');
+            const sendToVoicemailBtn = document.getElementById('sendToVoicemail');
+            
+            if (answerCallBtn) {
+                answerCallBtn.addEventListener('click', () => {
+                    dialer.answerCall();
+                    const callControls = document.getElementById('callControls');
+                    if (callControls) callControls.classList.remove('hidden');
+                    answerCallBtn.classList.add('hidden');
+                });
+            }
+            
+            if (hangupCallBtn) {
+                hangupCallBtn.addEventListener('click', () => {
+                    dialer.hangupCall();
+                    const incomingCallOverlay = document.getElementById('incomingCallOverlay');
+                    if (incomingCallOverlay) incomingCallOverlay.classList.add('hidden');
+                });
+            }
+            
+            if (sendToVoicemailBtn) {
+                sendToVoicemailBtn.addEventListener('click', () => {
+                    dialer.rejectCall();
+                    const incomingCallOverlay = document.getElementById('incomingCallOverlay');
+                    if (incomingCallOverlay) incomingCallOverlay.classList.add('hidden');
+                });
+            }
+            
+            // Handle backspace
+            const backspaceBtn = document.getElementById('backspace');
+            if (backspaceBtn) {
+                backspaceBtn.addEventListener('click', () => {
+                    const display = document.getElementById('phoneNumber');
+                    if (display) {
+                        display.value = display.value.slice(0, -1);
+                    }
+                });
+            }
+        }
+        
+        // Initialize call controls when dialer is ready
+        if (window.dialer) {
+            setupCallControls(window.dialer);
+            
+            // Listen for incoming calls
+            window.dialer.on('incomingCall', (call) => {
+                console.log('Incoming call from:', call.from);
+                const incomingCallOverlay = document.getElementById('incomingCallOverlay');
+                const callerIdElement = document.getElementById('callerId');
+                
+                if (incomingCallOverlay) {
+                    incomingCallOverlay.classList.remove('hidden');
+                }
+                
+                if (callerIdElement) {
+                    callerIdElement.textContent = call.from.phoneNumber || 'Unknown Caller';
+                }
+                
+                // Start call timer when call is answered
+                call.on('accepted', () => {
+                    startCallTimer(call);
+                });
+            });
+        }
     </script>
 </body>
 </html>
