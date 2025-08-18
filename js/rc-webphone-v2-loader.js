@@ -1,3 +1,4 @@
-// Loads RingCentral WebPhone v2 (ESM) and exposes it as a browser global
-import WebPhone from 'https://cdn.jsdelivr.net/npm/ringcentral-web-phone@2.2.7/dist/esm/index.min.js';
+// Loads RingCentral WebPhone v2 (ESM) with deps bundled and exposes it as a browser global
+// Using esm.sh with ?bundle resolves bare imports like "mixpanel-browser" for direct browser use
+import WebPhone from 'https://esm.sh/ringcentral-web-phone@2.2.7?bundle';
 window.RingCentralWebPhone = WebPhone;
