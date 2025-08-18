@@ -1388,12 +1388,14 @@ export const loadConfigurations = onRequest(withCors(async (req, res) => {
     const connections = connectionsDoc.exists ? connectionsDoc.data() : {};
     
     // Return sanitized configuration (no secrets)
+    console.log('Raw connections from Firestore:', JSON.stringify(connections, null, 2));
+    
     const config = {
       ringcentral: {
-        configured: !!(connections.ringcentral?.clientId),
-        clientId: connections.ringcentral?.clientId || null,
+        configured: !!(connections.ringcentral?.clientId || process.env.RINGCENTRAL_CLIENT_ID),
+        clientId: connections.ringcentral?.clientId || process.env.RINGCENTRAL_CLIENT_ID || null,
         environment: connections.ringcentral?.environment || 'production',
-        redirectUri: connections.ringcentral?.redirectUri
+        redirectUri: connections.ringcentral?.redirectUri || 'https://kanvaportal.web.app/rc/auth/callback'
       },
       copper: {
         configured: !!(connections.copper?.apiKey && connections.copper?.userEmail),
@@ -1410,7 +1412,7 @@ export const loadConfigurations = onRequest(withCors(async (req, res) => {
   }
 }));
 
-// =============================
+// ... rest of the code remains the same ...
 // RingCentral Sync Endpoint
 // =============================
 

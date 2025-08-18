@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kanva Dialer</title>
+    <title>Kanva Sales Dialer</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
-            --kanva-green: #22c55e;
-            --kanva-green-dark: #16a34a;
-            --kanva-green-light: #dcfce7;
+            --kanva-green: #93D500;
+            --kanva-green-dark: #17351A;
+            --kanva-green-light: #f8fdf8;
+            --kanva-accent: #e8f5e8;
         }
         
         body {
@@ -18,7 +19,7 @@
             margin: 0;
             padding: 0;
             overflow-x: hidden;
-            background: white; /* Default to white, prevent gradient flash */
+            background: white;
         }
 
         /* Adaptive container based on viewport */
@@ -30,10 +31,10 @@
             flex-direction: column;
         }
 
-        /* Standalone mode - full viewport with gradient */
+        /* Context modes */
         .standalone-mode {
             min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--kanva-green-light) 0%, #ffffff 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -44,107 +45,47 @@
             max-width: 380px;
             max-height: 90vh;
             border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 20px 40px rgba(147, 213, 0, 0.2);
             background: rgba(255, 255, 255, 0.98);
             backdrop-filter: blur(10px);
             overflow-y: auto;
+            border: 2px solid var(--kanva-accent);
         }
 
-        /* Modal mode - compact for Copper panels */
-        .modal-mode {
+        .modal-mode, .main-view-mode, .activity-bar-mode, .activity-panel-mode, .sidebar-mode {
             width: 100%;
             height: 100%;
             background: transparent;
         }
 
-        .modal-mode .dialer-container {
+        .modal-mode .dialer-container,
+        .main-view-mode .dialer-container,
+        .activity-bar-mode .dialer-container,
+        .activity-panel-mode .dialer-container,
+        .sidebar-mode .dialer-container {
             border-radius: 0;
             box-shadow: none;
             background: white;
             min-height: 100%;
+            border: 1px solid var(--kanva-accent);
         }
 
-        /* Sidebar mode - very narrow (280px) */
-        .sidebar-mode {
-            width: 100%;
-            max-width: 280px;
-            background: white;
-        }
-
+        /* Compact modes */
+        .activity-bar-mode .dialer-container,
         .sidebar-mode .dialer-container {
             padding: 12px;
             font-size: 14px;
         }
 
+        .activity-bar-mode .number-pad button,
         .sidebar-mode .number-pad button {
             min-height: 36px;
             font-size: 12px;
             padding: 4px;
         }
-        
-        .sidebar-mode .number-pad button span {
-            font-size: 14px;
-        }
-        
-        .sidebar-mode .number-pad button small {
-            font-size: 9px;
-        }
-
-        .sidebar-mode .dialer-container h1 {
-            font-size: 14px;
-        }
-
-        /* Activity panel mode - medium width (320px) */
-        .activity-panel-mode {
-            width: 100%;
-            max-width: 320px;
-            background: white;
-        }
 
         .activity-panel-mode .dialer-container {
             padding: 16px;
-        }
-
-        .activity-panel-mode .number-pad button {
-            min-height: 40px;
-            font-size: 15px;
-        }
-        
-        .activity-panel-mode .number-pad button span {
-            font-size: 16px;
-        }
-        
-        .activity-panel-mode .number-pad button small {
-            font-size: 10px;
-        }
-
-        /* Activity bar mode - narrow but taller (300px wide) */
-        .activity-bar-mode {
-            width: 100%;
-            max-width: 300px;
-            background: white;
-        }
-
-        .activity-bar-mode .dialer-container {
-            padding: 14px;
-        }
-        
-        .activity-bar-mode .number-pad button {
-            min-height: 38px;
-        }
-        
-        .activity-bar-mode .number-pad button span {
-            font-size: 15px;
-        }
-        
-        .activity-bar-mode .number-pad button small {
-            font-size: 9px;
-        }
-
-        /* Main view mode - full width available */
-        .main-view-mode {
-            width: 100%;
-            background: white;
         }
 
         .main-view-mode .dialer-container {
@@ -153,6 +94,7 @@
             padding: 24px;
         }
 
+        /* Status indicators */
         .status-indicator {
             width: 12px;
             height: 12px;
@@ -163,12 +105,16 @@
         .status-connected { background-color: var(--kanva-green); }
         .status-disconnected { background-color: #ef4444; }
         .status-connecting { background-color: #f59e0b; }
+        .status-fallback { background-color: #f59e0b; }
+        .status-error { background-color: #ef4444; }
+        .status-ready { background-color: var(--kanva-green); }
         
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
         
+        /* Button styles */
         .number-pad button {
             transition: all 0.2s ease;
             border-radius: 12px;
@@ -191,21 +137,105 @@
             transition: all 0.3s ease;
         }
         
-        .call-button:hover {
+        .call-button:hover:not(:disabled) {
             transform: scale(1.05);
-            box-shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
+            box-shadow: 0 8px 25px rgba(147, 213, 0, 0.4);
+        }
+
+        .kanva-btn {
+            background: var(--kanva-green);
+            transition: all 0.2s ease;
+        }
+
+        .kanva-btn:hover:not(:disabled) {
+            background: var(--kanva-green-dark);
+            transform: translateY(-1px);
+        }
+
+        .kanva-btn.secondary {
+            background: var(--kanva-accent);
+            color: var(--kanva-green-dark);
+        }
+
+        .kanva-btn.danger {
+            background: #ef4444;
         }
 
         .customer-info {
-            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+            background: linear-gradient(135deg, var(--kanva-green-light), var(--kanva-accent));
             border-radius: 12px;
             border-left: 4px solid var(--kanva-green);
         }
         
         .hidden { display: none !important; }
 
-        /* Incoming call overlay */
-        .incoming-overlay {
+        /* Alert styles */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 12px 0;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .alert.warning {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #92400e;
+        }
+
+        .alert.error {
+            background: #fee2e2;
+            border: 1px solid #ef4444;
+            color: #dc2626;
+        }
+
+        .alert.info {
+            background: #dbeafe;
+            border: 1px solid #3b82f6;
+            color: #1d4ed8;
+        }
+
+        .alert.success {
+            background: #d1fae5;
+            border: 1px solid var(--kanva-green);
+            color: #065f46;
+        }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            max-width: 300px;
+            animation: slideInToast 0.3s ease;
+        }
+
+        .toast.success { background: var(--kanva-green); }
+        .toast.error { background: #ef4444; }
+        .toast.warning { background: #f59e0b; }
+        .toast.info { background: #3b82f6; }
+
+        @keyframes slideInToast {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Overlays */
+        .overlay {
             position: fixed;
             top: 0;
             left: 0;
@@ -220,7 +250,7 @@
             padding: 20px;
         }
 
-        .incoming-call-card {
+        .overlay-content {
             background: white;
             border-radius: 20px;
             padding: 30px;
@@ -233,22 +263,6 @@
         @keyframes slideUp {
             from { transform: translateY(100px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
-        }
-
-        /* Active call interface */
-        .active-call-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(135deg, #1f2937, #374151);
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            color: white;
         }
 
         .call-controls {
@@ -269,6 +283,7 @@
             font-size: 20px;
             cursor: pointer;
             transition: all 0.2s ease;
+            color: white;
         }
 
         .call-control-btn:hover {
@@ -280,551 +295,813 @@
         .call-control-btn.hold { background: #6b7280; }
         .call-control-btn.hold.active { background: #f59e0b; }
         .call-control-btn.hangup { background: #ef4444; }
+        .call-control-btn.answer { background: var(--kanva-green); }
+        .call-control-btn.decline { background: #ef4444; }
+
+        /* Loading spinner */
+        .loading-spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid #f3f4f6;
+            border-top: 2px solid var(--kanva-green);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
-    <div id="dialerApp" class="standalone-mode">
-        <div class="dialer-container p-6">
-            <!-- Header -->
-            <div class="text-center mb-6">
-                <div class="text-center mb-4">
-                    <h1 class="text-lg font-semibold text-gray-800 tracking-wide">KANVA DIALER</h1>
-                </div>
-                <div class="flex items-center justify-center space-x-3 bg-gray-50 rounded-lg p-3">
-                    <div id="connectionStatus" class="status-indicator status-connecting"></div>
-                    <div class="flex flex-col items-center">
-                        <span id="statusText" class="text-sm font-medium text-gray-700">Initializing...</span>
-                        <span id="statusSubtext" class="text-xs text-gray-500">Setting up connection</span>
-                    </div>
-                    <button id="statusLoginButton" class="hidden ml-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-md transition-colors">
-                        <i class="fas fa-sign-in-alt mr-1"></i>Login
-                    </button>
-                </div>
-            </div>
-
-            <!-- Customer Info -->
-            <div id="customerInfo" class="customer-info p-4 mb-4 hidden">
-                <h3 class="font-semibold text-gray-800 mb-2">Customer Information</h3>
-                <div id="customerDetails" class="text-sm text-gray-600">
-                    <div><strong>Name:</strong> <span id="customerName">-</span></div>
-                    <div><strong>Company:</strong> <span id="customerCompany">-</span></div>
-                    <div><strong>Email:</strong> <span id="customerEmail">-</span></div>
-                </div>
-                <div class="mt-3 space-x-2">
-                    <button id="openLeadButton" class="hidden px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded">
-                        <i class="fas fa-external-link-alt mr-1"></i>Open Lead
-                    </button>
-                    <button id="openCompanyButton" class="hidden px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded">
-                        <i class="fas fa-building mr-1"></i>Open Company
-                    </button>
-                    <button id="openPersonButton" class="hidden px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded">
-                        <i class="fas fa-user mr-1"></i>Open Person
-                    </button>
-                </div>
-            </div>
-
-            <!-- Phone Number Input -->
-            <div class="mb-4">
-                <input type="text" id="phoneNumber" 
-                       class="w-full text-xl text-center p-3 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none"
-                       placeholder="Enter phone number">
-            </div>
-
-            <!-- Number Pad -->
-            <div class="number-pad grid grid-cols-3 gap-2 mb-4">
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="1">
-                    <span class="text-lg">1</span>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="2">
-                    <span class="text-lg">2</span>
-                    <small class="text-xs text-gray-500">ABC</small>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="3">
-                    <span class="text-lg">3</span>
-                    <small class="text-xs text-gray-500">DEF</small>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="4">
-                    <span class="text-lg">4</span>
-                    <small class="text-xs text-gray-500">GHI</small>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="5">
-                    <span class="text-lg">5</span>
-                    <small class="text-xs text-gray-500">JKL</small>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="6">
-                    <span class="text-lg">6</span>
-                    <small class="text-xs text-gray-500">MNO</small>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="7">
-                    <span class="text-lg">7</span>
-                    <small class="text-xs text-gray-500">PQRS</small>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="8">
-                    <span class="text-lg">8</span>
-                    <small class="text-xs text-gray-500">TUV</small>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="9">
-                    <span class="text-lg">9</span>
-                    <small class="text-xs text-gray-500">WXYZ</small>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="*">
-                    <span class="text-xl">*</span>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="0">
-                    <span class="text-lg">0</span>
-                </button>
-                <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg" data-number="#">
-                    <span class="text-xl">#</span>
-                </button>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="flex space-x-2 mb-4">
-                <button id="callButton" class="call-button flex-1 text-white font-semibold py-3 px-4 rounded-lg disabled:opacity-50">
-                    <i class="fas fa-phone mr-2"></i>Call
-                </button>
-                <button id="clearButton" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg">
-                    <i class="fas fa-backspace"></i>
-                </button>
-            </div>
-
-            <!-- Auth Section -->
-            <div id="authSection" class="text-center mb-4">
-                <button id="loginButton" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg w-full">
-                    <i class="fas fa-sign-in-alt mr-2"></i>Login to RingCentral
-                </button>
-            </div>
-
-            <!-- Call Notes -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Call Notes</label>
-                <textarea id="callNotes" 
-                         class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none"
-                         placeholder="Notes..." rows="2"></textarea>
-                <div class="mt-2 flex justify-between items-center">
-                    <button id="saveNotesButton" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm">
-                        Save Notes
-                    </button>
-                    <span id="saveStatus" class="text-xs text-gray-500"></span>
-                </div>
-            </div>
-        </div>
+    <div id="dialerApp">
+        <!-- Content will be dynamically generated -->
     </div>
 
-    <!-- Incoming Call Overlay -->
-    <div id="incomingCallOverlay" class="incoming-overlay hidden">
-        <div class="incoming-call-card">
-            <div class="mb-6">
-                <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i class="fas fa-phone text-2xl text-green-500"></i>
-                </div>
-                <h2 class="text-xl font-bold text-gray-800 mb-2">Incoming Call</h2>
-                <p id="incomingNumber" class="text-lg text-gray-600 mb-4">+1 (555) 123-4567</p>
-            </div>
-
-            <div id="incomingCustomerInfo" class="customer-info p-3 mb-4 hidden">
-                <div id="incomingCustomerDetails" class="text-sm text-gray-600"></div>
-            </div>
-
-            <div class="flex space-x-3">
-                <button id="answerButton" class="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg">
-                    <i class="fas fa-phone mr-2"></i>Answer
-                </button>
-                <button id="declineButton" class="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg">
-                    <i class="fas fa-phone-slash mr-2"></i>Decline
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Active Call Overlay -->
-    <div id="activeCallOverlay" class="active-call-overlay hidden">
-        <div class="text-center max-w-md w-full">
-            <div class="mb-6">
-                <div class="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i class="fas fa-user text-3xl text-gray-400"></i>
-                </div>
-                <h2 id="activeCallNumber" class="text-xl font-bold mb-2">+1 (555) 123-4567</h2>
-                <p id="callDuration" class="text-lg text-gray-300">00:00</p>
-                <p id="callStatus" class="text-sm text-gray-400">Connected</p>
-            </div>
-
-            <div class="mb-4">
-                <textarea id="activeCallNotes" 
-                         class="w-full p-3 bg-gray-800 text-white rounded-lg border border-gray-600 focus:border-green-500 focus:outline-none"
-                         placeholder="Call notes..." rows="2"></textarea>
-            </div>
-
-            <div class="call-controls">
-                <button id="muteButton" class="call-control-btn mute">
-                    <i class="fas fa-microphone"></i>
-                </button>
-                <button id="holdButton" class="call-control-btn hold">
-                    <i class="fas fa-pause"></i>
-                </button>
-                <button id="hangupButton" class="call-control-btn hangup">
-                    <i class="fas fa-phone-slash"></i>
-                </button>
-            </div>
-
-            <div id="activeCallCopperActions" class="space-y-2 mt-4">
-                <button id="activeOpenLeadButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg hidden">
-                    <i class="fas fa-external-link-alt mr-2"></i>Open Lead
-                </button>
-                <button id="activeOpenCompanyButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg hidden">
-                    <i class="fas fa-building mr-2"></i>Open Company
-                </button>
-                <button id="activeOpenPersonButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg hidden">
-                    <i class="fas fa-user mr-2"></i>Open Person
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- RingCentral SDKs with multiple fallback sources -->
-    <!-- Load RingCentral SDKs with fallbacks -->
     <script>
-        // Global dialer instance
-        let dialer = null;
+        /**
+         * 🌿 KANVA DIALER - ROBUST SDK LOADING & FALLBACK SYSTEM 🌿
+         * Handles RingCentral SDK loading failures gracefully
+         * Provides click-to-dial fallback when SDK unavailable
+         */
+
+        console.log('🌿 Kanva Sales Dialer starting...');
+
+        // Detect context from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const isModal = window.parent !== window;
+        const location = urlParams.get('location');
         
-        // Function to initialize the dialer
-        function initializeDialer() {
-            if (window.dialer) return;
-            
-            console.log('Initializing Kanva Dialer...');
-            
-            try {
-                // Check if we're in an iframe
-                const isModal = window.self !== window.top;
-                let contextMode = 'standalone-mode';
-                const viewport = {
-                    width: window.innerWidth,
-                    height: window.innerHeight
+        let contextMode = 'standalone-mode';
+        if (location === 'action_bar') contextMode = 'activity-bar-mode';
+        else if (location === 'left_nav') contextMode = 'main-view-mode';
+        else if (location === 'sidebar') contextMode = 'sidebar-mode';
+        else if (location === 'activity_panel') contextMode = 'activity-panel-mode';
+        
+        const viewport = {
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+        
+        console.log('🎯 Detected context:', contextMode, viewport);
+
+        // Apply context mode to body
+        document.body.classList.add(contextMode);
+
+        // Kanva Dialer Class with Robust Loading
+        class KanvaDialer {
+            constructor() {
+                this.version = '2.1.0';
+                this.contextMode = contextMode;
+                this.isModal = isModal;
+                this.viewport = viewport;
+                
+                // SDK status tracking
+                this.sdkStatus = {
+                    ringcentral: false,
+                    webphone: false,
+                    attempts: 0,
+                    maxAttempts: 3
                 };
                 
-                // Set context based on viewport size if in iframe
-                if (isModal) {
-                    if (viewport.width <= 250) {
-                        contextMode = 'sidebar-mode';
-                    } else if (viewport.width <= 300) {
-                        contextMode = 'activity-bar-mode';
-                    } else if (viewport.width <= 320) {
-                        contextMode = 'activity-panel-mode';
-                    } else if (viewport.width <= 500) {
-                        contextMode = 'modal-mode';
+                // Dialer state
+                this.isAuthenticated = false;
+                this.currentCall = null;
+                this.webPhone = null;
+                this.fallbackMode = false;
+                this.callTimer = null;
+                this.callStartTime = null;
+                this.customerData = null;
+                this.isMuted = false;
+                this.isOnHold = false;
+                
+                // Config loaded from backend
+                this.config = {
+                    functionsBase: '/rc',
+                    apiConfigEndpoint: '/api/config',
+                };
+                
+                this.init();
+            }
+
+            async init() {
+                console.log(`🚀 Initializing Kanva Dialer v${this.version}...`);
+                
+                try {
+                    // Show loading state immediately
+                    this.showLoadingState();
+                    
+                    // Attempt SDK loading with fallbacks
+                    await this.attemptSDKLoad();
+                    
+                    // Initialize based on SDK availability
+                    if (this.sdkStatus.ringcentral && this.sdkStatus.webphone) {
+                        console.log('✅ SDK loaded - initializing full mode');
+                        await this.initializeFullMode();
                     } else {
-                        contextMode = 'main-view-mode';
+                        console.log('⚠️ SDK failed - initializing fallback mode');
+                        this.initializeFallbackMode();
                     }
                     
-                    document.body.style.background = 'transparent';
-                    document.body.style.margin = '0';
-                    document.body.style.padding = '0';
-                } else {
-                    // Apply gradient background for standalone mode
-                    document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    // Post ready message to parent if in modal
+                    if (this.isModal) {
+                        this.postToParent('dialer-ready', {
+                            ready: true,
+                            version: this.version,
+                            mode: this.fallbackMode ? 'fallback' : 'full',
+                            contextMode: this.contextMode
+                        });
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Initialization failed:', error);
+                    this.handleInitializationError(error);
+                }
+            }
+
+            showLoadingState() {
+                document.getElementById('dialerApp').innerHTML = `
+                    <div class="dialer-container p-6">
+                        <div class="text-center mb-6">
+                            <div class="flex items-center justify-center mb-4">
+                                <span class="text-2xl mr-2">🌿</span>
+                                <h1 class="text-lg font-semibold text-gray-800">Kanva Sales Dialer</h1>
+                            </div>
+                            <div class="flex items-center justify-center space-x-3 bg-gray-50 rounded-lg p-3">
+                                <div class="status-indicator status-connecting"></div>
+                                <div class="text-center">
+                                    <span class="text-sm font-medium text-gray-700">Loading...</span>
+                                    <div class="text-xs text-gray-500">Initializing dialer</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center">
+                            <div class="loading-spinner"></div>
+                            <p class="text-gray-600 text-sm">Setting up RingCentral integration...</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            async attemptSDKLoad() {
+                console.log('📦 Attempting to load RingCentral SDK...');
+                
+                const sdkUrls = [
+                    'https://unpkg.com/@ringcentral/sdk@4.6.0/build/ringcentral.min.js',
+                    'https://cdn.jsdelivr.net/npm/@ringcentral/sdk@4.6.0/build/ringcentral.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/ringcentral/4.6.0/ringcentral.min.js'
+                ];
+
+                const webphoneUrls = [
+                    'https://unpkg.com/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js',
+                    'https://cdn.jsdelivr.net/npm/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js'
+                ];
+
+                try {
+                    // Check if already loaded
+                    if (typeof window.RingCentral !== 'undefined' && typeof window.RingCentralWebPhone !== 'undefined') {
+                        this.sdkStatus.ringcentral = true;
+                        this.sdkStatus.webphone = true;
+                        console.log('✅ RingCentral SDK already loaded');
+                        return;
+                    }
+
+                    // Try to load RingCentral SDK
+                    this.sdkStatus.ringcentral = await this.loadScriptWithFallbacks('RingCentral', sdkUrls);
+                    
+                    if (this.sdkStatus.ringcentral) {
+                        // Try to load WebPhone SDK
+                        this.sdkStatus.webphone = await this.loadScriptWithFallbacks('RingCentralWebPhone', webphoneUrls);
+                    }
+
+                    if (this.sdkStatus.ringcentral && this.sdkStatus.webphone) {
+                        console.log('✅ All RingCentral SDKs loaded successfully');
+                    } else {
+                        console.warn('⚠️ RingCentral SDK loading failed - proceeding with fallback mode');
+                    }
+
+                } catch (error) {
+                    console.error('❌ SDK loading error:', error);
+                    this.sdkStatus.ringcentral = false;
+                    this.sdkStatus.webphone = false;
+                }
+            }
+
+            async loadScriptWithFallbacks(globalName, urls) {
+                // Check if already loaded
+                if (typeof window[globalName] !== 'undefined') {
+                    return true;
+                }
+
+                for (let i = 0; i < urls.length; i++) {
+                    const url = urls[i];
+                    console.log(`📥 Trying to load ${globalName} from: ${url}`);
+                    
+                    try {
+                        await this.loadScript(url);
+                        
+                        // Check if the global is available
+                        if (typeof window[globalName] !== 'undefined') {
+                            console.log(`✅ ${globalName} loaded successfully from: ${url}`);
+                            return true;
+                        }
+                    } catch (error) {
+                        console.warn(`❌ Failed to load ${globalName} from ${url}:`, error);
+                        
+                        if (i === urls.length - 1) {
+                            console.error(`❌ Failed to load ${globalName} from all sources`);
+                        }
+                    }
                 }
                 
-                document.getElementById('dialerApp').className = contextMode;
-                console.log('🎯 Detected context:', contextMode, viewport);
-                
-                // Initialize unified dialer
-                window.dialer = new UnifiedDialer({
-                    isModal: isModal,
-                    contextMode: contextMode,
-                    viewport: viewport,
-                    parentOrigin: isModal ? document.referrer : null
-                });
-                
-                // Handle viewport changes
-                window.addEventListener('resize', function() {
-                    const newViewport = {
-                        width: window.innerWidth,
-                        height: window.innerHeight
+                return false;
+            }
+
+            loadScript(url) {
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = url;
+                    script.crossOrigin = 'anonymous';
+                    
+                    const timeout = setTimeout(() => {
+                        reject(new Error(`Script loading timeout: ${url}`));
+                    }, 10000);
+                    
+                    script.onload = () => {
+                        clearTimeout(timeout);
+                        resolve();
                     };
                     
-                    if (isModal && Math.abs(newViewport.width - viewport.width) > 20) {
-                        location.reload(); // Reload to recalculate context
-                    }
-                });
-                
-                console.log('✅ Kanva Dialer initialized successfully');
-            } catch (error) {
-                console.error('❌ Failed to initialize dialer:', error);
-                showError('Failed to initialize dialer: ' + error.message);
-            }
-        }
-        
-        // Function to load a script with retries
-        function loadScript(src, onSuccess, onError, maxRetries = 3, retryDelay = 1000) {
-            let retries = 0;
-            
-            function attemptLoad() {
-                const script = document.createElement('script');
-                script.src = src;
-                
-                script.onload = function() {
-                    console.log('Successfully loaded:', src);
-                    if (onSuccess) onSuccess();
-                };
-                
-                script.onerror = function() {
-                    retries++;
-                    console.warn(`Failed to load ${src}, retry ${retries}/${maxRetries}`);
+                    script.onerror = () => {
+                        clearTimeout(timeout);
+                        reject(new Error(`Script loading failed: ${url}`));
+                    };
                     
-                    if (retries < maxRetries) {
-                        setTimeout(attemptLoad, retryDelay);
-                    } else if (onError) {
-                        onError(`Failed to load ${src} after ${maxRetries} attempts`);
-                    }
-                };
-                
-                document.head.appendChild(script);
+                    document.head.appendChild(script);
+                });
             }
-            
-            attemptLoad();
-        }
-        
-        // Function to show error message
-        function showError(message) {
-            console.error(message);
-            const errorDiv = document.createElement('div');
-            errorDiv.style.position = 'fixed';
-            errorDiv.style.top = '0';
-            errorDiv.style.left = '0';
-            errorDiv.style.right = '0';
-            errorDiv.style.padding = '10px';
-            errorDiv.style.backgroundColor = '#f8d7da';
-            errorDiv.style.color = '#721c24';
-            errorDiv.style.textAlign = 'center';
-            errorDiv.style.zIndex = '9999';
-            errorDiv.textContent = message;
-            document.body.prepend(errorDiv);
-        }
-        
-        // Start loading process when DOM is ready
-        document.addEventListener('DOMContentLoaded', function() {
-            // Load RingCentral SDK
-            loadScript(
-                'https://unpkg.com/@ringcentral/sdk@4.6.0/build/ringcentral.min.js',
-                function() {
-                    // After RingCentral SDK loads, load WebPhone
-                    loadScript(
-                        'https://unpkg.com/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js',
-                        function() {
-                            console.log('All RingCentral SDKs loaded successfully');
-                            // Load unified-dialer.js
-                            loadScript(
-                                'js/unified-dialer.js',
-                                function() {
-                                    console.log('Unified dialer loaded, initializing...');
-                                    initializeDialer();
-                                },
-                                function(error) {
-                                    showError('Failed to load dialer component: ' + error);
-                                }
-                            );
-                        },
-                        function(error) {
-                            showError('Failed to load RingCentral WebPhone: ' + error);
+
+            async initializeFullMode() {
+                try {
+                    // Load configurations and check auth
+                    await this.loadConfigurations();
+                    await this.checkAuthStatus();
+                    
+                    // Show full dialer interface
+                    this.showFullDialerUI();
+                    
+                    // Bind events
+                    this.bindEvents();
+                    
+                    console.log('✅ Full mode initialized successfully');
+                    
+                } catch (error) {
+                    console.error('❌ Full mode initialization failed:', error);
+                    this.initializeFallbackMode();
+                }
+            }
+
+            initializeFallbackMode() {
+                this.fallbackMode = true;
+                this.showFallbackDialerUI();
+                this.bindBasicEvents();
+                console.log('✅ Fallback mode initialized');
+            }
+
+            showFullDialerUI() {
+                document.getElementById('dialerApp').innerHTML = `
+                    <div class="dialer-container p-6">
+                        <!-- Header -->
+                        <div class="text-center mb-6">
+                            <div class="flex items-center justify-center mb-4">
+                                <span class="text-2xl mr-2">🌿</span>
+                                <h1 class="text-lg font-semibold text-gray-800">Kanva Sales Dialer</h1>
+                            </div>
+                            <div class="flex items-center justify-center space-x-3 bg-gray-50 rounded-lg p-3">
+                                <div id="connectionStatus" class="status-indicator ${this.isAuthenticated ? 'status-ready' : 'status-disconnected'}"></div>
+                                <div class="text-center">
+                                    <span id="statusText" class="text-sm font-medium text-gray-700">${this.isAuthenticated ? 'Ready' : 'Not Connected'}</span>
+                                    <div id="statusSubtext" class="text-xs text-gray-500">${this.isAuthenticated ? 'Ready for calls' : 'Login required'}</div>
+                                </div>
+                                ${!this.isAuthenticated ? `
+                                <button id="statusLoginButton" class="ml-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-md transition-colors">
+                                    <i class="fas fa-sign-in-alt mr-1"></i>Login
+                                </button>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Auth Section (shown when not authenticated) -->
+                        ${!this.isAuthenticated ? `
+                        <div id="authSection" class="alert warning mb-4">
+                            <span style="font-size: 18px;">🔐</span>
+                            <div>
+                                <strong>Authentication Required</strong><br>
+                                <small>Please log in to RingCentral to make calls</small>
+                                <br>
+                                <button id="loginButton" class="kanva-btn mt-2 px-4 py-2 text-white rounded-lg">
+                                    <i class="fas fa-sign-in-alt mr-2"></i>Login to RingCentral
+                                </button>
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        <!-- Customer Info -->
+                        <div id="customerInfo" class="customer-info p-4 mb-4 hidden">
+                            <h3 class="font-semibold text-gray-800 mb-2">Customer Information</h3>
+                            <div class="text-sm text-gray-600">
+                                <div><strong>Name:</strong> <span id="customerName">-</span></div>
+                                <div><strong>Company:</strong> <span id="customerCompany">-</span></div>
+                                <div><strong>Email:</strong> <span id="customerEmail">-</span></div>
+                            </div>
+                            <div class="mt-3 space-x-2">
+                                <button id="openLeadButton" class="hidden px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded">
+                                    <i class="fas fa-external-link-alt mr-1"></i>Open Lead
+                                </button>
+                                <button id="openCompanyButton" class="hidden px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded">
+                                    <i class="fas fa-building mr-1"></i>Open Company
+                                </button>
+                                <button id="openPersonButton" class="hidden px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded">
+                                    <i class="fas fa-user mr-1"></i>Open Person
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Phone Number Input -->
+                        <div class="mb-4">
+                            <input type="tel" id="phoneNumber" 
+                                   class="w-full text-xl text-center p-3 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none"
+                                   placeholder="Enter phone number">
+                        </div>
+
+                        <!-- Number Pad -->
+                        <div class="number-pad grid grid-cols-3 gap-2 mb-4">
+                            ${this.generateNumberPad()}
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex space-x-2 mb-4">
+                            <button id="callButton" class="call-button flex-1 text-white font-semibold py-3 px-4 rounded-lg ${!this.isAuthenticated ? 'opacity-50 cursor-not-allowed' : ''}" ${!this.isAuthenticated ? 'disabled' : ''}>
+                                <i class="fas fa-phone mr-2"></i>Call
+                            </button>
+                            <button id="clearButton" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg">
+                                <i class="fas fa-backspace"></i>
+                            </button>
+                        </div>
+
+                        <!-- Call Notes -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                <i class="fas fa-sticky-note mr-1"></i>Call Notes
+                            </label>
+                            <textarea id="callNotes" 
+                                     class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none"
+                                     placeholder="Add notes about this call..." rows="2"></textarea>
+                            <div class="mt-2 flex justify-between items-center">
+                                <button id="saveNotesButton" class="kanva-btn px-3 py-1 text-white rounded text-sm">
+                                    <i class="fas fa-save mr-1"></i>Save Notes
+                                </button>
+                                <span id="saveStatus" class="text-xs text-gray-500"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Incoming Call Overlay -->
+                    <div id="incomingCallOverlay" class="overlay hidden">
+                        <div class="overlay-content">
+                            <div class="mb-6">
+                                <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i class="fas fa-phone text-2xl text-green-500"></i>
+                                </div>
+                                <h2 class="text-xl font-bold text-gray-800 mb-2">Incoming Call</h2>
+                                <p id="incomingNumber" class="text-lg text-gray-600 mb-4">+1 (555) 123-4567</p>
+                            </div>
+
+                            <div id="incomingCustomerInfo" class="customer-info p-3 mb-4 hidden">
+                                <div id="incomingCustomerDetails" class="text-sm text-gray-600"></div>
+                            </div>
+
+                            <div class="flex space-x-3">
+                                <button id="declineButton" class="call-control-btn decline" style="width: auto; height: auto; border-radius: 8px; padding: 12px 24px;">
+                                    <i class="fas fa-phone-slash mr-2"></i>Decline
+                                </button>
+                                <button id="answerButton" class="call-control-btn answer" style="width: auto; height: auto; border-radius: 8px; padding: 12px 24px;">
+                                    <i class="fas fa-phone mr-2"></i>Answer
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Active Call Overlay -->
+                    <div id="activeCallOverlay" class="overlay hidden" style="background: linear-gradient(135deg, #1f2937, #374151); color: white;">
+                        <div class="overlay-content" style="background: transparent; color: white;">
+                            <div class="mb-6">
+                                <div class="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i class="fas fa-user text-3xl text-gray-400"></i>
+                                </div>
+                                <h2 id="activeCallNumber" class="text-xl font-bold mb-2">+1 (555) 123-4567</h2>
+                                <p id="callDuration" class="text-lg text-gray-300">00:00</p>
+                                <p id="callStatus" class="text-sm text-gray-400">Connected</p>
+                            </div>
+
+                            <div class="mb-4">
+                                <textarea id="activeCallNotes" 
+                                         class="w-full p-3 bg-gray-800 text-white rounded-lg border border-gray-600 focus:border-green-500 focus:outline-none"
+                                         placeholder="Call notes..." rows="2"></textarea>
+                            </div>
+
+                            <div class="call-controls">
+                                <button id="muteButton" class="call-control-btn mute" title="Mute">
+                                    <i class="fas fa-microphone"></i>
+                                </button>
+                                <button id="holdButton" class="call-control-btn hold" title="Hold">
+                                    <i class="fas fa-pause"></i>
+                                </button>
+                                <button id="hangupButton" class="call-control-btn hangup" title="Hang Up">
+                                    <i class="fas fa-phone-slash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            showFallbackDialerUI() {
+                document.getElementById('dialerApp').innerHTML = `
+                    <div class="dialer-container p-6">
+                        <!-- Header -->
+                        <div class="text-center mb-6">
+                            <div class="flex items-center justify-center mb-4">
+                                <span class="text-2xl mr-2">🌿</span>
+                                <h1 class="text-lg font-semibold text-gray-800">Kanva Sales Dialer</h1>
+                            </div>
+                            <div class="flex items-center justify-center space-x-3 bg-gray-50 rounded-lg p-3">
+                                <div class="status-indicator status-fallback"></div>
+                                <div class="text-center">
+                                    <span class="text-sm font-medium text-gray-700">Limited Mode</span>
+                                    <div class="text-xs text-gray-500">Click-to-dial only</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fallback Mode Warning -->
+                        <div class="alert warning mb-4">
+                            <span style="font-size: 18px;">⚠️</span>
+                            <div>
+                                <strong>Limited Functionality</strong><br>
+                                <small>RingCentral SDK unavailable. Using system dialer.</small>
+                            </div>
+                        </div>
+
+                        <!-- Phone Number Input -->
+                        <div class="mb-4">
+                            <input type="tel" id="phoneNumber" 
+                                   class="w-full text-xl text-center p-3 border-2 border-gray-200 rounded-lg focus:border-green-500 focus:outline-none"
+                                   placeholder="Enter phone number">
+                        </div>
+
+                        <!-- Number Pad -->
+                        <div class="number-pad grid grid-cols-3 gap-2 mb-4">
+                            ${this.generateNumberPad()}
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex space-x-2 mb-4">
+                            <button id="dialButton" class="call-button flex-1 text-white font-semibold py-3 px-4 rounded-lg">
+                                <i class="fas fa-phone mr-2"></i>Dial
+                            </button>
+                            <button id="clearButton" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg">
+                                <i class="fas fa-backspace"></i>
+                            </button>
+                        </div>
+
+                        <!-- Info -->
+                        <div class="alert info">
+                            <span style="font-size: 16px;">💡</span>
+                            <div>
+                                <small><strong>How it works:</strong> The dial button will open your device's phone app or use system tel: links.</small>
+                            </div>
+                        </div>
+
+                        <!-- Retry Option -->
+                        <div class="text-center mt-4">
+                            <button onclick="window.location.reload()" class="kanva-btn secondary px-4 py-2 rounded-lg">
+                                <i class="fas fa-redo mr-2"></i>Retry Full Load
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            generateNumberPad() {
+                const buttons = [
+                    { number: '1', letters: '' },
+                    { number: '2', letters: 'ABC' },
+                    { number: '3', letters: 'DEF' },
+                    { number: '4', letters: 'GHI' },
+                    { number: '5', letters: 'JKL' },
+                    { number: '6', letters: 'MNO' },
+                    { number: '7', letters: 'PQRS' },
+                    { number: '8', letters: 'TUV' },
+                    { number: '9', letters: 'WXYZ' },
+                    { number: '*', letters: '' },
+                    { number: '0', letters: '' },
+                    { number: '#', letters: '' }
+                ];
+
+                return buttons.map(btn => `
+                    <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg transition-colors" data-number="${btn.number}">
+                        <span class="block text-lg">${btn.number}</span>
+                        ${btn.letters ? `<small class="text-xs text-gray-500">${btn.letters}</small>` : ''}
+                    </button>
+                `).join('');
+            }
+
+            bindEvents() {
+                // Number pad
+                document.querySelectorAll('.number-pad button').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const number = e.currentTarget.dataset.number;
+                        if (number) {
+                            this.addDigit(number);
                         }
-                    );
-                },
-                function(error) {
-                    showError('Failed to load RingCentral SDK: ' + error);
-                }
-            );
-        });
-    </script>
-    <script>
-        // Handle dial pad buttons
-        document.querySelectorAll('.number-pad button').forEach(button => {
-            button.addEventListener('click', () => {
-                const number = button.getAttribute('data-number');
-                if (number) {
-                    const display = document.getElementById('phoneNumber');
-                    display.value += number;
-                }
-            });
-        });
-
-        // Handle call button
-        document.getElementById('callButton').addEventListener('click', () => {
-            const phoneNumber = document.getElementById('phoneNumber').value;
-            if (phoneNumber && window.dialer) {
-                window.dialer.makeCall(phoneNumber);
-            }
-        });
-
-        // Handle end call button
-        document.getElementById('endCallButton').addEventListener('click', () => {
-            if (window.dialer && window.dialer.currentCall) {
-                window.dialer.endCall();
-            }
-        });
-
-        // Handle answer call button
-        document.getElementById('answerCallButton').addEventListener('click', () => {
-            if (window.dialer && window.dialer.currentCall) {
-                window.dialer.answerCall();
-                document.getElementById('incomingCallOverlay').classList.add('hidden');
-            }
-        });
-
-        // Handle decline call button
-        document.getElementById('declineCallButton').addEventListener('click', () => {
-            if (window.dialer && window.dialer.currentCall) {
-                window.dialer.declineCall();
-                document.getElementById('incomingCallOverlay').classList.add('hidden');
-            }
-        });
-
-        // Handle mute toggle
-        document.getElementById('muteButton')?.addEventListener('click', () => {
-            if (window.dialer) {
-                window.dialer.toggleMute();
-            }
-        });
-
-        // Handle hold toggle
-        document.getElementById('holdButton')?.addEventListener('click', () => {
-            if (window.dialer) {
-                window.dialer.toggleHold();
-            }
-        });
-
-        // Handle keypad toggle
-        document.getElementById('keypadButton')?.addEventListener('click', () => {
-            const keypad = document.getElementById('keypadContainer');
-            if (keypad) {
-                keypad.classList.toggle('hidden');
-            }
-        });
-
-        // Handle transfer button
-        document.getElementById('transferButton')?.addEventListener('click', () => {
-            if (window.dialer) {
-                const number = prompt('Enter number to transfer to:');
-                if (number) {
-                    window.dialer.transferCall(number);
-                }
-            }
-        });
-
-        // Handle conference button
-        document.getElementById('conferenceButton')?.addEventListener('click', () => {
-            if (window.dialer) {
-                const number = prompt('Enter number to add to conference:');
-                if (number) {
-                    window.dialer.addToConference(number);
-                }
-            }
-        });
-
-        // Handle speaker toggle
-        document.getElementById('speakerButton')?.addEventListener('click', () => {
-            if (window.dialer) {
-                window.dialer.toggleSpeaker();
-            }
-        });
-
-        // Set up call timer functionality
-        function startCallTimer(call) {
-            const callTimerElement = document.getElementById('callTimer');
-            if (!callTimerElement) return;
-            
-            // Clear any existing timer
-            if (window.callTimer) {
-                clearInterval(window.callTimer);
-            }
-            
-            let seconds = 0;
-            window.callTimer = setInterval(() => {
-                seconds++;
-                const minutes = Math.floor(seconds / 60);
-                const remainingSeconds = seconds % 60;
-                callTimerElement.textContent = `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
-            }, 1000);
-            
-            // Handle call end
-            call.on('disconnected', () => {
-                if (window.callTimer) {
-                    clearInterval(window.callTimer);
-                    window.callTimer = null;
-                }
-                const incomingCallOverlay = document.getElementById('incomingCallOverlay');
-                if (incomingCallOverlay) {
-                    incomingCallOverlay.classList.add('hidden');
-                }
-            });
-        }
-
-        // Set up event listeners for call controls
-        function setupCallControls(dialer) {
-            const answerCallBtn = document.getElementById('answerCall');
-            const hangupCallBtn = document.getElementById('hangupCall');
-            const sendToVoicemailBtn = document.getElementById('sendToVoicemail');
-            
-            if (answerCallBtn) {
-                answerCallBtn.addEventListener('click', () => {
-                    dialer.answerCall();
-                    const callControls = document.getElementById('callControls');
-                    if (callControls) callControls.classList.remove('hidden');
-                    answerCallBtn.classList.add('hidden');
+                    });
                 });
+
+                // Phone input formatting
+                const phoneInput = document.getElementById('phoneNumber');
+                if (phoneInput) {
+                    phoneInput.addEventListener('input', (e) => {
+                        e.target.value = this.formatPhoneNumber(e.target.value);
+                    });
+                    phoneInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            this.makeCall();
+                        }
+                    });
+                }
+
+                // Action buttons
+                document.getElementById('callButton')?.addEventListener('click', () => this.makeCall());
+                document.getElementById('clearButton')?.addEventListener('click', () => this.clearNumber());
+                document.getElementById('loginButton')?.addEventListener('click', () => this.login());
+                document.getElementById('statusLoginButton')?.addEventListener('click', () => this.login());
+                
+                // Call control buttons
+                document.getElementById('answerButton')?.addEventListener('click', () => this.answerCall());
+                document.getElementById('declineButton')?.addEventListener('click', () => this.declineCall());
+                document.getElementById('muteButton')?.addEventListener('click', () => this.toggleMute());
+                document.getElementById('holdButton')?.addEventListener('click', () => this.toggleHold());
+                document.getElementById('hangupButton')?.addEventListener('click', () => this.hangupCall());
+
+                // Notes
+                document.getElementById('saveNotesButton')?.addEventListener('click', () => this.saveNotes());
             }
-            
-            if (hangupCallBtn) {
-                hangupCallBtn.addEventListener('click', () => {
-                    dialer.hangupCall();
-                    const incomingCallOverlay = document.getElementById('incomingCallOverlay');
-                    if (incomingCallOverlay) incomingCallOverlay.classList.add('hidden');
+
+            bindBasicEvents() {
+                // Number pad
+                document.querySelectorAll('.number-pad button').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const number = e.currentTarget.dataset.number;
+                        if (number) {
+                            this.addDigit(number);
+                        }
+                    });
                 });
+
+                // Phone input formatting
+                const phoneInput = document.getElementById('phoneNumber');
+                if (phoneInput) {
+                    phoneInput.addEventListener('input', (e) => {
+                        e.target.value = this.formatPhoneNumber(e.target.value);
+                    });
+                    phoneInput.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') {
+                            this.handleDialAction();
+                        }
+                    });
+                }
+
+                // Action buttons
+                document.getElementById('dialButton')?.addEventListener('click', () => this.handleDialAction());
+                document.getElementById('clearButton')?.addEventListener('click', () => this.clearNumber());
             }
-            
-            if (sendToVoicemailBtn) {
-                sendToVoicemailBtn.addEventListener('click', () => {
-                    dialer.rejectCall();
-                    const incomingCallOverlay = document.getElementById('incomingCallOverlay');
-                    if (incomingCallOverlay) incomingCallOverlay.classList.add('hidden');
-                });
+
+            handleDialAction() {
+                const phoneNumber = document.getElementById('phoneNumber')?.value?.replace(/\D/g, '');
+                
+                if (!phoneNumber) {
+                    this.showToast('Please enter a phone number', 'warning');
+                    return;
+                }
+                
+                // Use system tel: link for fallback mode
+                window.open(`tel:${phoneNumber}`, '_self');
+                this.showToast('Opening system dialer...', 'info');
             }
-            
-            // Handle backspace
-            const backspaceBtn = document.getElementById('backspace');
-            if (backspaceBtn) {
-                backspaceBtn.addEventListener('click', () => {
-                    const display = document.getElementById('phoneNumber');
-                    if (display) {
-                        display.value = display.value.slice(0, -1);
+
+            addDigit(digit) {
+                const phoneInput = document.getElementById('phoneNumber');
+                if (phoneInput) {
+                    const currentValue = phoneInput.value.replace(/\D/g, '');
+                    const newValue = currentValue + digit;
+                    phoneInput.value = this.formatPhoneNumber(newValue);
+                }
+            }
+
+            clearNumber() {
+                const phoneInput = document.getElementById('phoneNumber');
+                if (phoneInput) {
+                    const currentValue = phoneInput.value.replace(/\D/g, '');
+                    const newValue = currentValue.slice(0, -1);
+                    phoneInput.value = this.formatPhoneNumber(newValue);
+                }
+            }
+
+            formatPhoneNumber(number) {
+                const cleaned = number.replace(/\D/g, '');
+                
+                if (cleaned.length === 0) return '';
+                if (cleaned.length <= 3) return cleaned;
+                if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+                if (cleaned.length <= 10) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+                
+                return `+${cleaned.slice(0, 1)} (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7, 11)}`;
+            }
+
+            showToast(message, type = 'info') {
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+                toast.textContent = message;
+                
+                document.body.appendChild(toast);
+                
+                setTimeout(() => {
+                    toast.style.animation = 'slideInToast 0.3s ease reverse';
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            }
+
+            postToParent(type, data) {
+                if (this.isModal && window.parent) {
+                    window.parent.postMessage({
+                        source: 'kanva-dialer',
+                        type,
+                        data
+                    }, '*');
+                }
+            }
+
+            handleInitializationError(error) {
+                console.error('❌ Initialization error:', error);
+                
+                document.getElementById('dialerApp').innerHTML = `
+                    <div class="dialer-container p-6">
+                        <div class="text-center mb-6">
+                            <div class="flex items-center justify-center mb-4">
+                                <span class="text-2xl mr-2">🌿</span>
+                                <h1 class="text-lg font-semibold text-gray-800">Kanva Sales Dialer</h1>
+                            </div>
+                            <div class="flex items-center justify-center space-x-3 bg-gray-50 rounded-lg p-3">
+                                <div class="status-indicator status-error"></div>
+                                <div class="text-center">
+                                    <span class="text-sm font-medium text-gray-700">Error</span>
+                                    <div class="text-xs text-gray-500">Initialization failed</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert error">
+                            <span style="font-size: 18px;">❌</span>
+                            <div>
+                                <strong>Initialization Failed</strong><br>
+                                <small>${error.message}</small>
+                            </div>
+                        </div>
+                        
+                        <button onclick="window.location.reload()" class="kanva-btn w-full py-3 text-white rounded-lg mt-4">
+                            <i class="fas fa-redo mr-2"></i>Refresh Page
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Config and Auth implementations
+            async loadConfigurations() {
+                console.log('📋 Loading configurations...');
+                try {
+                    const res = await fetch(this.config.apiConfigEndpoint, { credentials: 'include' });
+                    if (res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        // Normalize config
+                        if (data && data.rc) {
+                            this.config.ringcentral = data.rc;
+                        }
+                        if (data && data.functionsBase) {
+                            this.config.functionsBase = data.functionsBase;
+                        }
+                        console.log('✅ Config loaded', this.config);
+                    } else {
+                        console.warn('⚠️ Config endpoint returned', res.status);
                     }
-                });
+                } catch (e) {
+                    console.warn('⚠️ Failed to load config, proceeding with defaults', e);
+                }
             }
-        }
-        
-        // Initialize call controls when dialer is ready
-        if (window.dialer) {
-            setupCallControls(window.dialer);
             
-            // Listen for incoming calls
-            window.dialer.on('incomingCall', (call) => {
-                console.log('Incoming call from:', call.from);
-                const incomingCallOverlay = document.getElementById('incomingCallOverlay');
-                const callerIdElement = document.getElementById('callerId');
-                
-                if (incomingCallOverlay) {
-                    incomingCallOverlay.classList.remove('hidden');
+            async checkAuthStatus() {
+                console.log('🔐 Checking auth status...');
+                try {
+                    const res = await fetch('/rc/status', { credentials: 'include' });
+                    if (res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        this.isAuthenticated = Boolean(data && (data.authenticated || data.active || data.loggedIn || data.token));
+                    } else {
+                        this.isAuthenticated = false;
+                    }
+                } catch (e) {
+                    this.isAuthenticated = false;
                 }
-                
-                if (callerIdElement) {
-                    callerIdElement.textContent = call.from.phoneNumber || 'Unknown Caller';
+                this.updateAuthUI();
+            }
+            
+            async login() {
+                try {
+                    const returnTo = encodeURIComponent(window.location.href);
+                    // Redirect to backend auth start
+                    window.location.href = `/rc/auth/start?returnTo=${returnTo}`;
+                } catch (e) {
+                    console.error('Login redirect failed', e);
+                    this.showToast('Unable to start login', 'error');
                 }
+            }
+            
+            async makeCall() {
+                if (this.fallbackMode) {
+                    this.handleDialAction();
+                    return;
+                }
+                const raw = document.getElementById('phoneNumber')?.value || '';
+                const phoneNumber = raw.replace(/\D/g, '');
+                if (!phoneNumber) {
+                    this.showToast('Please enter a phone number', 'warning');
+                    return;
+                }
+                if (!this.isAuthenticated) {
+                    this.showToast('Please login to RingCentral first', 'warning');
+                    return;
+                }
+                // If SDK and WebPhone are available, prefer system tel for now (no session setup here)
+                if (typeof window.RingCentralWebPhone === 'undefined') {
+                    console.warn('WebPhone SDK not available, using system dialer');
+                }
+                // Graceful interim behavior: system dial
+                window.open(`tel:${phoneNumber}`, '_self');
+                this.showToast('Dialing via system dialer...', 'info');
+            }
+
+            // UI helpers
+            updateAuthUI() {
+                const statusEl = document.getElementById('connectionStatus');
+                const statusText = document.getElementById('statusText');
+                const statusSub = document.getElementById('statusSubtext');
+                const loginBtn = document.getElementById('statusLoginButton');
+                const authSection = document.getElementById('authSection');
+                const callBtn = document.getElementById('callButton');
                 
-                // Start call timer when call is answered
-                call.on('accepted', () => {
-                    startCallTimer(call);
-                });
-            });
+                if (statusEl) {
+                    statusEl.classList.remove('status-disconnected', 'status-connecting', 'status-error');
+                    statusEl.classList.add(this.isAuthenticated ? 'status-ready' : 'status-disconnected');
+                }
+                if (statusText) statusText.textContent = this.isAuthenticated ? 'Ready' : 'Not Connected';
+                if (statusSub) statusSub.textContent = this.isAuthenticated ? 'Ready for calls' : 'Login required';
+                if (loginBtn) loginBtn.classList.toggle('hidden', this.isAuthenticated);
+                if (authSection) authSection.classList.toggle('hidden', this.isAuthenticated);
+                if (callBtn) {
+                    callBtn.disabled = !this.isAuthenticated;
+                    callBtn.classList.toggle('opacity-50', !this.isAuthenticated);
+                    callBtn.classList.toggle('cursor-not-allowed', !this.isAuthenticated);
+                }
+            }
+            
+            answerCall() { console.log('📞 Answer call'); }
+            declineCall() { console.log('📴 Decline call'); }
+            toggleMute() { console.log('🔇 Toggle mute'); }
+            toggleHold() { console.log('⏸️ Toggle hold'); }
+            hangupCall() { console.log('📴 Hangup call'); }
+            saveNotes() { this.showToast('Notes saved', 'success'); }
         }
+
+        // Initialize the dialer when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            window.kanvaDialer = new KanvaDialer();
+        });
+
+        // Global reference for onclick handlers
+        window.kanvaDialer = null;
     </script>
 </body>
 </html>
