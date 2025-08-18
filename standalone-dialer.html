@@ -3,691 +3,451 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanva RingCentral Dialer</title>
     
-    <!-- DNS prefetch for faster connection -->
-    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
-    <link rel="dns-prefetch" href="//unpkg.com">
-    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
-    
-    <!-- Preconnect for critical resources -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="preconnect" href="https://unpkg.com" crossorigin>
-    
-    <!-- Preload the specific WebPhone SDK resource -->
-    <link rel="preload" 
-          href="https://cdn.jsdelivr.net/npm/ringcentral-web-phone@2.1.13/dist/esm/index.umd.min.js" 
-          as="script" 
-          crossorigin="anonymous">
-    
-    <!-- CSS Resources -->
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Kanva Brand Colors -->
     <style>
         :root {
             --kanva-green: #93D500;
-            --kanva-green-dark: #17351A;
-            --kanva-green-light: #f8fdf8;
-            --kanva-accent: #e8f5e8;
+            --kanva-dark: #17351A;
+            --kanva-light: #f0f9e8;
+            --border-radius: 12px;
         }
-        
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+        * {
             margin: 0;
             padding: 0;
-            overflow-x: hidden;
-            background: white;
+            box-sizing: border-box;
         }
 
-        /* Adaptive container based on viewport */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, var(--kanva-light) 0%, white 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
         .dialer-container {
             background: white;
+            border-radius: var(--border-radius);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 30px;
             width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
+            max-width: 400px;
         }
 
-        /* Context modes */
-        .standalone-mode {
-            min-height: 100vh;
-            background: linear-gradient(135deg, var(--kanva-green-light) 0%, #ffffff 100%);
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 15px;
+            background: var(--kanva-green);
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 10px;
+            font-size: 24px;
+            color: white;
         }
 
-        .standalone-mode .dialer-container {
-            max-width: 380px;
-            max-height: 90vh;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(147, 213, 0, 0.2);
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(10px);
-            overflow-y: auto;
-            border: 2px solid var(--kanva-accent);
+        h1 {
+            color: var(--kanva-dark);
+            font-size: 24px;
+            margin-bottom: 5px;
         }
 
-        .modal-mode, .main-view-mode, .activity-bar-mode, .activity-panel-mode, .sidebar-mode {
-            width: 100%;
-            height: 100%;
-            background: transparent;
-        }
-
-        .modal-mode .dialer-container,
-        .main-view-mode .dialer-container,
-        .activity-bar-mode .dialer-container,
-        .activity-panel-mode .dialer-container,
-        .sidebar-mode .dialer-container {
-            border-radius: 0;
-            box-shadow: none;
-            background: white;
-            min-height: 100%;
-            border: 1px solid var(--kanva-accent);
-        }
-
-        /* Compact modes */
-        .activity-bar-mode .dialer-container,
-        .sidebar-mode .dialer-container {
-            padding: 12px;
-            font-size: 14px;
-        }
-
-        .activity-bar-mode .number-pad button,
-        .sidebar-mode .number-pad button {
-            min-height: 36px;
-            font-size: 12px;
-            padding: 4px;
-        }
-
-        .activity-panel-mode .dialer-container {
-            padding: 16px;
-        }
-
-        .main-view-mode .dialer-container {
-            max-width: 420px;
-            margin: 0 auto;
-            padding: 24px;
-        }
-
-        /* Status indicators */
         .status-indicator {
-            width: 12px;
-            height: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .status-indicator.connected {
+            background: #d4f4dd;
+            color: #2e7d32;
+        }
+
+        .status-indicator.disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .status-indicator.connecting {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             animation: pulse 2s infinite;
         }
-        
-        .status-connected { background-color: var(--kanva-green); }
-        .status-disconnected { background-color: #ef4444; }
-        .status-connecting { background-color: #f59e0b; }
-        .status-fallback { background-color: #f59e0b; }
-        .status-error { background-color: #ef4444; }
-        .status-ready { background-color: var(--kanva-green); }
-        
+
+        .status-indicator.connected .status-dot {
+            background: #2e7d32;
+        }
+
+        .status-indicator.disconnected .status-dot {
+            background: #c62828;
+            animation: none;
+        }
+
+        .status-indicator.connecting .status-dot {
+            background: #e65100;
+        }
+
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
-        
-        /* Button styles */
-        .number-pad button {
-            transition: all 0.2s ease;
-            border-radius: 12px;
-            min-height: 44px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            white-space: nowrap;
-            overflow: hidden;
-        }
-        
-        .number-pad button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-        
-        .call-button {
-            background: linear-gradient(135deg, var(--kanva-green), var(--kanva-green-dark));
-            transition: all 0.3s ease;
-        }
-        
-        .call-button:hover:not(:disabled) {
-            transform: scale(1.05);
-            box-shadow: 0 8px 25px rgba(147, 213, 0, 0.4);
-        }
 
-        .kanva-btn {
-            background: var(--kanva-green);
-            transition: all 0.2s ease;
-        }
-
-        .kanva-btn:hover:not(:disabled) {
-            background: var(--kanva-green-dark);
-            transform: translateY(-1px);
-        }
-
-        .kanva-btn.secondary {
-            background: var(--kanva-accent);
-            color: var(--kanva-green-dark);
-        }
-
-        .kanva-btn.danger {
-            background: #ef4444;
-        }
-
-        .customer-info {
-            background: linear-gradient(135deg, var(--kanva-green-light), var(--kanva-accent));
-            border-radius: 12px;
-            border-left: 4px solid var(--kanva-green);
-        }
-        
-        .hidden { display: none !important; }
-
-        /* Alert styles */
-        .alert {
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin: 12px 0;
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            font-size: 14px;
-        }
-
-        .alert.warning {
-            background: #fef3c7;
-            border: 1px solid #f59e0b;
-            color: #92400e;
-        }
-
-        .alert.error {
-            background: #fee2e2;
-            border: 1px solid #ef4444;
-            color: #dc2626;
-        }
-
-        .alert.info {
-            background: #dbeafe;
-            border: 1px solid #3b82f6;
-            color: #1d4ed8;
-        }
-
-        .alert.success {
-            background: #d1fae5;
-            border: 1px solid var(--kanva-green);
-            color: #065f46;
-        }
-
-        /* Toast notifications */
-        .toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 10000;
-            padding: 12px 16px;
-            border-radius: 8px;
-            color: white;
-            font-size: 14px;
-            max-width: 300px;
-            animation: slideInToast 0.3s ease;
-        }
-
-        .toast.success { background: var(--kanva-green); }
-        .toast.error { background: #ef4444; }
-        .toast.warning { background: #f59e0b; }
-        .toast.info { background: #3b82f6; }
-
-        @keyframes slideInToast {
-            from {
-                opacity: 0;
-                transform: translateX(100%);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        /* Overlays */
-        .overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(5px);
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .overlay-content {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            text-align: center;
-            max-width: 400px;
-            width: 100%;
-            animation: slideUp 0.3s ease-out;
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(100px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .call-controls {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
+        .phone-input-group {
             margin: 20px 0;
         }
 
-        .call-control-btn {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
+        .phone-input {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .phone-input:focus {
+            outline: none;
+            border-color: var(--kanva-green);
+            box-shadow: 0 0 0 3px rgba(147, 213, 0, 0.1);
+        }
+
+        .dial-button {
+            width: 100%;
+            padding: 15px;
+            background: var(--kanva-green);
+            color: white;
             border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
-            cursor: pointer;
-            transition: all 0.2s ease;
+            gap: 10px;
+        }
+
+        .dial-button:hover:not(:disabled) {
+            background: #7fb800;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(147, 213, 0, 0.3);
+        }
+
+        .dial-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .auth-section {
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .auth-section p {
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .login-button {
+            padding: 12px 24px;
+            background: var(--kanva-dark);
             color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
         }
 
-        .call-control-btn:hover {
-            transform: scale(1.1);
+        .login-button:hover {
+            background: #223d25;
         }
 
-        .call-control-btn.mute { background: #6b7280; }
-        .call-control-btn.mute.active { background: #ef4444; }
-        .call-control-btn.hold { background: #6b7280; }
-        .call-control-btn.hold.active { background: #f59e0b; }
-        .call-control-btn.hangup { background: #ef4444; }
-        .call-control-btn.answer { background: var(--kanva-green); }
-        .call-control-btn.decline { background: #ef4444; }
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-size: 14px;
+            display: none;
+        }
 
-        /* Loading spinner */
+        .error-message.show {
+            display: block;
+        }
+
         .loading-spinner {
-            width: 24px;
-            height: 24px;
-            border: 2px solid #f3f4f6;
-            border-top: 2px solid var(--kanva-green);
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--kanva-green);
             border-radius: 50%;
+            width: 20px;
+            height: 20px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 16px;
+            display: inline-block;
         }
 
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+            max-width: 300px;
+        }
+
+        .toast.success {
+            background: #4caf50;
+        }
+
+        .toast.error {
+            background: #f44336;
+        }
+
+        .toast.info {
+            background: #2196f3;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
-    <div id="dialerApp">
-        <!-- Content will be dynamically generated -->
+    <div class="dialer-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">📞</div>
+            <h1>Kanva Dialer</h1>
+            <div id="statusIndicator" class="status-indicator disconnected">
+                <span class="status-dot"></span>
+                <span id="statusText">Not Connected</span>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message"></div>
+
+        <!-- Auth Section (shown when not authenticated) -->
+        <div id="authSection" class="auth-section">
+            <p>Connect to RingCentral to start making calls</p>
+            <button id="loginButton" class="login-button" onclick="dialer.login()">
+                Connect to RingCentral
+            </button>
+        </div>
+
+        <!-- Dialer Section (shown when authenticated) -->
+        <div id="dialerSection" class="hidden">
+            <div class="phone-input-group">
+                <input 
+                    type="tel" 
+                    id="phoneNumber" 
+                    class="phone-input" 
+                    placeholder="Enter phone number"
+                    pattern="[0-9\-\(\)\s\+]*"
+                >
+            </div>
+            <button id="dialButton" class="dial-button" onclick="dialer.makeCall()">
+                <span>📞</span>
+                <span>Call</span>
+            </button>
+        </div>
     </div>
 
-    <!-- Additional dialer styles -->
-    <!-- Only production CDN scripts/styles below -->
-    <!-- Tailwind CSS and FontAwesome are already loaded above -->
-    <!-- RingCentral SDK loaded via CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/ringcentral-web-phone@2.1.13/dist/esm/index.umd.min.js" crossorigin="anonymous"></script>
-    <!-- Main dialer logic (replace with your production bundle if needed) -->
-    <!-- <script src="https://your-cdn.com/kanva-standalone-dialer.prod.js"></script> -->
-
+    <!-- Load RingCentral SDKs FIRST -->
+    <script src="https://unpkg.com/@ringcentral/sdk@4.7.2/dist/ringcentral.js"></script>
+    <script src="https://unpkg.com/ringcentral-web-phone@1.0.0/dist/ringcentral-web-phone.js"></script>
+    
+    <!-- Simple Dialer Implementation -->
     <script>
-        /**
-         * 🌿 KANVA DIALER - PRODUCTION IMPLEMENTATION 🌿
-         * Using KanvaDialerIntegration as the single unified implementation
-         */
-
-        console.log('🌿 Kanva Sales Dialer v3.0 starting...');
-
-        // Detect context from URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const isModal = window.parent !== window;
-        const contextLocation = urlParams.get('location');
-        
-        let contextMode = 'standalone-mode';
-        if (contextLocation === 'action_bar') contextMode = 'activity-bar-mode';
-        else if (contextLocation === 'left_nav') contextMode = 'main-view-mode';
-        else if (contextLocation === 'sidebar') contextMode = 'sidebar-mode';
-        else if (contextLocation === 'activity_panel') contextMode = 'activity-panel-mode';
-        
-        // Apply context mode to body
-        document.body.classList.add(contextMode);
-        
-        // Pass context mode to KanvaDialerIntegration when it initializes
-        document.addEventListener('DOMContentLoaded', () => {
-            // Remove any existing dialer UI to prevent duplicates
-            const container = document.getElementById('dialerApp');
-            if (container) {
-                container.innerHTML = '';
-            }
-            
-            console.log('🎯 Initializing dialer with context mode:', contextMode);
-            
-            // KanvaDialerIntegration will automatically initialize when the DOM is ready
-            // The event listener in kanva-dialer-integration.js handles this
-        });
-        
-        console.log('✅ Kanva Dialer setup complete');
-    </script>
-</body>
-</html>
-                    </div>
-                `;
+        class SimpleDialer {
+            constructor() {
+                this.isAuthenticated = false;
+                this.init();
             }
 
-            generateNumberPad() {
-                const buttons = [
-                    { number: '1', letters: '' },
-                    { number: '2', letters: 'ABC' },
-                    { number: '3', letters: 'DEF' },
-                    { number: '4', letters: 'GHI' },
-                    { number: '5', letters: 'JKL' },
-                    { number: '6', letters: 'MNO' },
-                    { number: '7', letters: 'PQRS' },
-                    { number: '8', letters: 'TUV' },
-                    { number: '9', letters: 'WXYZ' },
-                    { number: '*', letters: '' },
-                    { number: '0', letters: '' },
-                    { number: '#', letters: '' }
-                ];
-
-                return buttons.map(btn => `
-                    <button class="bg-gray-100 hover:bg-gray-200 text-lg font-semibold p-2 rounded-lg transition-colors" data-number="${btn.number}">
-                        <span class="block text-lg">${btn.number}</span>
-                        ${btn.letters ? `<small class="text-xs text-gray-500">${btn.letters}</small>` : ''}
-                    </button>
-                `).join('');
-            }
-
-            bindEvents() {
-                // Number pad
-                document.querySelectorAll('.number-pad button').forEach(button => {
-                    button.addEventListener('click', (e) => {
-                        const number = e.currentTarget.dataset.number;
-                        if (number) {
-                            this.addDigit(number);
-                        }
-                    });
-                });
-
-                // Phone input formatting
-                const phoneInput = document.getElementById('phoneNumber');
-                if (phoneInput) {
-                    phoneInput.addEventListener('input', (e) => {
-                        e.target.value = this.formatPhoneNumber(e.target.value);
-                    });
-                    phoneInput.addEventListener('keypress', (e) => {
-                        if (e.key === 'Enter') {
-                            this.makeCall();
-                        }
-                    });
-                }
-
-                // Action buttons
-                document.getElementById('callButton')?.addEventListener('click', () => this.makeCall());
-                document.getElementById('clearButton')?.addEventListener('click', () => this.clearNumber());
-                document.getElementById('loginButton')?.addEventListener('click', () => this.login());
-                document.getElementById('statusLoginButton')?.addEventListener('click', () => this.login());
+            async init() {
+                console.log('🚀 Initializing dialer...');
                 
-                // Call control buttons
-                document.getElementById('answerButton')?.addEventListener('click', () => this.answerCall());
-                document.getElementById('declineButton')?.addEventListener('click', () => this.declineCall());
-                document.getElementById('muteButton')?.addEventListener('click', () => this.toggleMute());
-                document.getElementById('holdButton')?.addEventListener('click', () => this.toggleHold());
-                document.getElementById('hangupButton')?.addEventListener('click', () => this.hangupCall());
-
-                // Notes
-                document.getElementById('saveNotesButton')?.addEventListener('click', () => this.saveNotes());
-            }
-
-            bindBasicEvents() {
-                // Number pad
-                document.querySelectorAll('.number-pad button').forEach(button => {
-                    button.addEventListener('click', (e) => {
-                        const number = e.currentTarget.dataset.number;
-                        if (number) {
-                            this.addDigit(number);
-                        }
-                    });
-                });
-
-                // Phone input formatting
-                const phoneInput = document.getElementById('phoneNumber');
-                if (phoneInput) {
-                    phoneInput.addEventListener('input', (e) => {
-                        e.target.value = this.formatPhoneNumber(e.target.value);
-                    });
-                    phoneInput.addEventListener('keypress', (e) => {
-                        if (e.key === 'Enter') {
-                            this.handleDialAction();
-                        }
-                    });
-                }
-
-                // Action buttons
-                document.getElementById('dialButton')?.addEventListener('click', () => this.handleDialAction());
-                document.getElementById('clearButton')?.addEventListener('click', () => this.clearNumber());
-            }
-
-            handleDialAction() {
-                const phoneNumber = document.getElementById('phoneNumber')?.value?.replace(/\D/g, '');
-                
-                if (!phoneNumber) {
-                    this.showToast('Please enter a phone number', 'warning');
+                // Check if SDKs loaded
+                if (typeof RingCentral === 'undefined') {
+                    this.showError('RingCentral SDK failed to load. Please refresh the page.');
                     return;
                 }
-                
-                // Use system tel: link for fallback mode
-                window.open(`tel:${phoneNumber}`, '_self');
-                this.showToast('Opening system dialer...', 'info');
+
+                // Check authentication status on load
+                await this.checkAuthStatus();
             }
 
-            addDigit(digit) {
-                const phoneInput = document.getElementById('phoneNumber');
-                if (phoneInput) {
-                    const currentValue = phoneInput.value.replace(/\D/g, '');
-                    const newValue = currentValue + digit;
-                    phoneInput.value = this.formatPhoneNumber(newValue);
+            async checkAuthStatus() {
+                try {
+                    const response = await fetch('/api/rc/auth/status');
+                    const data = await response.json();
+                    
+                    if (data.authenticated) {
+                        this.onAuthenticated();
+                    } else {
+                        this.showAuthSection();
+                    }
+                } catch (error) {
+                    console.error('Auth check failed:', error);
+                    this.showAuthSection();
                 }
             }
 
-            clearNumber() {
-                const phoneInput = document.getElementById('phoneNumber');
-                if (phoneInput) {
-                    const currentValue = phoneInput.value.replace(/\D/g, '');
-                    const newValue = currentValue.slice(0, -1);
-                    phoneInput.value = this.formatPhoneNumber(newValue);
+            async login() {
+                try {
+                    this.updateStatus('connecting', 'Connecting...');
+                    
+                    // Open OAuth window
+                    const authWindow = window.open(
+                        '/api/rc/auth/start',
+                        'ringcentral-auth',
+                        'width=500,height=650'
+                    );
+
+                    // Check when auth window closes
+                    const checkInterval = setInterval(async () => {
+                        if (authWindow.closed) {
+                            clearInterval(checkInterval);
+                            
+                            // Check if now authenticated
+                            await this.checkAuthStatus();
+                        }
+                    }, 1000);
+
+                } catch (error) {
+                    this.showError('Login failed: ' + error.message);
+                    this.updateStatus('disconnected', 'Not Connected');
                 }
             }
 
-            formatPhoneNumber(number) {
-                const cleaned = number.replace(/\D/g, '');
+            onAuthenticated() {
+                this.isAuthenticated = true;
+                this.updateStatus('connected', 'Connected');
+                document.getElementById('authSection').classList.add('hidden');
+                document.getElementById('dialerSection').classList.remove('hidden');
+                this.showToast('Connected to RingCentral!', 'success');
+            }
+
+            showAuthSection() {
+                this.updateStatus('disconnected', 'Not Connected');
+                document.getElementById('authSection').classList.remove('hidden');
+                document.getElementById('dialerSection').classList.add('hidden');
+            }
+
+            async makeCall() {
+                const phoneNumber = document.getElementById('phoneNumber').value.replace(/\D/g, '');
                 
-                if (cleaned.length === 0) return '';
-                if (cleaned.length <= 3) return cleaned;
-                if (cleaned.length <= 6) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
-                if (cleaned.length <= 10) return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+                if (!phoneNumber) {
+                    this.showToast('Please enter a phone number', 'error');
+                    return;
+                }
+
+                if (!this.isAuthenticated) {
+                    this.showToast('Please login first', 'error');
+                    return;
+                }
+
+                try {
+                    // For now, use tel: protocol as fallback
+                    // Full WebRTC implementation would go here
+                    window.location.href = `tel:${phoneNumber}`;
+                    this.showToast(`Dialing ${phoneNumber}...`, 'info');
+                } catch (error) {
+                    this.showError('Call failed: ' + error.message);
+                }
+            }
+
+            updateStatus(status, text) {
+                const indicator = document.getElementById('statusIndicator');
+                const statusText = document.getElementById('statusText');
                 
-                return `+${cleaned.slice(0, 1)} (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7, 11)}`;
+                indicator.className = `status-indicator ${status}`;
+                statusText.textContent = text;
+            }
+
+            showError(message) {
+                const errorEl = document.getElementById('errorMessage');
+                errorEl.textContent = message;
+                errorEl.classList.add('show');
+                
+                setTimeout(() => {
+                    errorEl.classList.remove('show');
+                }, 5000);
             }
 
             showToast(message, type = 'info') {
                 const toast = document.createElement('div');
                 toast.className = `toast ${type}`;
                 toast.textContent = message;
-                
                 document.body.appendChild(toast);
                 
                 setTimeout(() => {
-                    toast.style.animation = 'slideInToast 0.3s ease reverse';
-                    setTimeout(() => toast.remove(), 300);
+                    toast.remove();
                 }, 3000);
             }
-
-            postToParent(type, data) {
-                if (this.isModal && window.parent) {
-                    window.parent.postMessage({
-                        source: 'kanva-dialer',
-                        type,
-                        data
-                    }, '*');
-                }
-            }
-
-            handleInitializationError(error) {
-                console.error('❌ Initialization error:', error);
-                
-                document.getElementById('dialerApp').innerHTML = `
-                    <div class="dialer-container p-6">
-                        <div class="text-center mb-6">
-                            <div class="flex items-center justify-center mb-4">
-                                <span class="text-2xl mr-2">🌿</span>
-                                <h1 class="text-lg font-semibold text-gray-800">Kanva Sales Dialer</h1>
-                            </div>
-                            <div class="flex items-center justify-center space-x-3 bg-gray-50 rounded-lg p-3">
-                                <div class="status-indicator status-error"></div>
-                                <div class="text-center">
-                                    <span class="text-sm font-medium text-gray-700">Error</span>
-                                    <div class="text-xs text-gray-500">Initialization failed</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="alert error">
-                            <span style="font-size: 18px;">❌</span>
-                            <div>
-                                <strong>Initialization Failed</strong><br>
-                                <small>${error.message}</small>
-                            </div>
-                        </div>
-                        
-                        <button onclick="window.location.reload()" class="kanva-btn w-full py-3 text-white rounded-lg mt-4">
-                            <i class="fas fa-redo mr-2"></i>Refresh Page
-                        </button>
-                    </div>
-                `;
-            }
-
-            // Config and Auth implementations
-            async loadConfigurations() {
-                console.log('📋 Loading configurations...');
-                try {
-                    const res = await fetch(this.config.apiConfigEndpoint, { credentials: 'include' });
-                    if (res.ok) {
-                        const data = await res.json().catch(() => ({}));
-                        // Normalize config
-                        if (data && data.rc) {
-                            this.config.ringcentral = data.rc;
-                        }
-                        if (data && data.functionsBase) {
-                            this.config.functionsBase = data.functionsBase;
-                        }
-                        console.log('✅ Config loaded', this.config);
-                    } else {
-                        console.warn('⚠️ Config endpoint returned', res.status);
-                    }
-                } catch (e) {
-                    console.warn('⚠️ Failed to load config, proceeding with defaults', e);
-                }
-            }
-            
-            async checkAuthStatus() {
-                console.log('🔐 Checking auth status...');
-                try {
-                    const res = await fetch('/rc/status', { credentials: 'include' });
-                    if (res.ok) {
-                        const data = await res.json().catch(() => ({}));
-                        this.isAuthenticated = Boolean(data && (data.authenticated || data.active || data.loggedIn || data.token));
-                    } else {
-                        this.isAuthenticated = false;
-                    }
-                } catch (e) {
-                    this.isAuthenticated = false;
-                }
-                this.updateAuthUI();
-            }
-            
-            async login() {
-                try {
-                    const returnTo = encodeURIComponent(window.location.href);
-                    // Redirect to backend auth start
-                    window.location.href = `/rc/auth/start?returnTo=${returnTo}`;
-                } catch (e) {
-                    console.error('Login redirect failed', e);
-                    this.showToast('Unable to start login', 'error');
-                }
-            }
-            
-            async makeCall() {
-                if (this.fallbackMode) {
-                    this.handleDialAction();
-                    return;
-                }
-                const raw = document.getElementById('phoneNumber')?.value || '';
-                const phoneNumber = raw.replace(/\D/g, '');
-                if (!phoneNumber) {
-                    this.showToast('Please enter a phone number', 'warning');
-                    return;
-                }
-                if (!this.isAuthenticated) {
-                    this.showToast('Please login to RingCentral first', 'warning');
-                    return;
-                }
-                // If SDK and WebPhone are available, prefer system tel for now (no session setup here)
-                if (typeof window.RingCentralWebPhone === 'undefined') {
-                    console.warn('WebPhone SDK not available, using system dialer');
-                }
-                // Graceful interim behavior: system dial
-                window.open(`tel:${phoneNumber}`, '_self');
-                this.showToast('Dialing via system dialer...', 'info');
-            }
-
-            // UI helpers
-            updateAuthUI() {
-                const statusEl = document.getElementById('connectionStatus');
-                const statusText = document.getElementById('statusText');
-                const statusSub = document.getElementById('statusSubtext');
-                const loginBtn = document.getElementById('statusLoginButton');
-                const authSection = document.getElementById('authSection');
-                const callBtn = document.getElementById('callButton');
-                
-                if (statusEl) {
-                    statusEl.classList.remove('status-disconnected', 'status-connecting', 'status-error');
-                    statusEl.classList.add(this.isAuthenticated ? 'status-ready' : 'status-disconnected');
-                }
-                if (statusText) statusText.textContent = this.isAuthenticated ? 'Ready' : 'Not Connected';
-                if (statusSub) statusSub.textContent = this.isAuthenticated ? 'Ready for calls' : 'Login required';
-                if (loginBtn) loginBtn.classList.toggle('hidden', this.isAuthenticated);
-                if (authSection) authSection.classList.toggle('hidden', this.isAuthenticated);
-                if (callBtn) {
-                    callBtn.disabled = !this.isAuthenticated;
-                    callBtn.classList.toggle('opacity-50', !this.isAuthenticated);
-                    callBtn.classList.toggle('cursor-not-allowed', !this.isAuthenticated);
-                }
-            }
-            
-            answerCall() { console.log('📞 Answer call'); }
-            declineCall() { console.log('📴 Decline call'); }
-            toggleMute() { console.log('🔇 Toggle mute'); }
-            toggleHold() { console.log('⏸️ Toggle hold'); }
-            hangupCall() { console.log('📴 Hangup call'); }
-            saveNotes() { this.showToast('Notes saved', 'success'); }
         }
 
-        // KanvaDialerIntegration initialization is handled in kanva-dialer-integration.js
+        // Initialize dialer when page loads
+        const dialer = new SimpleDialer();
+
+        // Format phone number as user types
+        document.getElementById('phoneNumber')?.addEventListener('input', (e) => {
+            let value = e.target.value.replace(/\D/g, '');
+            if (value.length >= 6) {
+                value = value.slice(0, 3) + '-' + value.slice(3, 6) + '-' + value.slice(6, 10);
+            } else if (value.length >= 3) {
+                value = value.slice(0, 3) + '-' + value.slice(3);
+            }
+            e.target.value = value;
+        });
     </script>
 </body>
 </html>

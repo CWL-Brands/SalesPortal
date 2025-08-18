@@ -128,7 +128,7 @@
       },
       {
         "source": "**",
-        "destination": "/standalone-dialer.html"
+        "destination": "/index.html"
       }
     ],
     "headers": [
