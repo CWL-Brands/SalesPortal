@@ -224,6 +224,7 @@ class UnifiedDialer {
         document.getElementById('callButton')?.addEventListener('click', () => this.makeCall());
         document.getElementById('clearButton')?.addEventListener('click', () => this.clearNumber());
         document.getElementById('loginButton')?.addEventListener('click', () => this.login());
+        document.getElementById('statusLoginButton')?.addEventListener('click', () => this.login());
         document.getElementById('saveNotesButton')?.addEventListener('click', () => this.saveNotes());
 
         // Incoming call actions
@@ -348,14 +349,19 @@ class UnifiedDialer {
             console.log('🔐 Starting RingCentral OAuth flow...');
             
             // Open OAuth popup
-            const popup = window.open('/rc/auth/start', 'ringcentral-auth', 
-                'width=500,height=600,scrollbars=yes,resizable=yes');
+            const popup = window.open('/rc/auth/start', 'ringcentral-auth',
+                'width=500,height=650,noopener,noreferrer,scrollbars=yes,resizable=yes');
             
             if (!popup) {
-                throw new Error('Popup blocked. Please allow popups for this site.');
+                // Fallback for sandboxed iframes or popup blockers: navigate current tab
+                console.warn('Popup not opened (blocked or sandboxed). Falling back to same-window navigation.');
+                this.showInfo('Redirecting to RingCentral login...');
+                window.location.href = '/rc/auth/start';
+                return;
             }
             
             // Listen for OAuth completion
+            this.showInfo('Waiting for RingCentral authentication...');
             const checkClosed = setInterval(() => {
                 if (popup.closed) {
                     clearInterval(checkClosed);
@@ -363,14 +369,17 @@ class UnifiedDialer {
                     
                     // Wait a moment then check auth status
                     setTimeout(async () => {
-                        await this.checkAuthStatus();
+                        const ok = await this.checkAuthStatus();
+                        if (!ok) {
+                            this.showError('Not authenticated. Please try logging in again.');
+                        }
                     }, 1000);
                 }
             }, 1000);
             
         } catch (error) {
             console.error('❌ Login failed:', error);
-            alert('Login failed: ' + error.message);
+            this.showError('Login failed: ' + (error?.message || 'Unknown error'));
         }
     }
 
@@ -1055,10 +1064,14 @@ class UnifiedDialer {
     }
 
     showDisconnectedStatus() {
-        const statusElement = document.getElementById('connectionStatus');
-        if (statusElement) {
-            statusElement.textContent = 'Not Connected';
-            statusElement.className = 'text-red-600 font-medium';
+        const statusText = document.getElementById('statusText');
+        const statusSubtext = document.getElementById('statusSubtext');
+        const connectionStatus = document.getElementById('connectionStatus');
+        
+        if (statusText) statusText.textContent = 'Disconnected';
+        if (statusSubtext) statusSubtext.textContent = 'Click Login to connect';
+        if (connectionStatus) {
+            connectionStatus.className = 'status-indicator status-disconnected';
         }
     }
 
@@ -1066,13 +1079,33 @@ class UnifiedDialer {
      * Show/hide auth section
      */
     showAuthSection() {
-        document.getElementById('authSection')?.classList.remove('hidden');
+        const authSection = document.getElementById('authSection');
+        if (authSection) {
+            authSection.classList.remove('hidden');
+        }
+        
+        // Also show status login button
+        const statusLoginButton = document.getElementById('statusLoginButton');
+        if (statusLoginButton) {
+            statusLoginButton.classList.remove('hidden');
+        }
+        
         document.getElementById('callButton').disabled = true;
         this.updateConnectionStatus('disconnected', 'Authentication required', 'Click Login to connect');
     }
 
     hideAuthSection() {
-        document.getElementById('authSection')?.classList.add('hidden');
+        const authSection = document.getElementById('authSection');
+        if (authSection) {
+            authSection.classList.add('hidden');
+        }
+        
+        // Also hide status login button
+        const statusLoginButton = document.getElementById('statusLoginButton');
+        if (statusLoginButton) {
+            statusLoginButton.classList.add('hidden');
+        }
+        
         this.enableCallButton();
     }
 
@@ -1082,8 +1115,30 @@ class UnifiedDialer {
     }
 
     showError(message) {
-        // Simple alert for now - could be enhanced with better UI
-        alert(message);
+        // Use inline status area instead of alert (alerts are blocked in sandboxed contexts)
+        const statusText = document.getElementById('statusText');
+        const statusSubtext = document.getElementById('statusSubtext');
+        if (statusText) statusText.textContent = 'Error';
+        if (statusSubtext) {
+            statusSubtext.textContent = message;
+            statusSubtext.classList.remove('text-gray-500');
+            statusSubtext.classList.add('text-red-600');
+        }
+        const connectionStatus = document.getElementById('connectionStatus');
+        if (connectionStatus) connectionStatus.className = 'status-indicator status-disconnected';
+    }
+
+    showInfo(message) {
+        const statusText = document.getElementById('statusText');
+        const statusSubtext = document.getElementById('statusSubtext');
+        if (statusText) statusText.textContent = 'Authenticating...';
+        if (statusSubtext) {
+            statusSubtext.textContent = message;
+            statusSubtext.classList.remove('text-red-600');
+            statusSubtext.classList.add('text-gray-500');
+        }
+        const connectionStatus = document.getElementById('connectionStatus');
+        if (connectionStatus) connectionStatus.className = 'status-indicator status-connecting';
     }
 
     showSaveStatus(message) {

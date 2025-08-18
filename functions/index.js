@@ -622,42 +622,60 @@ export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
 // Token endpoint - provide access token to frontend
 export const ringcentralToken = onRequest(withCors(async (req, res) => {
   try {
-    const tokensSnap = await RC_TOKENS_DOC.get();
-    if (!tokensSnap.exists) {
+    // Support optional ownerId scoping, similar to status endpoint
+    const ownerId = req.query?.ownerId ? String(req.query.ownerId) : '';
+    const tokensAllSnap = await RC_TOKENS_DOC.get();
+    if (!tokensAllSnap.exists) {
       res.status(401).json({ error: 'No tokens found' });
       return;
     }
-    
-    const tokens = tokensSnap.data() || {};
-    const accessToken = tokens.access_token;
-    const expiresAt = tokens.expires_at;
-    
+
+    const tokensAll = tokensAllSnap.data() || {};
+    const userTokens = ownerId && tokensAll.users && tokensAll.users[ownerId] ? tokensAll.users[ownerId] : null;
+    const tokens = userTokens || tokensAll;
+
+    // Normalize fields from our storage format
+    const accessToken = tokens.accessToken || tokens.access_token || '';
+    // expiresAt may be a Firestore Timestamp, Date, or ISO string
+    let expiresAtIso = null;
+    if (tokens.expiresAt && typeof tokens.expiresAt?.toDate === 'function') {
+      expiresAtIso = tokens.expiresAt.toDate().toISOString();
+    } else if (tokens.expiresAt instanceof Date) {
+      expiresAtIso = tokens.expiresAt.toISOString();
+    } else if (typeof tokens.expiresAt === 'string') {
+      expiresAtIso = tokens.expiresAt;
+    } else if (tokens.expires_at) {
+      expiresAtIso = String(tokens.expires_at);
+    }
+
     if (!accessToken) {
       res.status(401).json({ error: 'No access token available' });
       return;
     }
-    
-    // Check if token is expired
-    if (expiresAt && new Date() >= new Date(expiresAt)) {
-      // Try to refresh token
+
+    // Check expiry if we have it
+    if (expiresAtIso && new Date() >= new Date(expiresAtIso)) {
       const refreshed = await refreshRingCentralToken();
       if (refreshed) {
-        const newTokensSnap = await RC_TOKENS_DOC.get();
-        const newTokens = newTokensSnap.data() || {};
-        res.json({ 
-          access_token: newTokens.access_token,
-          expires_at: newTokens.expires_at 
-        });
+        const newSnap = await RC_TOKENS_DOC.get();
+        const newAll = newSnap.data() || {};
+        const newUserTokens = ownerId && newAll.users && newAll.users[ownerId] ? newAll.users[ownerId] : null;
+        const latest = newUserTokens || newAll;
+        const latestAccess = latest.accessToken || latest.access_token || '';
+        let latestExpires = null;
+        if (latest.expiresAt && typeof latest.expiresAt?.toDate === 'function') latestExpires = latest.expiresAt.toDate().toISOString();
+        else if (latest.expiresAt instanceof Date) latestExpires = latest.expiresAt.toISOString();
+        else if (typeof latest.expiresAt === 'string') latestExpires = latest.expiresAt;
+        else if (latest.expires_at) latestExpires = String(latest.expires_at);
+
+        res.json({ access_token: latestAccess, expires_at: latestExpires });
       } else {
         res.status(401).json({ error: 'Token expired and refresh failed' });
       }
       return;
     }
-    
-    res.json({ 
-      access_token: accessToken,
-      expires_at: expiresAt 
-    });
+
+    res.json({ access_token: accessToken, expires_at: expiresAtIso });
   } catch (error) {
     console.error('Error getting RingCentral token:', error);
     res.status(500).json({ error: 'Internal server error' });
