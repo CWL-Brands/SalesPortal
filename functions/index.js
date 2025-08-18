@@ -18,6 +18,7 @@ const ALLOWED_ORIGINS = new Set([
   'https://salesportal--kanvaportal.us-central1.hosted.app',
   // Copper app host (if embedding makes cross-origin calls)
   'https://app.copper.com',
+  'https://copper.com',
   // Local dev convenience
   'http://localhost:5000',
   'http://localhost:3000'
@@ -25,13 +26,19 @@ const ALLOWED_ORIGINS = new Set([
 
 function applyCors(req, res) {
   const origin = req.get('origin');
-  if (origin && (ALLOWED_ORIGINS.has(origin))) {
-    res.set('Access-Control-Allow-Origin', origin);
-    res.set('Vary', 'Origin');
-    res.set('Access-Control-Allow-Credentials', 'true');
-  }
+  console.log('🌐 CORS request from origin:', origin);
+  
+  // Temporarily allow all origins for debugging
+  res.set('Access-Control-Allow-Origin', '*');
   res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  
+  // Original restrictive CORS (commented out for debugging)
+  // if (origin && (ALLOWED_ORIGINS.has(origin))) {
+  //   res.set('Access-Control-Allow-Origin', origin);
+  //   res.set('Vary', 'Origin');
+  //   res.set('Access-Control-Allow-Credentials', 'true');
+  // }
 }
 
 const withCors = (handler) => async (req, res) => {
@@ -461,25 +468,42 @@ export const ringcentralSyncCopper = onRequest(withCors(async (req, res) => {
 const RC_CONNECTIONS_DOC = db.collection('integrations').doc('connections');
 const RC_TOKENS_DOC = db.collection('integrations').doc('ringcentral_tokens');
 
-// Start OAuth (org-level) – placeholder redirects to RingCentral authorize URL when clientId present
+// Helper function to generate PKCE parameters
+function generatePKCE() {
+  const codeVerifier = Buffer.from(Array.from({length: 32}, () => Math.random().toString(36)[2] || '0').join('')).toString('base64url');
+  const codeChallenge = Buffer.from(crypto.createHash('sha256').update(codeVerifier).digest()).toString('base64url');
+  return { codeVerifier, codeChallenge };
+}
+
+// Start OAuth with PKCE flow
 export const ringcentralAuthStart = onRequest(withCors(async (req, res) => {
   try {
     const snap = await RC_CONNECTIONS_DOC.get();
     const cfg = snap.exists ? (snap.data()?.ringcentral || {}) : {};
-    const clientId = cfg.clientId || process.env.RC_CLIENT_ID || '';
-    const redirectUri = cfg.redirectUri || process.env.RC_REDIRECT_URI || '';
-    const base = cfg.environment === 'sandbox' ? 'https://platform.devtest.ringcentral.com' : 'https://platform.ringcentral.com';
-    if (!clientId || !redirectUri) {
-      res.status(400).json({ success: false, message: 'RingCentral clientId/redirectUri not configured' });
+    const clientId = cfg.clientId;
+    const base = cfg.environment === 'production' ? 'https://platform.ringcentral.com' : 'https://platform.devtest.ringcentral.com';
+    
+    if (!clientId) {
+      res.status(400).send('RingCentral clientId not configured');
       return;
     }
-    // Capture optional ownerId to support per-user token storage
-    const ownerId = (req.query?.ownerId && String(req.query.ownerId)) || '';
-    const state = ownerId ? encodeURIComponent(JSON.stringify({ ownerId })) : 'kanva';
-    const authUrl = `${base}/restapi/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&prompt=login`;
+    
+    // Generate PKCE parameters
+    const { codeVerifier, codeChallenge } = generatePKCE();
+    
+    // Store code_verifier for token exchange (in a real app, use session storage)
+    await db.collection('oauth_state').doc('pkce_temp').set({
+      codeVerifier,
+      timestamp: new Date()
+    });
+    
+    const redirectUri = 'https://kanvaportal.web.app/rc/auth/callback';
+    const state = 'kanva';
+    const authUrl = `${base}/restapi/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+    
     res.redirect(authUrl);
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+    res.status(500).send(`Auth start error: ${e.message}`);
   }
 }));
 
@@ -525,24 +549,39 @@ export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
       return;
     }
 
-    // Exchange code for access token
+    // Get stored code_verifier for PKCE
+    const pkceDoc = await db.collection('oauth_state').doc('pkce_temp').get();
+    const pkceData = pkceDoc.exists ? pkceDoc.data() : null;
+    
+    if (!pkceData || !pkceData.codeVerifier) {
+      res.status(400).send('PKCE code_verifier not found. Please restart OAuth flow.');
+      return;
+    }
+
+    // Exchange code for access token using PKCE with Basic Auth
     const tokenUrl = `${base}/restapi/oauth/token`;
     const tokenData = {
       grant_type: 'authorization_code',
       code: code,
       redirect_uri: redirectUri,
-      client_id: clientId,
-      client_secret: clientSecret
+      code_verifier: pkceData.codeVerifier
     };
+
+    // Some RingCentral apps require Basic Auth even with PKCE
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
     const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Authorization': `Basic ${credentials}`
       },
       body: new URLSearchParams(tokenData).toString()
     });
+
+    // Clean up PKCE state
+    await db.collection('oauth_state').doc('pkce_temp').delete();
 
     const tokenResult = await tokenResponse.json();
 
@@ -577,6 +616,51 @@ export const ringcentralAuthCallback = onRequest(withCors(async (req, res) => {
   } catch (e) {
     console.error('OAuth callback error:', e);
     res.status(500).send(`Callback error: ${e.message}`);
+  }
+}));
+
+// Token endpoint - provide access token to frontend
+export const ringcentralToken = onRequest(withCors(async (req, res) => {
+  try {
+    const tokensSnap = await RC_TOKENS_DOC.get();
+    if (!tokensSnap.exists) {
+      res.status(401).json({ error: 'No tokens found' });
+      return;
+    }
+    
+    const tokens = tokensSnap.data() || {};
+    const accessToken = tokens.access_token;
+    const expiresAt = tokens.expires_at;
+    
+    if (!accessToken) {
+      res.status(401).json({ error: 'No access token available' });
+      return;
+    }
+    
+    // Check if token is expired
+    if (expiresAt && new Date() >= new Date(expiresAt)) {
+      // Try to refresh token
+      const refreshed = await refreshRingCentralToken();
+      if (refreshed) {
+        const newTokensSnap = await RC_TOKENS_DOC.get();
+        const newTokens = newTokensSnap.data() || {};
+        res.json({ 
+          access_token: newTokens.access_token,
+          expires_at: newTokens.expires_at 
+        });
+      } else {
+        res.status(401).json({ error: 'Token expired and refresh failed' });
+      }
+      return;
+    }
+    
+    res.json({ 
+      access_token: accessToken,
+      expires_at: expiresAt 
+    });
+  } catch (error) {
+    console.error('Error getting RingCentral token:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 }));
 
@@ -1344,37 +1428,7 @@ export const rcSync = onRequest(withCors(async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 }));
-// =============================
-// AI Summary Endpoint
-// =============================
-
-export const aiSummary = onRequest(withCors(async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
-
-  try {
-    const { transcript, callDuration, participants } = req.body || {};
-    
-    if (!transcript) {
-      res.status(400).json({ success: false, message: 'transcript required' });
-      return;
-    }
-    
-    // Simple AI summary generation (you can enhance with actual AI service)
-    const summary = generateCallSummary(transcript, callDuration, participants);
-    
-    res.status(200).json({ 
-      success: true, 
-      summary,
-      generatedAt: new Date().toISOString()
-    });
-  } catch (e) {
-    console.error('AI summary error:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-}));
+// Note: aiSummary function already declared above at line 939
 
 // Helper function for AI summary generation
 function generateCallSummary(transcript, duration, participants) {

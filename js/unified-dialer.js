@@ -273,21 +273,26 @@ class UnifiedDialer {
         try {
             console.log('🔍 Checking authentication status...');
             
-            // Check Firebase Functions for token status
-            const response = await fetch(`${this.config.functions.baseUrl}/status`);
-            
+            const response = await fetch('/rc/status');
             if (response.ok) {
-                const status = await response.json();
-                this.isAuthenticated = status.data?.authenticated || false;
+                const data = await response.json();
+                console.log('🔐 Auth status:', data.success && data.data.authenticated ? 'Authenticated' : 'Not authenticated');
                 
-                console.log('🔐 Auth status:', this.isAuthenticated ? 'Authenticated' : 'Not authenticated');
-                
-                // If authenticated, initialize WebPhone
-                if (this.isAuthenticated) {
-                    await this.initializeWebPhoneFromToken();
-                    this.showConnectedStatus();
-                    this.hideAuthSection();
+                if (data.success && data.data.authenticated) {
+                    // Try to initialize WebPhone, but handle token failures gracefully
+                    try {
+                        await this.initializeWebPhoneFromToken();
+                        this.isAuthenticated = true;
+                        this.showConnectedStatus();
+                        this.hideAuthSection();
+                    } catch (tokenError) {
+                        console.warn('⚠️ Auth status shows authenticated but token retrieval failed, showing login button');
+                        this.isAuthenticated = false;
+                        this.showDisconnectedStatus();
+                        this.showAuthSection();
+                    }
                 } else {
+                    this.isAuthenticated = false;
                     this.showDisconnectedStatus();
                     this.showAuthSection();
                 }
@@ -315,23 +320,57 @@ class UnifiedDialer {
         try {
             console.log('📞 Getting access token and initializing WebPhone...');
             
-            const tokenResponse = await fetch(`${this.config.functions.baseUrl}/token`);
+            const tokenResponse = await fetch('/rc/token');
             if (!tokenResponse.ok) {
                 throw new Error('Failed to get access token');
             }
             
             const tokenData = await tokenResponse.json();
-            if (!tokenData.success || !tokenData.accessToken) {
+            if (!tokenData.access_token) {
                 throw new Error('Invalid token response');
             }
             
-            await this.initializeWebPhone(tokenData.accessToken);
+            await this.initializeWebPhone(tokenData.access_token);
             
         } catch (error) {
             console.error('❌ Failed to initialize WebPhone from token:', error);
             this.isAuthenticated = false;
             this.showAuthSection();
             throw error;
+        }
+    }
+
+    /**
+     * Handle login button click - start OAuth flow
+     */
+    async login() {
+        try {
+            console.log('🔐 Starting RingCentral OAuth flow...');
+            
+            // Open OAuth popup
+            const popup = window.open('/rc/auth/start', 'ringcentral-auth', 
+                'width=500,height=600,scrollbars=yes,resizable=yes');
+            
+            if (!popup) {
+                throw new Error('Popup blocked. Please allow popups for this site.');
+            }
+            
+            // Listen for OAuth completion
+            const checkClosed = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(checkClosed);
+                    console.log('🔄 OAuth popup closed, checking auth status...');
+                    
+                    // Wait a moment then check auth status
+                    setTimeout(async () => {
+                        await this.checkAuthStatus();
+                    }, 1000);
+                }
+            }, 1000);
+            
+        } catch (error) {
+            console.error('❌ Login failed:', error);
+            alert('Login failed: ' + error.message);
         }
     }
 
