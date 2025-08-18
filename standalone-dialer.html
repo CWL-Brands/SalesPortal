@@ -386,6 +386,28 @@
                 this.init();
             }
 
+            loadModuleScript(srcUrl) {
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.type = 'module';
+                    script.src = srcUrl;
+
+                    const timeout = setTimeout(() => {
+                        reject(new Error(`Module script timeout: ${srcUrl}`));
+                    }, 10000);
+
+                    script.onload = () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    };
+                    script.onerror = () => {
+                        clearTimeout(timeout);
+                        reject(new Error(`Module script load failed: ${srcUrl}`));
+                    };
+                    document.head.appendChild(script);
+                });
+            }
+
             async init() {
                 console.log(`🚀 Initializing Kanva Dialer v${this.version}...`);
                 
@@ -500,7 +522,18 @@
                 // Already available?
                 if (typeof window.RingCentralWebPhone !== 'undefined') return true;
 
-                // Try ESM v2.2.7
+                // Try external module loader (avoids inline module CSP)
+                try {
+                    await this.loadModuleScript('/js/rc-webphone-v2-loader.js');
+                    if (typeof window.RingCentralWebPhone !== 'undefined') {
+                        console.log('✅ Loaded RingCentral WebPhone v2 via local module loader');
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Local module loader failed, trying direct ESM import next:', e);
+                }
+
+                // Try direct ESM v2.2.7
                 try {
                     await this.loadESMAsGlobal(
                         'https://cdn.jsdelivr.net/npm/ringcentral-web-phone@2.2.7/dist/esm/index.min.js',
