@@ -3,6 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- DNS prefetch for faster connection -->
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="//unpkg.com">
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+    
+    <!-- Preconnect for critical resources -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    
+    <!-- Preload the specific WebPhone SDK resource -->
+    <link rel="preload" 
+          href="https://cdn.jsdelivr.net/npm/ringcentral-web-phone@2.1.13/dist/esm/index.umd.min.js" 
+          as="script" 
+          crossorigin="anonymous">
+    
+    <!-- CSS Resources -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -319,14 +336,23 @@
         <!-- Content will be dynamically generated -->
     </div>
 
+    <!-- Additional dialer styles -->
+    <link href="/css/dialer-styles.css" rel="stylesheet">
+    
+    <!-- Load WebPhone SDK components -->
+    <script src="/js/webphone-sdk-loader.js"></script>
+    <script src="/js/kanva-sales-dialer.js"></script>
+    <script src="/js/copper-crm-integration.js"></script>
+    <script src="/js/kanva-dialer-integration.js"></script>
+
     <script>
         /**
-         * 🌿 KANVA DIALER - ROBUST SDK LOADING & FALLBACK SYSTEM 🌿
-         * Handles RingCentral SDK loading failures gracefully
-         * Provides click-to-dial fallback when SDK unavailable
+         * 🌿 KANVA DIALER - COMPLETE WEBPHONE SDK IMPLEMENTATION 🌿
+         * Production-ready RingCentral WebPhone integration following the comprehensive guide
+         * Includes all features: SDK loading, call quality monitoring, CRM integration, etc.
          */
 
-        console.log('🌿 Kanva Sales Dialer starting...');
+        console.log('🌿 Kanva Sales Dialer v3.0 starting with complete WebPhone SDK implementation...');
 
         // Detect context from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
@@ -348,12 +374,19 @@
 
         // Apply context mode to body
         document.body.classList.add(contextMode);
-
-        // Kanva Dialer Class with Robust Loading
-        class KanvaDialer {
-            constructor() {
-                this.version = '2.1.0';
-                this.contextMode = contextMode;
+        
+        // The KanvaDialerIntegration will automatically initialize when DOM is ready
+        // This replaces the old implementation with the comprehensive WebPhone SDK solution
+        
+        // Legacy code removed - now using complete WebPhone SDK implementation
+        
+        // All functionality is now handled by the KanvaDialerIntegration class
+        // which automatically initializes when DOM is ready
+        
+        console.log('✅ Kanva Dialer v3.0 ready - using comprehensive WebPhone SDK implementation');
+    </script>
+</body>
+</html>
                 this.isModal = isModal;
                 this.viewport = viewport;
                 
