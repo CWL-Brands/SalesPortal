@@ -11,8 +11,6 @@ class WebPhoneSDKLoader {
             'https://cdn.jsdelivr.net/npm/ringcentral-web-phone@2.1.13/dist/esm/index.umd.min.js',
             // Secondary: unpkg fallback
             'https://unpkg.com/ringcentral-web-phone@2.1.13/dist/esm/index.umd.min.js',
-            // Tertiary: Local fallback
-            '/js/vendor/ringcentral-web-phone.min.js'
         ];
         this.loaded = false;
         this.loading = false;
