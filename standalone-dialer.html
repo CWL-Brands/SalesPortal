@@ -450,12 +450,18 @@
                 console.log('📦 Attempting to load RingCentral SDK...');
                 
                 const sdkUrls = [
-                    'https://unpkg.com/@ringcentral/sdk@4.6.0/build/ringcentral.min.js',
-                    'https://cdn.jsdelivr.net/npm/@ringcentral/sdk@4.6.0/build/ringcentral.min.js',
-                    'https://cdnjs.cloudflare.com/ajax/libs/ringcentral/4.6.0/ringcentral.min.js'
+                    // Prefer local copies (no CORS)
+                    '/lib/ringcentral/ringcentral.min.js',
+                    '/lib/ringcentral.min.js',
+                    // CDNs (correct UMD paths)
+                    'https://unpkg.com/@ringcentral/sdk@4.6.0/build/umd/ringcentral.min.js',
+                    'https://cdn.jsdelivr.net/npm/@ringcentral/sdk@4.6.0/build/umd/ringcentral.min.js'
                 ];
 
                 const webphoneUrls = [
+                    // Prefer local copy
+                    '/lib/ringcentral-web-phone.min.js',
+                    // CDNs
                     'https://unpkg.com/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js',
                     'https://cdn.jsdelivr.net/npm/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js'
                 ];
@@ -524,7 +530,7 @@
                 return new Promise((resolve, reject) => {
                     const script = document.createElement('script');
                     script.src = url;
-                    script.crossOrigin = 'anonymous';
+                    // Avoid setting crossOrigin to reduce CORS/MIME rejections on some CDNs
                     
                     const timeout = setTimeout(() => {
                         reject(new Error(`Script loading timeout: ${url}`));
