@@ -79,17 +79,14 @@
                 // Using locally downloaded files
                 {
                     sdk: '/lib/ringcentral/ringcentral.min.js',
-                    webphone: '/lib/ringcentral-web-phone/ringcentral-web-phone.min.js',
-                    name: 'Local Files',
-                    crossOrigin: 'anonymous'
+                    webphone: '/lib/ringcentral-web-phone.min.js',
+                    name: 'Local Files'
                 },
                 // Fallback to direct unpkg (in case local files are missing)
                 {
                     sdk: 'https://unpkg.com/@ringcentral/sdk@4.6.0/build/umd/ringcentral.min.js',
                     webphone: 'https://unpkg.com/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js',
-                    name: 'unpkg CDN',
-                    crossOrigin: 'anonymous',
-                    noIntegrity: true
+                    name: 'unpkg CDN'
                 }
             ];
 
@@ -120,20 +117,11 @@
                 // Load SDK
                 const sdkScript = document.createElement('script');
                 sdkScript.src = source.sdk;
-                if (source.crossOrigin) {
-                    sdkScript.crossOrigin = source.crossOrigin;
-                }
                 sdkScript.onload = () => {
                     // Load WebPhone
                     const webphoneScript = document.createElement('script');
                     webphoneScript.src = source.webphone;
-                    if (source.crossOrigin) {
-                        webphoneScript.crossOrigin = source.crossOrigin;
-                    }
-                    if (source.noIntegrity) {
-                        sdkScript.integrity = '';
-                        webphoneScript.integrity = '';
-                    }
+                    // No crossorigin attribute to avoid CORS errors on some CDNs
                     webphoneScript.onload = () => {
                         if (testSDK()) {
                             showTestResults();

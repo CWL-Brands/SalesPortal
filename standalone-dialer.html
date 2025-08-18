@@ -332,13 +332,13 @@
         // Detect context from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const isModal = window.parent !== window;
-        const location = urlParams.get('location');
+        const contextLocation = urlParams.get('location');
         
         let contextMode = 'standalone-mode';
-        if (location === 'action_bar') contextMode = 'activity-bar-mode';
-        else if (location === 'left_nav') contextMode = 'main-view-mode';
-        else if (location === 'sidebar') contextMode = 'sidebar-mode';
-        else if (location === 'activity_panel') contextMode = 'activity-panel-mode';
+        if (contextLocation === 'action_bar') contextMode = 'activity-bar-mode';
+        else if (contextLocation === 'left_nav') contextMode = 'main-view-mode';
+        else if (contextLocation === 'sidebar') contextMode = 'sidebar-mode';
+        else if (contextLocation === 'activity_panel') contextMode = 'activity-panel-mode';
         
         const viewport = {
             width: window.innerWidth,
