@@ -504,18 +504,13 @@
                 console.log('📦 Attempting to load RingCentral SDK...');
                 
                 const sdkUrls = [
-                    // Prefer local copies (no CORS)
-                    '/lib/ringcentral/ringcentral.min.js',
-                    '/lib/ringcentral.min.js',
-                    // CDNs (correct UMD paths)
+                    // Only use official CDN sources
                     'https://unpkg.com/@ringcentral/sdk@4.6.0/build/umd/ringcentral.min.js',
                     'https://cdn.jsdelivr.net/npm/@ringcentral/sdk@4.6.0/build/umd/ringcentral.min.js'
                 ];
 
                 const webphoneUrls = [
-                    // Prefer local copy (UMD v1)
-                    '/lib/ringcentral-web-phone.min.js',
-                    // Legacy CDNs (UMD v1)
+                    // Only use official CDN sources
                     'https://unpkg.com/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js',
                     'https://cdn.jsdelivr.net/npm/ringcentral-web-phone@1.13.0/dist/ringcentral-web-phone.min.js'
                 ];
